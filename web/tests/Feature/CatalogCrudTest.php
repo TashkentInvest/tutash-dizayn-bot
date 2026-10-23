@@ -203,4 +203,23 @@ class CatalogCrudTest extends TestCase
         $this->assertSame('sandbox', $r->headers->get('Content-Security-Policy'));
         $this->assertSame('application/octet-stream', $r->headers->get('Content-Type'));
     }
+
+    public function test_district_contact_phone_is_saved_normalised_and_bad_numbers_are_refused(): void
+    {
+        $district = District::orderBy('id')->firstOrFail();
+
+        Livewire::test(EditDistrict::class, ['record' => $district->getKey()])
+            ->fillForm(['phone' => '99-201 22 72'])->call('save')->assertHasNoFormErrors();
+        $this->assertSame('+998992012272', $district->fresh()->phone);
+
+        Livewire::test(EditDistrict::class, ['record' => $district->getKey()])
+            ->fillForm(['phone' => '12345'])->call('save')->assertHasFormErrors(['phone']);
+        $this->assertSame('+998992012272', $district->fresh()->phone, 'a refused value is not stored');
+
+        Livewire::test(EditDistrict::class, ['record' => $district->getKey()])
+            ->fillForm(['phone' => ''])->call('save')->assertHasNoFormErrors();
+        $this->assertNull($district->fresh()->phone, 'empty means: show no contact line');
+
+        $this->assertSame('+998 99 201 22 72', \App\Support\Phone::pretty('+998992012272'));
+    }
 }

@@ -7,6 +7,7 @@ use App\Filament\Resources\Districts\Pages\EditDistrict;
 use App\Filament\Resources\Districts\Pages\ListDistricts;
 use App\Filament\Resources\Districts\RelationManagers\StreetsRelationManager;
 use App\Models\District;
+use App\Support\Phone;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -39,6 +40,14 @@ class DistrictResource extends Resource
             TextInput::make('name')->label('Tuman nomi')->required()->maxLength(255),
             TextInput::make('sort_order')->label('Tartib raqami')->numeric()->default(0)
                 ->helperText('Botda tumanlar shu raqam bo‘yicha tartiblanadi'),
+            TextInput::make('phone')->label('Murojaat telefoni')->tel()->placeholder('+998 99 201 22 72')
+                ->helperText('Tuman ochilganda botda “savolingiz bo‘lsa shu raqamga murojaat qiling” deb ko‘rsatiladi. Bo‘sh qoldirsangiz, ko‘rsatilmaydi.')
+                ->rules([fn () => function (string $attribute, $value, \Closure $fail) {
+                    if (filled($value) && Phone::normalize($value) === null) {
+                        $fail('Raqam noto‘g‘ri. Namuna: +998 99 201 22 72');
+                    }
+                }])
+                ->dehydrateStateUsing(fn ($state) => filled($state) ? Phone::normalize($state) : null),
             Toggle::make('is_active')->label('Botda ko‘rinsin')->default(true),
         ]);
     }
@@ -51,6 +60,8 @@ class DistrictResource extends Resource
             ->reorderable('sort_order')
             ->columns([
                 TextColumn::make('name')->label('Tuman')->searchable(),
+                TextColumn::make('phone')->label('Murojaat telefoni')->placeholder('—')
+                    ->formatStateUsing(fn ($state) => Phone::pretty($state)),
                 TextColumn::make('streets_count')->label('Ko‘chalar'),
                 TextColumn::make('files_count')->label('Fayllar'),
                 ToggleColumn::make('is_active')->label('Botda ko‘rinadi'),

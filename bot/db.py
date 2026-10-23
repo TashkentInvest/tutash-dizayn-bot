@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS districts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    is_active  INTEGER NOT NULL DEFAULT 1
+    is_active  INTEGER NOT NULL DEFAULT 1,
+    phone      TEXT                         -- contact shown when the district is opened (Chamber of Commerce representative)
 );
 CREATE TABLE IF NOT EXISTS streets (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,10 +120,11 @@ def init() -> None:
     with _db() as c:
         c.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
         c.executescript(SCHEMA)
-        have = {r[1] for r in c.execute("PRAGMA table_info(users)")}
-        for col, typ in REG_COLUMNS.items():  # migrate a database created before a column existed
-            if col not in have:
-                c.execute(f"ALTER TABLE users ADD COLUMN {col} {typ}")
+        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"})):
+            have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+            for col, typ in columns.items():  # migrate a database created before a column existed
+                if col not in have:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
         c.executescript(INDEXES)
         c.commit()
     _rekey_file_cache()

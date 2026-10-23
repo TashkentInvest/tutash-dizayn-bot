@@ -24,6 +24,9 @@ from .keyboards import TXT_DISTRICTS, districts_kb, streets_kb
 
 TXT_STREETS = "<b>{}</b>\nКўчани танланг:"
 TXT_EMPTY = "<b>{}</b>\nБу туман учун файллар ҳали юкланмаган."
+TXT_CONTACT = (
+    "\n\n📞 Савол, таклиф ёки эътирозларингиз бўлса, Савдо-саноат палатасининг {} бўйича вакилига мурожаат қилинг:\n<b>{}</b>"
+)
 TXT_STALE = "Меню янгиланган. /start босинг."
 TXT_NEED_REG = "Аввал рўйхатдан ўтинг: /start босинг."
 TXT_ERROR = "⚠️ Хатолик юз берди. Бироздан кейин қайта уриниб кўринг."
@@ -102,9 +105,10 @@ async def pick_district(c: CallbackQuery):
         return await c.answer(TXT_STALE, show_alert=True)
     kb = streets_kb(d)
     has_streets = len(kb.inline_keyboard) > 1
-    await c.message.edit_text(
-        (TXT_STREETS if has_streets else TXT_EMPTY).format(d.name), reply_markup=kb, parse_mode="HTML"
-    )
+    text = (TXT_STREETS if has_streets else TXT_EMPTY).format(d.name)
+    if phone := catalog.format_phone(d.phone):
+        text += TXT_CONTACT.format(d.name, phone)
+    await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await c.answer()
 
 

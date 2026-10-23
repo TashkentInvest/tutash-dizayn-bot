@@ -19,6 +19,7 @@ _TTL = 5.0  # seconds; dashboard edits show up in the bot within this time
 class Entry:
     num: int  # database id
     name: str
+    phone: str | None = None  # districts only: contact for questions
 
 
 def _cached(key, compute):
@@ -33,9 +34,21 @@ def _cached(key, compute):
 
 def districts() -> list[Entry]:
     return _cached("d", lambda: [
-        Entry(r["id"], r["name"])
-        for r in db.fetch_all("SELECT id, name FROM districts WHERE is_active = 1 ORDER BY sort_order, id")
+        Entry(r["id"], r["name"], r["phone"])
+        for r in db.fetch_all("SELECT id, name, phone FROM districts WHERE is_active = 1 ORDER BY sort_order, id")
     ])
+
+
+def format_phone(raw: str | None) -> str | None:
+    """'+998992012272' / '99-201-22-72' / '992012272' -> '+998 99 201 22 72'; anything else is shown as typed."""
+    if not raw or not raw.strip():
+        return None
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 9:
+        digits = "998" + digits
+    if len(digits) == 12 and digits.startswith("998"):
+        return f"+998 {digits[3:5]} {digits[5:8]} {digits[8:10]} {digits[10:12]}"
+    return raw.strip()
 
 
 def district(num: int) -> Entry | None:
