@@ -1,0 +1,27 @@
+.env
+bot.db
+data/
+_stage/
+__pycache__/
+*.log
+uploads/
+tools/*.backup*
+tools/demo/
+tools/*.db
+.claude/
+must be uploaded/
+*.rar
+*.zip
+
+# never commit: real data, personal data, generated or environment-specific files
+bot.db*
+*.pdf
+*.xlsx
+tools/e2e/
+tools/*.log
+web/phpini/php.ini
+web/public/css/filament/
+web/public/js/filament/
+web/public/fonts/filament/
+web/database/*.sqlite*
+web/storage/framework/testing/

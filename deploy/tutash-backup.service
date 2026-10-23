@@ -1,0 +1,6 @@
+[Unit]
+Description=Tutash nightly backup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tutash-backup

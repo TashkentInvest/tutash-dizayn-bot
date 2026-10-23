@@ -1,0 +1,24 @@
+[Unit]
+Description=Tutash Telegram bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=tutash
+Group=tutash
+WorkingDirectory=/srv/tutash
+EnvironmentFile=/srv/tutash/.env
+ExecStart=/srv/tutash/venv/bin/python -m bot.main
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+UMask=0007
+# hardening: the bot may only write to its own data
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/tutash/data /srv/tutash/uploads /srv/tutash/bot.db /srv/tutash/bot.db-wal /srv/tutash/bot.db-shm
+
+[Install]
+WantedBy=multi-user.target
