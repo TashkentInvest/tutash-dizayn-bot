@@ -1,0 +1,14 @@
+# /etc/fail2ban/jail.d/tutash.local
+# Someone who keeps hitting the nginx rate limits (a flood) is cut off for an hour; SSH guessers for a day.
+[nginx-limit-req]
+enabled  = true
+port     = http,https
+logpath  = /var/log/nginx/error.log
+maxretry = 30
+findtime = 60
+bantime  = 3600
+
+[sshd]
+enabled  = true
+maxretry = 4
+bantime  = 86400

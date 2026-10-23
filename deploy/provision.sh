@@ -136,12 +136,7 @@ chgrp -R www-data "$APP/web/storage" "$APP/web/bootstrap/cache" "$APP/web/databa
 
 step "8/11 php and nginx"
 cp "$APP/deploy/php-fpm-99-tutash.ini" /etc/php/8.4/fpm/conf.d/99-tutash.ini
-cat > /etc/nginx/conf.d/tutash-limits.conf <<'EOF'
-limit_req_zone  $binary_remote_addr zone=login:10m rate=5r/m;
-limit_req_zone  $binary_remote_addr zone=files:10m rate=30r/m;
-limit_req_zone  $binary_remote_addr zone=lw:10m rate=120r/m;
-limit_conn_zone $binary_remote_addr zone=perip:10m;
-EOF
+install -m 644 "$APP/deploy/nginx-limits.conf" /etc/nginx/conf.d/tutash-limits.conf
 sed "s/YOUR-DOMAIN/$DOMAIN/g" "$APP/deploy/nginx-tutash.conf" > /etc/nginx/sites-available/tutash
 ln -sf /etc/nginx/sites-available/tutash /etc/nginx/sites-enabled/tutash
 rm -f /etc/nginx/sites-enabled/default
@@ -173,7 +168,8 @@ step "11/11 firewall and SSH hardening"
 ufw default deny incoming; ufw default allow outgoing
 ufw allow OpenSSH; ufw allow 80/tcp; ufw allow 443/tcp
 ufw --force enable
-systemctl enable --now fail2ban
+install -m 644 "$APP/deploy/fail2ban-tutash.local" /etc/fail2ban/jail.d/tutash.local
+systemctl enable fail2ban && systemctl restart fail2ban
 if [ -s /root/.ssh/authorized_keys ]; then   # only when a key is installed, otherwise we would lock ourselves out
   printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/99-tutash.conf
   sshd -t && systemctl reload ssh

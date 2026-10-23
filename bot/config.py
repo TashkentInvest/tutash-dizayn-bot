@@ -39,3 +39,14 @@ REQUIRE_APPROVAL = os.environ.get("REQUIRE_APPROVAL", "0") == "1"
 USER_COOLDOWN = float(os.environ.get("USER_COOLDOWN", "0.7"))
 # How many files may be uploaded to Telegram at the same moment (the rest wait in line).
 MAX_PARALLEL_UPLOADS = int(os.environ.get("MAX_PARALLEL_UPLOADS", "3"))
+
+# --- flood protection (bot/guard.py) ---
+# per user: a short burst is fine, then at most GUARD_RATE events/second; GUARD_MUTE_STRIKES refused events within
+# 30 s mute the user for GUARD_MUTE_SECONDS. MAX_INFLIGHT = handlers running at the same time before work is shed.
+GUARD_BURST = int(os.environ.get("GUARD_BURST", "6"))
+GUARD_RATE = float(os.environ.get("GUARD_RATE", "1.5"))
+GUARD_MUTE_STRIKES = int(os.environ.get("GUARD_MUTE_STRIKES", "12"))
+GUARD_MUTE_SECONDS = int(os.environ.get("GUARD_MUTE_SECONDS", "120"))
+MAX_INFLIGHT = int(os.environ.get("MAX_INFLIGHT", "150"))
+# our own calls to Telegram per second (its limit is about 30 for one bot)
+TG_OUT_PER_SECOND = float(os.environ.get("TG_OUT_PER_SECOND", "25"))

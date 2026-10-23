@@ -18,8 +18,8 @@ from .config import (
     LOCAL_API_URL,
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
-    USER_COOLDOWN,
 )
+from .guard import Guard, OutgoingLimiter
 from .keyboards import TXT_DISTRICTS, districts_kb, streets_kb
 
 TXT_STREETS = "<b>{}</b>\nКўчани танланг:"
@@ -46,22 +46,6 @@ class RequireRegistration(BaseMiddleware):
             return await event.answer(TXT_NEED_REG, show_alert=True)
         if not registration.has_access(uid):
             return await event.answer(registration.TXT_PENDING, show_alert=True)
-        return await handler(event, data)
-
-
-class Throttle(BaseMiddleware):
-    """One menu press per USER_COOLDOWN seconds per user; extra presses are dropped silently (anti-flood)."""
-
-    def __init__(self) -> None:
-        self._last: dict[int, float] = {}
-
-    async def __call__(self, handler, event: CallbackQuery, data):
-        now = time.monotonic()
-        if len(self._last) > 20000:  # keep memory bounded
-            self._last = {k: v for k, v in self._last.items() if now - v < 60}
-        if now - self._last.get(event.from_user.id, 0.0) < USER_COOLDOWN:
-            return await event.answer()
-        self._last[event.from_user.id] = now
         return await handler(event, data)
 
 
@@ -262,10 +246,13 @@ async def main():
         logging.info("catalog imported from data/ folders")
     api = TelegramAPIServer.from_base(LOCAL_API_URL, is_local=True) if LOCAL_API_URL else None
     bot = Bot(BOT_TOKEN, session=AiohttpSession(api=api, timeout=3600) if api else AiohttpSession(timeout=1800))
+    bot.session.middleware(OutgoingLimiter())  # stay under Telegram's ~30 requests/second
     dp = Dispatcher()
+    guard = Guard()  # first in line: flooded events are dropped before they cost a database write or an API call
+    dp.message.outer_middleware(guard)
+    dp.callback_query.outer_middleware(guard)
     dp.message.outer_middleware(TrackUsers())
     dp.callback_query.outer_middleware(TrackUsers())
-    dp.callback_query.outer_middleware(Throttle())
     dp.errors.register(stale_query, ExceptionTypeFilter(TelegramBadRequest), ExceptionMessageFilter("query is too old"))
     dp.errors.register(on_error)
     router.callback_query.outer_middleware(RequireRegistration())

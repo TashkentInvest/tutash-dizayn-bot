@@ -14,6 +14,11 @@ ExecStart=/srv/tutash/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
 UMask=0007
+# resource limits: a leak or a flood can only ever restart the bot, never take down the server
+MemoryHigh=600M
+MemoryMax=900M
+TasksMax=300
+LimitNOFILE=4096
 # hardening: the bot may only write to its own data
 NoNewPrivileges=yes
 PrivateTmp=yes

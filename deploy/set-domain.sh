@@ -12,8 +12,7 @@ SERVER_IP=$(curl -s -4 https://ifconfig.me || true)
 DNS_IP=$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}' || true)
 [ -n "$SERVER_IP" ] && [ "$DNS_IP" = "$SERVER_IP" ] || { echo "DNS: $DOMAIN -> '${DNS_IP:-nothing}', this server is '$SERVER_IP'. Fix the A record first."; exit 3; }
 
-grep -q 'zone=lw' /etc/nginx/conf.d/tutash-limits.conf 2>/dev/null || \
-  echo 'limit_req_zone $binary_remote_addr zone=lw:10m rate=120r/m;' >> /etc/nginx/conf.d/tutash-limits.conf
+install -m 644 "$APP/deploy/nginx-limits.conf" /etc/nginx/conf.d/tutash-limits.conf
 
 OLD_CERTS=$(certbot certificates 2>/dev/null | awk '/Certificate Name:/{print $3}' | grep -vx "$DOMAIN" || true)
 cp /etc/nginx/sites-available/tutash "/root/nginx-tutash.before-set-domain.$(date +%s)"
@@ -23,7 +22,7 @@ ln -sf /etc/nginx/sites-available/tutash /etc/nginx/sites-enabled/tutash
 nginx -t && systemctl reload nginx
 
 if [ -n "$EMAIL" ]; then ACME_ACCOUNT=(-m "$EMAIL"); else ACME_ACCOUNT=(--register-unsafely-without-email); fi
-certbot --nginx -d "$DOMAIN" "${ACME_ACCOUNT[@]}" --agree-tos --no-eff-email --redirect --non-interactive
+certbot --nginx -d "$DOMAIN" "${ACME_ACCOUNT[@]}" --agree-tos --no-eff-email --redirect --keep-until-expiring --non-interactive
 
 # settings that contain the address: bot links, dashboard url, secure cookies
 sed -i "s#^PUBLIC_BASE_URL=.*#PUBLIC_BASE_URL=https://$DOMAIN#" "$APP/.env"
