@@ -1,0 +1,32 @@
+[Unit]
+Description=3dot.uz website (Nuxt, node server)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=site3dot
+Group=site3dot
+WorkingDirectory=/srv/3dot/app
+EnvironmentFile=/srv/3dot/app/.env
+Environment=NODE_ENV=production
+Environment=NITRO_HOST=127.0.0.1
+Environment=NITRO_PORT=3001
+ExecStart=/usr/local/bin/node .output/server/index.mjs
+Restart=always
+RestartSec=5
+# this site is a separate program from the bot: it can only read its own folder and cannot grow without limit
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryHigh=300M
+MemoryMax=500M
+TasksMax=200
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

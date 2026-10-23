@@ -1,0 +1,92 @@
+#!/bin/bash
+# Install and publish the 3dot.uz website (Nuxt 4) on this server. Run as root; safe to run again.
+#   bash /srv/tutash/deploy/3dot-site/setup.sh                (optional: EMAIL=you@example.com for certificate notices)
+#
+# The site runs as its own system user (site3dot) from /srv/3dot, completely apart from the bot and the dashboard
+# (/srv/tutash): it cannot read their files, settings or database.
+set -euo pipefail
+REPO_URL="${REPO_URL:-https://github.com/https-github-com-teamdevsuz/3dot.uz.git}"
+EMAIL="${EMAIL:-}"
+SITE=/srv/3dot
+APPDIR=$SITE/app
+TUTASH=/srv/tutash
+step() { echo; echo "==> $*"; }
+
+step "1/7 Node.js 22 (official build from nodejs.org, checksum verified)"
+apt-get install -y -qq xz-utils >/dev/null
+if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 22 ]; then
+  base=https://nodejs.org/dist/latest-v22.x
+  sums=$(curl -fsSL "$base/SHASUMS256.txt")
+  file=$(echo "$sums" | awk '/linux-x64\.tar\.xz$/{print $2}')
+  [ -n "$file" ] || { echo "cannot find the Node tarball name"; exit 1; }
+  tmp=$(mktemp -d)
+  curl -fsSL "$base/$file" -o "$tmp/$file"
+  want=$(echo "$sums" | awk -v f="$file" '$2==f{print $1}')
+  got=$(sha256sum "$tmp/$file" | awk '{print $1}')
+  [ "$want" = "$got" ] || { echo "CHECKSUM MISMATCH for $file"; exit 1; }
+  rm -rf /opt/node && mkdir -p /opt/node && tar -xJf "$tmp/$file" -C /opt/node --strip-components=1
+  ln -sf /opt/node/bin/node /usr/local/bin/node
+  ln -sf /opt/node/bin/npm /usr/local/bin/npm
+  ln -sf /opt/node/bin/npx /usr/local/bin/npx
+  rm -rf "$tmp"
+fi
+node -v
+
+step "2/7 user and folder"
+id site3dot >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/site3dot --shell /usr/sbin/nologin site3dot
+mkdir -p "$SITE"; chown site3dot:site3dot "$SITE"; chmod 750 "$SITE"
+
+step "3/7 code from GitHub"
+sudo -u site3dot bash -c "
+  set -e
+  cd '$SITE'
+  [ -d app/.git ] || git clone --quiet '$REPO_URL' app
+  cd app && git fetch --quiet origin main && git checkout --quiet -f -B main origin/main
+  echo \"commit: \$(git rev-parse --short HEAD)\""
+
+step "4/7 settings (.env)"
+if [ ! -f "$APPDIR/.env" ]; then
+  cat > "$APPDIR/.env" <<'EOF'
+# The contact form sends leads to a Telegram group through a bot. Use a SEPARATE small bot for this
+# (not the bot of the street catalog). Fill in both values, then:  systemctl restart 3dot-site
+NUXT_TELEGRAM_BOT_TOKEN=
+NUXT_TELEGRAM_CHAT_ID=
+EOF
+  chown site3dot:site3dot "$APPDIR/.env"; chmod 600 "$APPDIR/.env"
+fi
+
+step "5/7 build (low priority, so the bot and the dashboard are not slowed down)"
+build() {
+  sudo -u site3dot bash -c "
+    set -e
+    cd '$APPDIR'
+    export NODE_OPTIONS=--max-old-space-size=1800 CI=1
+    nice -n 19 ionice -c3 $1
+    nice -n 19 npx --no-install nuxt prepare
+    nice -n 19 npm run build"
+}
+# dependencies come only from registry.npmjs.org (checked); their install scripts are skipped, `nuxt prepare` is run by hand
+build "npm ci --ignore-scripts --no-audit --no-fund" || { echo "build without install scripts failed, retrying with them"; build "npm ci --no-audit --no-fund"; }
+[ -f "$APPDIR/.output/server/index.mjs" ] || { echo "build produced no server"; exit 1; }
+
+step "6/7 service"
+install -m 644 "$TUTASH/deploy/3dot-site/3dot-site.service" /etc/systemd/system/3dot-site.service
+systemctl daemon-reload
+systemctl enable 3dot-site >/dev/null
+systemctl restart 3dot-site
+for i in $(seq 1 20); do curl -fs -o /dev/null http://127.0.0.1:3001/ && break; sleep 1; done
+curl -s -o /dev/null -w "local check: HTTP %{http_code}\n" http://127.0.0.1:3001/
+
+step "7/7 nginx and HTTPS for 3dot.uz and www.3dot.uz"
+install -m 644 "$TUTASH/deploy/nginx-limits.conf" /etc/nginx/conf.d/tutash-limits.conf
+install -m 644 "$TUTASH/deploy/3dot-site/nginx-3dot.conf" /etc/nginx/sites-available/3dot
+ln -sf /etc/nginx/sites-available/3dot /etc/nginx/sites-enabled/3dot
+nginx -t && systemctl reload nginx
+SERVER_IP=$(curl -s -4 https://ifconfig.me || true)
+for h in 3dot.uz www.3dot.uz; do
+  dns=$(getent ahostsv4 "$h" | awk 'NR==1{print $1}' || true)
+  [ -n "$SERVER_IP" ] && [ "$dns" = "$SERVER_IP" ] || { echo "DNS: $h -> '${dns:-nothing}', this server is '$SERVER_IP'. Point the A record here, then run this script again."; exit 3; }
+done
+if [ -n "$EMAIL" ]; then ACME_ACCOUNT=(-m "$EMAIL"); else ACME_ACCOUNT=(--register-unsafely-without-email); fi
+certbot --nginx -d 3dot.uz -d www.3dot.uz "${ACME_ACCOUNT[@]}" --agree-tos --no-eff-email --redirect --keep-until-expiring --non-interactive
+echo; echo "DONE: https://3dot.uz"
