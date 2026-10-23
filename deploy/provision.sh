@@ -7,7 +7,7 @@ set -euo pipefail
 : "${DOMAIN:?set DOMAIN, e.g. DOMAIN=bot.3dot.uz}"
 # EMAIL is optional (certificate expiry notices; renewal is automatic anyway). ADMIN_EMAIL is only the dashboard login name.
 EMAIL="${EMAIL:-}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-${EMAIL:-admin@$DOMAIN}}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-${EMAIL:-admin@$DOMAIN}}"   # only the dashboard login name
 # public repository: plain https, no key needed. For a private one use REPO_URL=git@github.com:... (a deploy key is created and shown).
 REPO_URL="${REPO_URL:-https://github.com/TashkentInvest/tutash-dizayn-bot.git}"
 APP=/srv/tutash
@@ -103,7 +103,7 @@ if [ ! -f "$APP/web/.env" ]; then
 APP_NAME="Tutash Admin"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=http://127.0.0.1:8000
+APP_URL=https://$DOMAIN
 APP_LOCALE=uz
 LOG_LEVEL=warning
 ADMIN_EMAILS=$ADMIN_EMAIL
@@ -111,8 +111,8 @@ TRUSTED_PROXIES=127.0.0.1
 SESSION_DRIVER=database
 SESSION_LIFETIME=60
 SESSION_ENCRYPT=true
-# the dashboard is opened through an SSH tunnel over plain http; switch to true if you ever publish it over https
-SESSION_SECURE_COOKIE=false
+# the dashboard is served over https on the same domain as the download links
+SESSION_SECURE_COOKIE=true
 SESSION_SAME_SITE=strict
 DB_CONNECTION=sqlite
 CACHE_STORE=database
@@ -139,6 +139,7 @@ cp "$APP/deploy/php-fpm-99-tutash.ini" /etc/php/8.4/fpm/conf.d/99-tutash.ini
 cat > /etc/nginx/conf.d/tutash-limits.conf <<'EOF'
 limit_req_zone  $binary_remote_addr zone=login:10m rate=5r/m;
 limit_req_zone  $binary_remote_addr zone=files:10m rate=30r/m;
+limit_req_zone  $binary_remote_addr zone=lw:10m rate=120r/m;
 limit_conn_zone $binary_remote_addr zone=perip:10m;
 EOF
 sed "s/YOUR-DOMAIN/$DOMAIN/g" "$APP/deploy/nginx-tutash.conf" > /etc/nginx/sites-available/tutash
