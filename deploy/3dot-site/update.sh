@@ -15,6 +15,8 @@ sudo -u site3dot bash -c "
   nice -n 19 ionice -c3 npm ci --ignore-scripts --no-audit --no-fund
   nice -n 19 npx --no-install nuxt prepare
   nice -n 19 npm run build"
+sudo -u site3dot bash -c "cd '$APPDIR' && node scripts/sitemap.mjs"
+install -D -m 644 "$APPDIR/.output/public/sitemap.xml" /var/www/3dot/sitemap.xml
 systemctl restart 3dot-site
 sleep 3
 curl -s -o /dev/null -w "site: HTTP %{http_code}\n" http://127.0.0.1:3001/
