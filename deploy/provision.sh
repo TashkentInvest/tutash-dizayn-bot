@@ -7,7 +7,8 @@ set -euo pipefail
 : "${DOMAIN:?set DOMAIN, e.g. DOMAIN=bot.3dot.uz}"
 : "${EMAIL:?set EMAIL (certificate expiry notices), e.g. EMAIL=you@example.com}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-$EMAIL}"
-REPO_URL="${REPO_URL:-git@github.com:TashkentInvest/tutash-dizayn-bot.git}"
+# public repository: plain https, no key needed. For a private one use REPO_URL=git@github.com:... (a deploy key is created and shown).
+REPO_URL="${REPO_URL:-https://github.com/TashkentInvest/tutash-dizayn-bot.git}"
 APP=/srv/tutash
 KEY=/home/tutash/.ssh/id_ed25519_deploy
 export DEBIAN_FRONTEND=noninteractive
@@ -38,17 +39,15 @@ mkdir -p /etc/systemd/system/php8.3-fpm.service.d
 printf '[Service]\nUMask=0007\n' > /etc/systemd/system/php8.3-fpm.service.d/umask.conf
 systemctl daemon-reload
 
-step "4/11 deploy key for the private GitHub repository (read-only)"
-if [ ! -f "$KEY" ]; then
-  sudo -u tutash ssh-keygen -t ed25519 -N "" -C "tutash-server-deploy" -f "$KEY" -q
-fi
-if ! sudo -u tutash GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-     git ls-remote "$REPO_URL" >/dev/null 2>&1; then
-  echo
-  echo "GitHub does not accept this server yet. Add this PUBLIC key as a read-only Deploy key of the repository"
-  echo "(repo -> Settings -> Deploy keys -> Add deploy key, leave 'Allow write access' OFF), then run this script again:"
-  echo; cat "$KEY.pub"; echo
-  exit 2
+step "4/11 access to the repository"
+if [[ "$REPO_URL" == git@* ]]; then
+  [ -f "$KEY" ] || sudo -u tutash ssh-keygen -t ed25519 -N "" -C "tutash-server-deploy" -f "$KEY" -q
+  if ! sudo -u tutash GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"        git ls-remote "$REPO_URL" >/dev/null 2>&1; then
+    echo "GitHub does not accept this server yet. Add this PUBLIC key as a read-only Deploy key of the repository,"
+    echo "then run this script again:"; cat "$KEY.pub"; exit 2
+  fi
+else
+  sudo -u tutash git ls-remote "$REPO_URL" >/dev/null   # public: just check that it is reachable
 fi
 
 step "5/11 code from GitHub"
