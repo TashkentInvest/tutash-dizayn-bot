@@ -5,8 +5,9 @@
 # deploy/README.md), PostgreSQL (the bot still uses SQLite; that port is a separate job).
 set -euo pipefail
 : "${DOMAIN:?set DOMAIN, e.g. DOMAIN=bot.3dot.uz}"
-: "${EMAIL:?set EMAIL (certificate expiry notices), e.g. EMAIL=you@example.com}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-$EMAIL}"
+# EMAIL is optional (certificate expiry notices; renewal is automatic anyway). ADMIN_EMAIL is only the dashboard login name.
+EMAIL="${EMAIL:-}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-${EMAIL:-admin@$DOMAIN}}"
 # public repository: plain https, no key needed. For a private one use REPO_URL=git@github.com:... (a deploy key is created and shown).
 REPO_URL="${REPO_URL:-https://github.com/TashkentInvest/tutash-dizayn-bot.git}"
 APP=/srv/tutash
@@ -17,10 +18,14 @@ step() { echo; echo "==> $*"; }
 step "1/11 packages"
 apt-get update -y
 apt-get -y upgrade
+# composer.lock was resolved on PHP 8.4 (Symfony 8 needs >= 8.4.1) but Ubuntu 24.04 ships 8.3: use the standard PHP PPA
+apt-get install -y software-properties-common
+add-apt-repository -y ppa:ondrej/php
+apt-get update -y
 apt-get install -y ufw fail2ban nginx git rsync sqlite3 curl unzip ca-certificates unattended-upgrades \
   python3 python3-venv python3-pip certbot python3-certbot-nginx \
-  php8.3-fpm php8.3-cli php8.3-sqlite3 php8.3-pgsql php8.3-mbstring php8.3-xml php8.3-intl php8.3-gd \
-  php8.3-zip php8.3-curl php8.3-bcmath composer
+  php8.4-fpm php8.4-cli php8.4-sqlite3 php8.4-pgsql php8.4-mbstring php8.4-xml php8.4-intl php8.4-gd \
+  php8.4-zip php8.4-curl php8.4-bcmath composer
 
 # optional: install an SSH public key for root (key login), e.g. SSH_PUBKEY="ssh-ed25519 AAAA... name"
 if [ -n "${SSH_PUBKEY:-}" ]; then
@@ -42,8 +47,9 @@ mkdir -p "$APP/data" "$APP/uploads" /home/tutash/.ssh
 chown -R tutash:www-data "$APP"; chmod 2770 "$APP" "$APP/data" "$APP/uploads"
 chown -R tutash:tutash /home/tutash/.ssh; chmod 700 /home/tutash/.ssh
 # php-fpm writes into the same folders (dashboard uploads, bot.db): files it creates must be group-writable
-mkdir -p /etc/systemd/system/php8.3-fpm.service.d
-printf '[Service]\nUMask=0007\n' > /etc/systemd/system/php8.3-fpm.service.d/umask.conf
+systemctl disable --now php8.3-fpm 2>/dev/null || true   # the first run installed 8.3; one PHP is enough
+mkdir -p /etc/systemd/system/php8.4-fpm.service.d
+printf '[Service]\nUMask=0007\n' > /etc/systemd/system/php8.4-fpm.service.d/umask.conf
 systemctl daemon-reload
 
 step "4/11 access to the repository"
@@ -129,7 +135,7 @@ fi
 chgrp -R www-data "$APP/web/storage" "$APP/web/bootstrap/cache" "$APP/web/database"; chmod -R g+rwX "$APP/web/storage" "$APP/web/bootstrap/cache" "$APP/web/database"
 
 step "8/11 php and nginx"
-cp "$APP/deploy/php-fpm-99-tutash.ini" /etc/php/8.3/fpm/conf.d/99-tutash.ini
+cp "$APP/deploy/php-fpm-99-tutash.ini" /etc/php/8.4/fpm/conf.d/99-tutash.ini
 cat > /etc/nginx/conf.d/tutash-limits.conf <<'EOF'
 limit_req_zone  $binary_remote_addr zone=login:10m rate=5r/m;
 limit_req_zone  $binary_remote_addr zone=files:10m rate=30r/m;
@@ -138,7 +144,7 @@ EOF
 sed "s/YOUR-DOMAIN/$DOMAIN/g" "$APP/deploy/nginx-tutash.conf" > /etc/nginx/sites-available/tutash
 ln -sf /etc/nginx/sites-available/tutash /etc/nginx/sites-enabled/tutash
 rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx && systemctl restart php8.3-fpm
+nginx -t && systemctl reload nginx && systemctl restart php8.4-fpm
 
 step "9/11 systemd: bot, nightly backup"
 install -m 644 "$APP/deploy/tutash-bot.service" /etc/systemd/system/tutash-bot.service
@@ -155,10 +161,11 @@ step "10/11 HTTPS certificate (needs $DOMAIN to point to this server)"
 SERVER_IP=$(curl -s -4 https://ifconfig.me || true)
 DNS_IP=$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}' || true)
 if [ -n "$SERVER_IP" ] && [ "$DNS_IP" = "$SERVER_IP" ]; then
-  certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --no-eff-email --redirect --non-interactive
+  if [ -n "$EMAIL" ]; then ACME_ACCOUNT=(-m "$EMAIL"); else ACME_ACCOUNT=(--register-unsafely-without-email); fi
+  certbot --nginx -d "$DOMAIN" "${ACME_ACCOUNT[@]}" --agree-tos --no-eff-email --redirect --non-interactive
 else
   echo "DNS check: $DOMAIN -> '${DNS_IP:-nothing}', this server is '$SERVER_IP'. Not issuing the certificate yet."
-  echo "When DNS is right run:  certbot --nginx -d $DOMAIN -m $EMAIL --agree-tos --redirect --non-interactive"
+  echo "When DNS is right run:  certbot --nginx -d $DOMAIN --agree-tos --redirect --non-interactive --register-unsafely-without-email"
 fi
 
 step "11/11 firewall and SSH hardening"

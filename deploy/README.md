@@ -39,7 +39,7 @@ Bu papkadagi fayllar tayyor shablonlar: `tutash-bot.service`, `tutash-backup.{sh
 
 ## 2. O'tish tartibi
 
-1. Paketlar: `python3.13` (+venv), `php8.3-fpm` (+pgsql mbstring xml intl gd zip sqlite3), `composer`, `postgresql`, `nginx`,
+1. Paketlar: `python3.13` (+venv), `php8.4-fpm` (+pgsql mbstring xml intl gd zip sqlite3), `composer`, `postgresql`, `nginx`,
    `certbot`, `rsync`, `sqlite3`, `rclone`, `ufw`, `fail2ban`. Foydalanuvchi `tutash`, papka `/srv/tutash`.
 2. **SSH:** faqat kalit bilan, `PermitRootLogin no`, `PasswordAuthentication no`. **ufw:** faqat 22, 80, 443. 8787 va PostgreSQL tashqariga ochilmaydi.
 3. Fayllarni ko'chirish: `rsync -a` (vaqt belgilarini saqlaydi) bilan `data/`, `uploads/`, `bot.db`. Keyin Cyrillic nomli har bir fayl
@@ -48,7 +48,7 @@ Bu papkadagi fayllar tayyor shablonlar: `tutash-bot.service`, `tutash-backup.{sh
    alohida `LINK_SECRET`, `APP_DEBUG=false`.
 5. Dashboard: `composer install --no-dev -o`, `php artisan key:generate`, `php artisan migrate`, `php artisan make:filament-user`,
    `php artisan config:cache route:cache`. `web/storage/logs/*.log` ni ko'chirmang (ichida shaxsiy ma'lumot bo'lishi mumkin).
-6. `php-fpm-99-tutash.ini` → `/etc/php/8.3/fpm/conf.d/`. `nginx-tutash.conf` → nginx, `certbot --nginx -d YOUR-DOMAIN`.
+6. `php-fpm-99-tutash.ini` → `/etc/php/8.4/fpm/conf.d/`. `nginx-tutash.conf` → nginx, `certbot --nginx -d YOUR-DOMAIN`.
 7. `systemctl enable --now tutash-bot tutash-backup.timer`, `tutash-monitor.sh` ni 5 daqiqada bir marta ishga tushiring (alohida kichik bot orqali ogohlantirish).
 8. **Ko'chirish kuni:** Windows'dagi botni **avval to'xtating** (bir token bilan ikkita bot `getUpdates` ziddiyatini beradi), so'ng Linux'dagini yoqing.
    Tekshiruv: `/start`, bitta ro'yxatdan o'tish, kichik fayl, katta havola.

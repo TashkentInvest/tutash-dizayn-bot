@@ -14,6 +14,6 @@ sudo -u tutash php artisan migrate --force -q
 sudo -u tutash php artisan filament:assets -q
 sudo -u tutash php artisan config:cache -q
 chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cache
-systemctl reload php8.3-fpm
+systemctl reload php8.4-fpm
 systemctl restart tutash-bot
 sleep 3; systemctl is-active tutash-bot && echo "deployed: $(sudo -u tutash git -C $APP rev-parse --short HEAD)"
