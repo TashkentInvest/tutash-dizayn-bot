@@ -80,7 +80,9 @@ class BotStats
         $tz = self::tz();
         $from = CarbonImmutable::now($tz)->startOfDay()->subDays($days - 1);
 
-        return Cache::remember("bot.stats.perday.$column.$days", 60, function () use ($query, $column, $days, $tz, $from) {
+        // Cache a plain array: Laravel 13 refuses to unserialize objects (a cached Collection comes back as
+        // __PHP_Incomplete_Class and the dashboard fails with a 500 on every cache hit).
+        $perDay = Cache::remember("bot.stats.perday.$column.$days", 60, function () use ($query, $column, $days, $tz, $from): array {
             $day = match ($query->getConnection()->getDriverName()) {
                 'pgsql' => "to_char($column AT TIME ZONE '$tz', 'YYYY-MM-DD')",
                 default => "strftime('%Y-%m-%d', $column, '".sprintf('%+d', $from->getOffset() / 3600)." hours')",
@@ -89,7 +91,10 @@ class BotStats
                 ->selectRaw("$day as day, COUNT(*) as n")->groupBy('day')->pluck('n', 'day');
 
             return collect(range(0, $days - 1))
-                ->mapWithKeys(fn ($i) => [$from->addDays($i)->format('Y-m-d') => (int) $counts->get($from->addDays($i)->format('Y-m-d'), 0)]);
+                ->mapWithKeys(fn ($i) => [$from->addDays($i)->format('Y-m-d') => (int) $counts->get($from->addDays($i)->format('Y-m-d'), 0)])
+                ->all();
         });
+
+        return collect($perDay);
     }
 }
