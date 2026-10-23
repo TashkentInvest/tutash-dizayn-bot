@@ -22,6 +22,13 @@ apt-get install -y ufw fail2ban nginx git rsync sqlite3 curl unzip ca-certificat
   php8.3-fpm php8.3-cli php8.3-sqlite3 php8.3-pgsql php8.3-mbstring php8.3-xml php8.3-intl php8.3-gd \
   php8.3-zip php8.3-curl php8.3-bcmath composer
 
+# optional: install an SSH public key for root (key login), e.g. SSH_PUBKEY="ssh-ed25519 AAAA... name"
+if [ -n "${SSH_PUBKEY:-}" ]; then
+  mkdir -p /root/.ssh && chmod 700 /root/.ssh
+  grep -qF "$SSH_PUBKEY" /root/.ssh/authorized_keys 2>/dev/null || echo "$SSH_PUBKEY" >> /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+fi
+
 step "2/11 swap (a 2 GB upload must not be able to kill the server)"
 if ! swapon --show | grep -q .; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
