@@ -25,3 +25,4 @@ web/public/js/filament/
 web/public/fonts/filament/
 web/database/*.sqlite*
 web/storage/framework/testing/
+venv/
