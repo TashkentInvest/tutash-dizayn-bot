@@ -2,6 +2,8 @@
 Description=Tutash Telegram bot
 After=network-online.target postgresql.service
 Wants=network-online.target
+# never give up restarting the bot after repeated crashes (this key belongs in [Unit], not [Service])
+StartLimitIntervalSec=0
 
 [Service]
 User=tutash
@@ -11,7 +13,6 @@ EnvironmentFile=/srv/tutash/.env
 ExecStart=/srv/tutash/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=0
 UMask=0007
 # hardening: the bot may only write to its own data
 NoNewPrivileges=yes
