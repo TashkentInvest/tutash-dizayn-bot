@@ -69,3 +69,21 @@ Ikkita rol: bot jadvallar egasi, dashboard esa faqat kerakli jadvallarga huquqli
 * "Mening ma'lumotlarimni o'chir" buyrug'i va saqlash muddati qoidasi; dashboard'da shaxsiy ma'lumotni ko'rish jurnali.
 * `data/_trash/` va `file_cache` ni vaqti-vaqti bilan tozalash.
 * Rozilik matni (`bot/registration.py`, `TXT_CONSENT`) — huquqshunos yoki o'zingiz tasdiqlashingiz kerak.
+
+## 5. Himoya qatlamlari (to'fan / DDoS)
+
+| Qatlam | Nima qiladi | Sozlash |
+|---|---|---|
+| `bot/guard.py` `Guard` | har bir foydalanuvchiga: 6 ta tez bosish, keyin sekundiga 1.5 ta. 30 soniyada 12 marta rad etilsa, 120 soniyaga jim bloklanadi. Bir vaqtda 150 tadan ortiq ishlov bo'lsa, ortig'i "band" deb rad etiladi | `.env`: `GUARD_BURST`, `GUARD_RATE`, `GUARD_MUTE_STRIKES`, `GUARD_MUTE_SECONDS`, `MAX_INFLIGHT` |
+| `bot/guard.py` `OutgoingLimiter` | Telegram'ga so'rovlar sekundiga 25 tadan oshmaydi (Telegram chegarasi ~30), bot flood-wait'ga tushmaydi | `TG_OUT_PER_SECOND` |
+| bot ichida | bir foydalanuvchi bir vaqtda bitta ko'cha yuklaydi; bir fayl bir marta yuklanadi; parallel yuklash 3 ta | `MAX_PARALLEL_UPLOADS` |
+| nginx (`deploy/nginx-limits.conf`) | fayl havolasi: 30/daq (burst 20), bir manzildan 4 va jami 40 ta bir vaqtdagi yuklash, har biri 8 MB/s; login: 5/daq; dashboard 10 so'rov/s | 429 qaytaradi |
+| `systemd` (`tutash-bot.service`) | bot 600 MB dan oshsa sekinlashadi, 900 MB dan oshsa qayta ishga tushadi, server qotmaydi | `MemoryHigh`, `MemoryMax` |
+| `fail2ban` | nginx cheklovlarini 60 soniyada 30 marta buzgan manzil 1 soatga, SSH'da 4 marta xato qilgan 1 kunga bloklanadi | `deploy/fail2ban-tutash.local` |
+
+Bloklangan manzilni ochish: `fail2ban-client set nginx-limit-req unbanip MANZIL`.
+
+**Chegara:** bot Telegram'dan *uzoq so'rov* (long polling) bilan oladi, serverga kiruvchi port yo'q, shuning uchun botning o'ziga
+tashqaridan hujum qilib bo'lmaydi: u Telegram infratuzilmasi orqasida. Tashqaridan faqat 80/443 (havolalar va dashboard) va 22 (SSH) ochiq.
+Provayder kanalini to'ldiradigan hajmli hujumni (L3/L4 DDoS) server yoki kod to'xtata olmaydi, buning uchun provayderning DDoS himoyasi
+yoki domen oldiga Cloudflare qo'yiladi.
