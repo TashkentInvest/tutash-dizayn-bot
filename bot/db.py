@@ -138,7 +138,8 @@ def _rekey_file_cache() -> None:
 
     with _db() as c:
         for (path,) in c.execute("SELECT DISTINCT path FROM file_cache").fetchall():
-            if "\\" not in path and ":" not in path:
+            file_part = path.split("|", 1)[0]  # "<rel>|<name>": the name may contain anything
+            if "\\" not in file_part and ":" not in file_part:
                 continue  # already relative
             try:
                 rel = Path(path).relative_to(DATA_DIR).as_posix()

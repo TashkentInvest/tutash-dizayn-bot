@@ -68,14 +68,22 @@ def street(d: Entry, num: int) -> Entry | None:
     return next((s for s in streets(d) if s.num == num), None)
 
 
-def files(s: Entry) -> list[Path]:
-    """Existing files of a street, in the order set in the dashboard."""
+def named_files(s: Entry) -> list[tuple[Path, str]]:
+    """Existing files of a street with the name the user should see, in the order set in the dashboard.
+    Dashboard uploads are stored under a random name on disk; the original one is kept in `file_name`."""
     def load():
-        rows = db.fetch_all("SELECT path FROM street_files WHERE street_id = ? ORDER BY sort_order, id", (s.num,))
-        paths = [DATA_DIR / r["path"] for r in rows]
-        return [p for p in paths if p.is_file()]
+        rows = db.fetch_all(
+            "SELECT path, file_name FROM street_files WHERE street_id = ? ORDER BY sort_order, id", (s.num,)
+        )
+        pairs = [(DATA_DIR / r["path"], r["file_name"]) for r in rows]
+        return [(p, (name or "").strip() or p.name) for p, name in pairs if p.is_file()]
 
     return _cached(("f", s.num), load)
+
+
+def files(s: Entry) -> list[Path]:
+    """Existing files of a street (paths on disk only)."""
+    return [p for p, _ in named_files(s)]
 
 
 def total_size(s: Entry) -> int:

@@ -119,7 +119,8 @@ async def pick_street(c: CallbackQuery):
     s = catalog.street(d, int(sn)) if d else None
     if not s:
         return await c.answer(TXT_STALE, show_alert=True)
-    files = catalog.files(s)
+    named = catalog.named_files(s)
+    files = [f for f, _ in named]
     if not files:
         return await c.answer(TXT_NO_FILE, show_alert=True)
     uid = c.from_user.id
@@ -130,7 +131,7 @@ async def pick_street(c: CallbackQuery):
     try:
         await c.answer()
         try:
-            eta_s = _estimate(files)
+            eta_s = _estimate(named)
         except OSError:  # a file vanished between the listing and now
             eta_s = 0
         if eta_s >= 5:
@@ -138,25 +139,25 @@ async def pick_street(c: CallbackQuery):
             # Telegram's side go out at once, and every extra message eats the ~30 messages/s Telegram allows
             loader = await c.message.answer(TXT_LOADING.format(s.name) + TXT_ETA.format(_fmt_eta(eta_s)))
             keep_action = asyncio.create_task(_keep_upload_action(c.bot, c.message.chat.id))
-        for i, f in enumerate(files, 1):
+        for i, (f, name) in enumerate(named, 1):
             st = f.stat()
             size_mb = st.st_size // (1024 * 1024)
             if loader and len(files) > 1:
                 await _safe_edit(
                     loader,
-                    TXT_LOADING.format(s.name) + f" ({i}/{len(files)})" + TXT_ETA.format(_fmt_eta(_estimate(files[i - 1:]))),
+                    TXT_LOADING.format(s.name) + f" ({i}/{len(files)})" + TXT_ETA.format(_fmt_eta(_estimate(named[i - 1:]))),
                 )
             sent_ok = False
             if st.st_size <= MAX_FILE_MB * 1024 * 1024 - 2 * 1024 * 1024:  # margin below Telegram's limit
                 try:
-                    await _send_file(c.message, f, st, f"{d.name} — {s.name}")
+                    await _send_file(c.message, f, st, f"{d.name} — {s.name}", name)
                     sent_ok = True
                 except Exception as e:  # upload failed/stalled: tell the user and fall back to a link
                     logging.exception("send failed: %s", f)
                     await c.message.answer(TXT_FAILED.format(s.name, type(e).__name__))
             if not sent_ok:
-                await c.message.answer(TXT_LINK.format(d.name, s.name, size_mb, web.link_for(f)))
-            db.log_download(uid, d.name, s.name, f.name)
+                await c.message.answer(TXT_LINK.format(d.name, s.name, size_mb, web.link_for(f, name)))
+            db.log_download(uid, d.name, s.name, name)
     except Exception as e:
         logging.exception("street handler failed")
         await c.message.answer(TXT_FAILED.format(s.name, type(e).__name__))
@@ -176,10 +177,10 @@ _file_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _upload_slots = asyncio.Semaphore(MAX_PARALLEL_UPLOADS)
 
 
-async def _send_file(msg: Message, f, st, caption: str):
+async def _send_file(msg: Message, f, st, caption: str, name: str):
     """Send a document. The first request for a file uploads it once (others wait on the lock and then
     reuse Telegram's file_id), uploads are capped so they don't starve each other, 429s are retried."""
-    key, mtime = f.relative_to(DATA_DIR).as_posix(), int(st.st_mtime)  # relative: survives moving data/
+    key, mtime = _cache_key(f, name), int(st.st_mtime)
     for attempt in range(4):
         try:
             file_id = db.get_cached(key, st.st_size, mtime)
@@ -191,7 +192,7 @@ async def _send_file(msg: Message, f, st, caption: str):
                     return await msg.answer_document(file_id, caption=caption)
                 async with _upload_slots:
                     t0 = time.monotonic()
-                    sent = await msg.answer_document(FSInputFile(f), caption=caption, request_timeout=1800)
+                    sent = await msg.answer_document(FSInputFile(f, filename=name), caption=caption, request_timeout=1800)
                     db.record_upload(st.st_size, time.monotonic() - t0)
                 db.set_cached(key, st.st_size, mtime, sent.document.file_id)
                 return sent
@@ -201,12 +202,19 @@ async def _send_file(msg: Message, f, st, caption: str):
             await asyncio.sleep(e.retry_after + 1)
 
 
-def _estimate(files) -> float:
+def _cache_key(f, name: str) -> str:
+    """Relative path (survives moving data/). A Telegram file_id keeps the file name it was uploaded with, so a file
+    sent under another name (dashboard uploads: random name on disk) gets its own entry."""
+    rel = f.relative_to(DATA_DIR).as_posix()
+    return rel if name == f.name else f"{rel}|{name}"
+
+
+def _estimate(named) -> float:
     """Seconds needed: cached files are near-instant, the rest depends on the measured upload speed."""
     bps, total = db.get_upload_speed(), 0.0
-    for f in files:
+    for f, name in named:
         st = f.stat()
-        if db.get_cached(f.relative_to(DATA_DIR).as_posix(), st.st_size, int(st.st_mtime)):
+        if db.get_cached(_cache_key(f, name), st.st_size, int(st.st_mtime)):
             total += 2
         elif st.st_size <= MAX_FILE_MB * 1024 * 1024 - 2 * 1024 * 1024:
             total += st.st_size / bps + 2
