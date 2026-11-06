@@ -267,7 +267,9 @@ async def main():
     dp.callback_query.outer_middleware(TrackUsers())
     dp.errors.register(stale_query, ExceptionTypeFilter(TelegramBadRequest), ExceptionMessageFilter("query is too old"))
     dp.errors.register(on_error)
-    router.callback_query.outer_middleware(RequireRegistration())
+    # inner, not outer: an outer middleware on this router would also catch the "consent" button (it passes through
+    # this router on its way to registration.router) and answer "register first", so nobody could ever register
+    router.callback_query.middleware(RequireRegistration())
     dp.include_router(router)
     dp.include_router(registration.router)
     runner = await web.start_web()

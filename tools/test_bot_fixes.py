@@ -73,6 +73,46 @@ async def http():
     finally:
         await runner.cleanup()
 
+# end to end through the dispatcher as wired in main(): a new user presses "Розиман" and must reach the name step,
+# not get "register first" (the menu's registration check once caught the consent button too)
+async def consent_flow():
+    from datetime import datetime
+    from aiogram import Bot, Dispatcher
+    from aiogram.client.session.base import BaseSession
+    from aiogram.methods import AnswerCallbackQuery, SendMessage
+    from aiogram.types import Chat, Message, Update
+    from bot import main as bm
+
+    sent = []
+    class Fake(BaseSession):
+        async def make_request(self, bot, method, timeout=None):
+            sent.append(method)
+            if isinstance(method, SendMessage):
+                return Message(message_id=1, date=datetime.now(), chat=Chat(id=method.chat_id, type="private"), text=method.text)
+            return True
+        async def stream_content(self, *a, **k):
+            yield b""
+        async def close(self):
+            pass
+
+    bot = Bot("42:TEST", session=Fake())
+    dp = Dispatcher()
+    dp.callback_query.outer_middleware(bm.TrackUsers())
+    bm.router.callback_query.middleware(bm.RequireRegistration())
+    dp.include_router(bm.router); dp.include_router(reg.router)
+    uid = 515151
+    frm = {"id": uid, "is_bot": False, "first_name": "N"}
+    msg = {"message_id": 5, "date": 0, "chat": {"id": uid, "type": "private"}, "from": {"id": 1, "is_bot": True, "first_name": "B"}, "text": "x"}
+    await dp.feed_update(bot, Update.model_validate({"update_id": 1, "callback_query": {"id": "q1", "from": frm, "chat_instance": "c", "message": msg, "data": "consent"}}))
+    alerts = [m.text for m in sent if isinstance(m, AnswerCallbackQuery) and m.text]
+    check("consent button is not blocked by the menu's registration check", not alerts and reg.step(uid) == "name")
+    check("after consent the bot asks for the name", any(isinstance(m, SendMessage) and m.text == reg.TXT_NAME for m in sent))
+    sent.clear()
+    await dp.feed_update(bot, Update.model_validate({"update_id": 2, "callback_query": {"id": "q2", "from": frm, "chat_instance": "c", "message": msg, "data": "d:1"}}))
+    check("menu buttons still need registration", any(isinstance(m, AnswerCallbackQuery) and m.text == bm.TXT_NEED_REG for m in sent))
+
+asyncio.run(consent_flow())
+
 os.environ["WEB_PORT"] = "8799"; web.WEB_PORT = 8799
 asyncio.run(http())
 shutil.rmtree(tmp, ignore_errors=True)
