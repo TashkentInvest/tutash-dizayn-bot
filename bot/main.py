@@ -62,6 +62,12 @@ class TrackUsers(BaseMiddleware):
         return await handler(event, data)
 
 
+def private_only(r: Router) -> None:
+    """The bot is personal: in a group, registration would post a member's name, phone and location for all to see."""
+    r.message.filter(F.chat.type == "private")
+    r.callback_query.filter(F.message.chat.type == "private")
+
+
 async def stale_query(event: ErrorEvent) -> bool:
     """Buttons pressed while the bot was offline: Telegram rejects the late answer, nothing to do."""
     return True
@@ -127,9 +133,21 @@ async def pick_street(c: CallbackQuery):
     if uid in _busy:  # one street at a time per user: repeated presses must not multiply the work
         return await c.answer(TXT_BUSY)
     _busy.add(uid)
-    loader = keep_action = None
     try:
         await c.answer()
+    except Exception:  # pressed while the bot was down/busy: too late to answer, still send the files (and free _busy)
+        pass
+    # The sending runs as its own task: an upload can take minutes, and holding the handler that long would keep one of
+    # Guard's MAX_INFLIGHT slots per waiting user, so a burst of uncached requests made the whole bot answer "busy".
+    t = asyncio.create_task(_send_street(c, d, s, named, uid))
+    _tasks.add(t)
+    t.add_done_callback(_tasks.discard)
+
+
+async def _send_street(c: CallbackQuery, d, s, named, uid: int):
+    files = [f for f, _ in named]
+    loader = keep_action = None
+    try:
         try:
             eta_s = _estimate(named)
         except OSError:  # a file vanished between the listing and now
@@ -173,6 +191,7 @@ async def pick_street(c: CallbackQuery):
 
 
 _busy: set[int] = set()
+_tasks: set[asyncio.Task] = set()  # running street sends (a reference keeps them from being garbage-collected)
 _file_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _upload_slots = asyncio.Semaphore(MAX_PARALLEL_UPLOADS)
 
@@ -265,11 +284,15 @@ async def main():
     dp.callback_query.outer_middleware(guard)
     dp.message.outer_middleware(TrackUsers())
     dp.callback_query.outer_middleware(TrackUsers())
-    dp.errors.register(stale_query, ExceptionTypeFilter(TelegramBadRequest), ExceptionMessageFilter("query is too old"))
+    # the exception text starts with "Telegram server says - Bad Request: ...", and the filter matches from the start
+    for late in ("query is too old", "query ID is invalid", "message is not modified"):
+        dp.errors.register(stale_query, ExceptionTypeFilter(TelegramBadRequest), ExceptionMessageFilter(rf".*{late}"))
     dp.errors.register(on_error)
     # inner, not outer: an outer middleware on this router would also catch the "consent" button (it passes through
     # this router on its way to registration.router) and answer "register first", so nobody could ever register
     router.callback_query.middleware(RequireRegistration())
+    private_only(router)
+    private_only(registration.router)
     dp.include_router(router)
     dp.include_router(registration.router)
     runner = await web.start_web()

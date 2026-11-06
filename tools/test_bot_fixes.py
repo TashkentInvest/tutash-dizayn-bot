@@ -99,6 +99,7 @@ async def consent_flow():
     dp = Dispatcher()
     dp.callback_query.outer_middleware(bm.TrackUsers())
     bm.router.callback_query.middleware(bm.RequireRegistration())
+    bm.private_only(bm.router); bm.private_only(reg.router)
     dp.include_router(bm.router); dp.include_router(reg.router)
     uid = 515151
     frm = {"id": uid, "is_bot": False, "first_name": "N"}
@@ -110,6 +111,19 @@ async def consent_flow():
     sent.clear()
     await dp.feed_update(bot, Update.model_validate({"update_id": 2, "callback_query": {"id": "q2", "from": frm, "chat_instance": "c", "message": msg, "data": "d:1"}}))
     check("menu buttons still need registration", any(isinstance(m, AnswerCallbackQuery) and m.text == bm.TXT_NEED_REG for m in sent))
+    sent.clear()
+    grp = {"message_id": 7, "date": 0, "chat": {"id": -100, "type": "supergroup", "title": "g"}, "from": {"id": 777, "is_bot": False, "first_name": "G"}, "text": "/start"}
+    await dp.feed_update(bot, Update.model_validate({"update_id": 3, "message": grp}))
+    check("group chats are ignored (no registration prompt posted to a group)", not sent)
+
+    # late answers / repeated edits: Telegram's text starts with "Telegram server says - ", the filter must still match
+    from aiogram.exceptions import TelegramBadRequest
+    from aiogram.filters import ExceptionMessageFilter
+    from aiogram.types import ErrorEvent
+    for late in ("query is too old and response timeout expired or query ID is invalid", "message is not modified: x"):
+        e = TelegramBadRequest(method=AnswerCallbackQuery(callback_query_id="x"), message="Bad Request: " + late)
+        ev = ErrorEvent(update=Update(update_id=9), exception=e)
+        check(f"stale filter matches '{late[:24]}'", await ExceptionMessageFilter(r".*" + late.split(" and")[0].split(":")[0])(ev))
 
 asyncio.run(consent_flow())
 

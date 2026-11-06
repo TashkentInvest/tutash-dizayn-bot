@@ -35,6 +35,13 @@ return [
             'driver' => 'local',
             'root' => env('BOT_DATA_PATH', base_path('../data')),
             'visibility' => 'private',
+            // The bot runs as another user (tutash) in the www-data group: "private" must still mean group-readable,
+            // or Flysystem's defaults (dirs 0700, files 0600) lock the bot out of every dashboard upload on Linux.
+            // 02770 keeps the setgid bit, so new folders stay in the shared group like data/ itself.
+            'permissions' => [
+                'file' => ['public' => 0660, 'private' => 0660],
+                'dir' => ['public' => 02770, 'private' => 02770],
+            ],
             'throw' => false,
             'report' => false,
         ],

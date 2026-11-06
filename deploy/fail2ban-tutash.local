@@ -2,6 +2,9 @@
 # Someone who keeps hitting the nginx rate limits (a flood) is cut off for an hour; SSH guessers for a day.
 [nginx-limit-req]
 enabled  = true
+# Only the dashboard zones ban. Download links (zone "files") are opened by many people behind one mobile-carrier IP
+# after an announcement: nginx already slows them down with 429, a one-hour ban would cut a whole carrier off the site.
+filter   = nginx-limit-req[ngx_limit_req_zones="login|lw|app"]
 port     = http,https
 logpath  = /var/log/nginx/error.log
 # read the log FILE: the default 'systemd' backend only looks at the journal, where nginx does not log
