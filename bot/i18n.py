@@ -96,8 +96,8 @@ TEXTS: dict[str, tuple[str, str]] = {
     ),
     "no_file": ("Bu bo‘lim uchun fayl hali yuklanmagan.", "Файл для этого раздела ещё не загружен."),
     "link": (
-        "{} — {}\nFayl katta ({} MB), yuklab olish uchun havola:\n{}\n\n(Havola {} soat amal qiladi)",
-        "{} — {}\nФайл большой ({} МБ), ссылка для скачивания:\n{}\n\n(Ссылка действует {} ч.)",
+        "{} — {}\nFayl katta ({} MB), yuklab olish uchun: 📥 <a href=\"{}\">Havola</a>\n\n(Havola {} soat amal qiladi)",
+        "{} — {}\nФайл большой ({} МБ), для скачивания: 📥 <a href=\"{}\">Ссылка</a>\n\n(Ссылка действует {} ч.)",
     ),
 
     # requests (murojaat)

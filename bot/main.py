@@ -10,7 +10,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.filters import BaseFilter, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
-from aiogram.types import BotCommand, CallbackQuery, ErrorEvent, FSInputFile, Message
+from aiogram.types import BotCommand, CallbackQuery, ErrorEvent, FSInputFile, LinkPreviewOptions, Message
 
 from . import catalog, db, registration, web
 from .config import (
@@ -309,7 +309,12 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
                     logging.exception("send failed: %s", f)
                     await c.message.answer(t(L, "failed", sl, type(e).__name__))
             if not sent_ok:
-                await c.message.answer(t(L, "link", dl, sl, size_mb, web.link_for(f, name), LINK_TTL_HOURS))
+                # the long signed URL hides behind a short "Havola" / "Ссылка" word; no preview (it would only fetch the file)
+                url = web.link_for(f, name)
+                await c.message.answer(
+                    t(L, "link", html.escape(dl), html.escape(sl), size_mb, html.escape(url, quote=True), LINK_TTL_HOURS),
+                    parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True),
+                )
             db.log_download(uid, d.name, s.name, name)
     except Exception as e:
         logging.exception("street handler failed")
