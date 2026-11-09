@@ -170,6 +170,28 @@ async def consent_flow():
     sent.clear(); await say("/start", 424242); await press("pick:concept", 424242)
     check("registered user: concept opens the districts", TXT_CHOICE in texts() and bm.TXT_DISTRICTS in texts())
 
+    # requests (мурожаат): level -> text -> saved; an answer written in the dashboard is delivered by the bot
+    from bot.keyboards import TXT_FB_LEVEL
+    sent.clear(); await press("pick:feedback")
+    check("request button -> problem level", TXT_FB_LEVEL in texts())
+    await press("fb:high"); sent.clear(); await say("қисқа")
+    check("too short request is refused", bm.TXT_FB_SHORT in texts() and not db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,)))
+    body = "Кўчамизда кечқурун ёритиш ишламайди, пиёдалар учун хавфли <b>"
+    sent.clear(); await say(body)
+    rows = db.fetch_all("SELECT id, level, text FROM feedback WHERE user_id=?", (uid,))
+    check("request saved with its level", len(rows) == 1 and rows[0]["level"] == "high" and rows[0]["text"] == body
+          and bm.TXT_FB_SAVED.format(rows[0]["id"]) in texts())
+    sent.clear(); await say("бу оддий хабар, мурожаат эмас")
+    check("after saving, the next message is not another request", len(db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,))) == 1)
+
+    db.execute("UPDATE feedback SET answer=?, answered_at=datetime('now') WHERE id=?", ("Ёритиш 3 кунда тикланади.", rows[0]["id"]))
+    sent.clear()
+    t = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); t.cancel()
+    msgs = [m for m in sent if isinstance(m, SendMessage) and m.chat_id == uid]
+    after = db.fetch_all("SELECT answer_sent_at, answer_error FROM feedback WHERE id=?", (rows[0]["id"],))[0]
+    check("dashboard answer delivered once, user text escaped", len(msgs) == 1 and "Ёритиш 3 кунда тикланади." in msgs[0].text
+          and "&lt;b&gt;" in msgs[0].text and after["answer_sent_at"] and after["answer_error"] is None)
+
 asyncio.run(consent_flow())
 
 os.environ["WEB_PORT"] = "8799"; web.WEB_PORT = 8799

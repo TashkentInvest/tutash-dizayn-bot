@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 import time
 from collections import defaultdict
@@ -7,8 +8,8 @@ from types import SimpleNamespace
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
-from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
-from aiogram.filters import CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.filters import BaseFilter, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
 from aiogram.types import CallbackQuery, ErrorEvent, FSInputFile, Message
 
 from . import catalog, db, registration, web
@@ -22,7 +23,18 @@ from .config import (
     MAX_PARALLEL_UPLOADS,
 )
 from .guard import Guard, OutgoingLimiter
-from .keyboards import TXT_CHOICE, TXT_DISTRICTS, TXT_LANG, choice_kb, districts_kb, lang_kb, streets_kb
+from .keyboards import (
+    FB_LEVELS,
+    TXT_CHOICE,
+    TXT_DISTRICTS,
+    TXT_FB_LEVEL,
+    TXT_LANG,
+    choice_kb,
+    districts_kb,
+    lang_kb,
+    level_kb,
+    streets_kb,
+)
 
 TXT_STREETS = "<b>{}</b>\nКўчани танланг:"
 TXT_EMPTY = "<b>{}</b>\nБу туман учун файллар ҳали юкланмаган."
@@ -44,6 +56,34 @@ router = Router()
 menu = Router()
 DESIGN_TITLE = "Дизайн-код"
 DESIGN_LANG = {"uz": "Ўзбекча", "ru": "Русский"}
+
+# Requests (мурожаат): level button -> one text message -> saved for the dashboard; the answer comes back through the bot
+TXT_FB_WRITE = (
+    "Муаммо даражаси: {}\n\nМурожаатингиз матнини битта хабарда батафсил ёзиб юборинг "
+    "(манзил, муаммо мазмуни ва таклифингиз).\n\nБекор қилиш учун /start ни босинг."
+)
+TXT_FB_TEXT_ONLY = "Илтимос, мурожаатингизни матн кўринишида юборинг."
+TXT_FB_SHORT = "Мурожаат матни жуда қисқа. Илтимос, муаммони батафсилроқ ёзинг."
+TXT_FB_LONG = "Мурожаат матни {} белгидан ошмаслиги керак. Илтимос, қисқартириб қайта юборинг."
+TXT_FB_LIMIT = "Бир кунда {} тадан ортиқ мурожаат юбориш мумкин эмас. Илтимос, эртага қайта уриниб кўринг."
+TXT_FB_SAVED = (
+    "✅ Мурожаатингиз қабул қилинди.\nМурожаат рақами: №{}\n\n"
+    "Мурожаатингиз масъул ходимлар томонидан кўриб чиқилиб, жавоб шу ерга юборилади."
+)
+TXT_FB_ANSWER = "📩 <b>№{} мурожаатингизга жавоб</b>\n\n<i>Сизнинг мурожаатингиз:</i>\n{}\n\n<b>Жавоб:</b>\n{}"
+FB_MIN, FB_MAX, FB_PER_DAY, FB_WAIT_SECONDS = 10, 2000, 5, 1800
+_fb_wait: dict[int, tuple[str, float]] = {}  # user id -> (level, when the level was picked): waiting for the text
+
+
+class WaitingFeedback(BaseFilter):
+    """A message from a user who picked a level and has not sent the text yet (expires after FB_WAIT_SECONDS)."""
+
+    async def __call__(self, m: Message) -> bool:
+        w = _fb_wait.get(m.from_user.id) if m.from_user else None
+        if w and time.monotonic() - w[1] > FB_WAIT_SECONDS:
+            _fb_wait.pop(m.from_user.id, None)
+            return False
+        return bool(w) and not (m.text or "").startswith("/")
 
 
 class RequireRegistration(BaseMiddleware):
@@ -100,6 +140,7 @@ def _has_contact(uid: int) -> bool:
 @router.message(CommandStart())
 async def start(m: Message):
     uid = m.from_user.id
+    _fb_wait.pop(uid, None)  # /start cancels a request being written
     if _has_contact(uid):  # everyone past the phone step starts at the main menu, registered or not
         return await registration.send_choice(m.bot, m.chat.id)
     if registration.step(uid) == "consent":
@@ -107,14 +148,22 @@ async def start(m: Message):
     await registration.prompt(m.bot, m.chat.id, uid)
 
 
-@menu.callback_query(F.data.startswith("pick:") | F.data.startswith("dc:"))
+@menu.callback_query(F.data.startswith("pick:") | F.data.startswith("dc:") | F.data.startswith("fb:"))
 async def main_menu(c: CallbackQuery):
     uid = c.from_user.id
     if not _has_contact(uid):
         return await c.answer(TXT_NEED_REG, show_alert=True)
     what = c.data.split(":", 1)[1]
-    if what == "menu":  # "back" from the language choice
+    if what == "menu":  # "back" from the language / level choice
+        _fb_wait.pop(uid, None)
         await _edit(c, TXT_CHOICE, choice_kb())
+    elif what == "feedback":
+        await _edit(c, TXT_FB_LEVEL, level_kb())
+    elif c.data.startswith("fb:") and what in FB_LEVELS:
+        if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
+            return await c.answer(TXT_FB_LIMIT.format(FB_PER_DAY), show_alert=True)
+        _fb_wait[uid] = (what, time.monotonic())
+        await _edit(c, TXT_FB_WRITE.format(FB_LEVELS[what]), None)
     elif what == "design":
         await _edit(c, TXT_LANG, lang_kb())
     elif what == "concept":
@@ -137,6 +186,42 @@ async def main_menu(c: CallbackQuery):
             return await c.answer(TXT_NO_FILE, show_alert=True)
         return await _start_send(c, SimpleNamespace(name=DESIGN_TITLE), SimpleNamespace(name=DESIGN_LANG[what]), [(f, name)])
     await c.answer()
+
+
+@menu.message(WaitingFeedback())
+async def feedback_text(m: Message):
+    uid = m.from_user.id
+    text = (m.text or "").strip()
+    if not text:
+        return await m.answer(TXT_FB_TEXT_ONLY)
+    if len(text) < FB_MIN:
+        return await m.answer(TXT_FB_SHORT)
+    if len(text) > FB_MAX:
+        return await m.answer(TXT_FB_LONG.format(FB_MAX))
+    level, _ = _fb_wait.pop(uid)
+    if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
+        return await m.answer(TXT_FB_LIMIT.format(FB_PER_DAY))
+    fid = db.add_feedback(uid, level, text)
+    await m.answer(TXT_FB_SAVED.format(fid))
+    await registration.send_choice(m.bot, m.chat.id)
+
+
+async def deliver_answers(bot: Bot) -> None:
+    """Sends the answers written in the dashboard. Polls the shared database, so the dashboard needs no bot token."""
+    while True:
+        try:
+            for r in db.unsent_answers():
+                text = r["text"] if len(r["text"]) <= 600 else r["text"][:600] + "…"
+                try:
+                    await bot.send_message(r["user_id"], TXT_FB_ANSWER.format(r["id"], html.escape(text), html.escape(r["answer"])),
+                                           parse_mode="HTML")
+                    db.mark_answer_sent(r["id"])
+                except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
+                    logging.warning("answer %s not delivered: %s", r["id"], e)
+                    db.mark_answer_sent(r["id"], error=str(e)[:200])
+        except Exception:  # database busy, network: try again next round
+            logging.exception("deliver_answers failed")
+        await asyncio.sleep(10)
 
 
 async def _edit(c: CallbackQuery, text: str, kb) -> None:
@@ -357,9 +442,11 @@ async def main():
     dp.include_router(menu)
     dp.include_router(registration.router)
     runner = await web.start_web()
+    answers = asyncio.create_task(deliver_answers(bot))
     try:
         await dp.start_polling(bot)
     finally:
+        answers.cancel()
         await runner.cleanup()
 
 

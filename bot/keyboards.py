@@ -11,13 +11,26 @@ BTN_CONCEPT = "🏙 Концепция"
 TXT_LANG = "Дизайн-код ҳужжатини қайси тилда олишни истайсиз? Тилни танланг:"
 BTN_UZ = "🇺🇿 Ўзбекча"
 BTN_RU = "🇷🇺 Русский"
+BTN_FEEDBACK = "📝 Мурожаат юбориш"
+TXT_FB_LEVEL = (
+    "Эътироз, таклиф ёки эҳтиёжларингизни юборишингиз мумкин. Мурожаатлар масъул ходимлар томонидан кўриб чиқилади "
+    "ва жавоб шу ерга юборилади.\n\nИлтимос, муаммо даражасини белгиланг:"
+)
+FB_LEVELS = {"low": "🟢 Паст", "medium": "🟡 Ўрта", "high": "🔴 Юқори"}
 
 
 def choice_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=BTN_DESIGN, callback_data="pick:design"),
         InlineKeyboardButton(text=BTN_CONCEPT, callback_data="pick:concept"),
-    ]])
+    ], [InlineKeyboardButton(text=BTN_FEEDBACK, callback_data="pick:feedback")]])
+
+
+def level_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t, callback_data=f"fb:{k}") for k, t in FB_LEVELS.items()],
+        [InlineKeyboardButton(text=BTN_BACK, callback_data="pick:menu")],
+    ])
 
 
 def lang_kb() -> InlineKeyboardMarkup:

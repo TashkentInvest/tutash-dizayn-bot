@@ -65,6 +65,21 @@ CREATE TABLE IF NOT EXISTS street_files (
 );
 CREATE INDEX IF NOT EXISTS idx_files_street ON street_files(street_id);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value REAL NOT NULL);
+-- Citizens' requests (objections, needs, suggestions). Answered from the dashboard, the bot delivers the answer.
+CREATE TABLE IF NOT EXISTS feedback (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER NOT NULL REFERENCES users(user_id),
+    level          TEXT NOT NULL,             -- problem level: low / medium / high
+    text           TEXT NOT NULL,
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    answer         TEXT,                      -- written in the dashboard
+    answered_at    TEXT,
+    answered_by    TEXT,                      -- admin e-mail
+    answer_sent_at TEXT,                      -- set by the bot once the answer reached the user (or failed for good)
+    answer_error   TEXT                       -- why it could not be delivered (user blocked the bot, ...)
+);
+CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
 """
 
 
@@ -243,6 +258,31 @@ def log_download(user_id: int, district: str, street: str, file_name: str) -> No
             "INSERT INTO downloads (user_id, district, street, file_name) VALUES (?, ?, ?, ?)",
             (user_id, district, street, file_name),
         )
+        c.commit()
+
+
+def add_feedback(user_id: int, level: str, text: str) -> int:
+    with _db() as c:
+        cur = c.execute("INSERT INTO feedback (user_id, level, text) VALUES (?, ?, ?)", (user_id, level, text))
+        c.commit()
+        return cur.lastrowid
+
+
+def feedback_count_since(user_id: int, hours: int) -> int:
+    with _db() as c:
+        return c.execute("SELECT COUNT(*) FROM feedback WHERE user_id=? AND created_at >= datetime('now', ?)",
+                         (user_id, f"-{hours} hours")).fetchone()[0]
+
+
+def unsent_answers(limit: int = 20) -> list[sqlite3.Row]:
+    with _db() as c:
+        return c.execute("SELECT id, user_id, text, answer FROM feedback WHERE answer IS NOT NULL AND answer_sent_at IS NULL "
+                         "ORDER BY answered_at LIMIT ?", (limit,)).fetchall()
+
+
+def mark_answer_sent(feedback_id: int, error: str | None = None) -> None:
+    with _db() as c:
+        c.execute("UPDATE feedback SET answer_sent_at=datetime('now'), answer_error=? WHERE id=?", (error, feedback_id))
         c.commit()
 
 
