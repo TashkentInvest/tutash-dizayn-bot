@@ -99,8 +99,8 @@ async def consent_flow():
     dp = Dispatcher()
     dp.callback_query.outer_middleware(bm.TrackUsers())
     bm.router.callback_query.middleware(bm.RequireRegistration())
-    bm.private_only(bm.router); bm.private_only(reg.router)
-    dp.include_router(bm.router); dp.include_router(reg.router)
+    bm.private_only(bm.router); bm.private_only(bm.menu); bm.private_only(reg.router)
+    dp.include_router(bm.router); dp.include_router(bm.menu); dp.include_router(reg.router)
     uid = 515151
     frm = {"id": uid, "is_bot": False, "first_name": "N"}
     msg = {"message_id": 5, "date": 0, "chat": {"id": uid, "type": "private"}, "from": {"id": 1, "is_bot": True, "first_name": "B"}, "text": "x"}
@@ -124,6 +124,51 @@ async def consent_flow():
         e = TelegramBadRequest(method=AnswerCallbackQuery(callback_query_id="x"), message="Bad Request: " + late)
         ev = ErrorEvent(update=Update(update_id=9), exception=e)
         check(f"stale filter matches '{late[:24]}'", await ExceptionMessageFilter(r".*" + late.split(" and")[0].split(":")[0])(ev))
+
+    # main menu after name + phone: design code (UZ/RU PDF, no location/photos) or concept (location, photos, districts)
+    from aiogram.methods import EditMessageText
+    from bot.keyboards import TXT_CHOICE, TXT_LANG
+    n = [10]
+    async def press(data, who=uid):
+        n[0] += 1
+        f = {"id": who, "is_bot": False, "first_name": "N"}
+        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "callback_query": {"id": f"q{n[0]}", "from": f, "chat_instance": "c", "message": msg, "data": data}}))
+    async def say(text, who=uid):
+        n[0] += 1
+        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": who, "type": "private"}, "from": {"id": who, "is_bot": False, "first_name": "N"}, "text": text}}))
+    texts = lambda: [getattr(m, "text", None) for m in sent if isinstance(m, (SendMessage, EditMessageText))]
+    sends = []
+    async def fake_start_send(c, d, s, named):
+        sends.append((d.name, s.name, [x[1] for x in named])); await c.answer()
+    bm._start_send = fake_start_send
+
+    await press("pick:design")
+    check("menu is closed before name and phone", sends == [] and reg.step(uid) == "name")
+    sent.clear(); await say("Тестов Тест Тестович"); await say("+998 90 123 45 67")
+    check("after the phone the bot asks: design code or concept", reg.step(uid) == "choice" and TXT_CHOICE in texts())
+    sent.clear(); await say("бирон матн")
+    check("text at the choice step repeats the choice", TXT_CHOICE in texts())
+    sent.clear(); await press("pick:design")
+    check("design code -> language flags", TXT_LANG in texts())
+    import bot.config as cfg
+    f = DATA_DIR / cfg.DESIGN_CODE["uz"][0]; created = not f.exists()
+    if created:
+        f.parent.mkdir(parents=True, exist_ok=True); f.write_bytes(b"%PDF-1.4 test")
+    try:
+        await press("dc:uz")
+    finally:
+        if created:
+            f.unlink(); f.parent.rmdir() if not any(f.parent.iterdir()) else None
+    check("UZ flag sends the Uzbek design code without location/photos", sends and sends[-1][1] == "Ўзбекча" and reg.step(uid) == "choice")
+    sent.clear(); await press("pick:concept")
+    check("concept -> location step", reg.step(uid) == "location" and reg.TXT_LOCATION in texts())
+    sent.clear(); await say("/start")
+    check("/start mid-registration shows the main menu", TXT_CHOICE in texts())
+
+    # a registered (and approved) user: /start -> menu, concept -> districts
+    db.update_user(424242, consent_at="2026-01-01 00:00:00")
+    sent.clear(); await say("/start", 424242); await press("pick:concept", 424242)
+    check("registered user: concept opens the districts", TXT_CHOICE in texts() and bm.TXT_DISTRICTS in texts())
 
 asyncio.run(consent_flow())
 

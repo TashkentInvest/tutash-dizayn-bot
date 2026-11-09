@@ -1,4 +1,5 @@
-"""Short registration: consent -> full name -> phone -> object location -> 2 object photos.
+"""Short registration: consent -> full name -> phone -> choice (design code / concept).
+"Design code" needs nothing more (the PDF is sent in main.py); "concept" goes on: object location -> 2 object photos.
 
 The current step is derived from what is already saved in the database, so a restart of the bot
 (or a user coming back later) simply continues where they stopped.
@@ -23,7 +24,7 @@ from aiogram.types import (
 
 from . import db
 from .config import REQUIRE_APPROVAL, UPLOADS_DIR
-from .keyboards import TXT_DISTRICTS, districts_kb
+from .keyboards import TXT_CHOICE, TXT_DISTRICTS, choice_kb, districts_kb
 
 PHOTOS_NEEDED = 2
 MAX_PHOTO_BYTES = 10 * 1024 * 1024
@@ -43,6 +44,7 @@ TXT_NAME_BAD = "Илтимос, Ф.И.Ш. ни тўлиқ киритинг (ка
 TXT_PHONE = "2/4. Телефон рақамингизни киритинг: +998 (--) --- -- --\nЁки пастдаги тугма орқали юборинг."
 TXT_PHONE_BAD = "Рақам нотўғри. Намуна: +998 (90) 123 45 67"
 TXT_CONTACT_NOT_OWN = "Бу сизнинг контактингиз эмас. Ўзингизнинг рақамингизни тугма орқали юборинг ёки қўлда киритинг."
+TXT_THANKS = "Раҳмат!"
 TXT_LOCATION = "3/4. Объект жойлашувини юборинг (📎 → Геопозиция) ёки пастдаги тугмани босинг."
 TXT_LOCATION_BAD = "Илтимос, Telegram геопозициясини юборинг."
 TXT_LOCATION_OUT = "Жойлашув Ўзбекистон ҳудудидан ташқарида. Объект жойлашувини қайта юборинг."
@@ -79,6 +81,8 @@ def step(user_id: int) -> str:
         return "name"
     if not u.get("phone"):
         return "phone"
+    if not u.get("concept_at") and u.get("latitude") is None:  # a location given before this step existed = concept
+        return "choice"
     if u.get("latitude") is None:
         return "location"
     if db.photo_count(user_id) >= PHOTOS_NEEDED:  # photos saved but the final write was lost (crash/restart)
@@ -116,11 +120,17 @@ async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
         await bot.send_message(chat_id, TXT_NAME, reply_markup=ReplyKeyboardRemove())
     elif s == "phone":
         await bot.send_message(chat_id, TXT_PHONE, reply_markup=_kb([[KeyboardButton(text=BTN_CONTACT, request_contact=True)]]))
+    elif s == "choice":
+        await send_choice(bot, chat_id)
     elif s == "location":
         await bot.send_message(chat_id, TXT_LOCATION, reply_markup=_kb([[KeyboardButton(text=BTN_LOCATION, request_location=True)]]))
     elif s == "photo":
         n = db.photo_count(user_id)
         await bot.send_message(chat_id, TXT_PHOTO.format(PHOTOS_NEEDED, n + 1), reply_markup=ReplyKeyboardRemove())
+
+
+async def send_choice(bot: Bot, chat_id: int) -> None:
+    await bot.send_message(chat_id, TXT_CHOICE, reply_markup=choice_kb())
 
 
 async def finish(m: Message) -> None:
@@ -157,7 +167,7 @@ async def register(m: Message):
         s = step(uid)
         if s == "done":  # the heal in step() just completed a registration that had lost its last write
             return await finish(m)
-        if s == "consent":
+        if s in ("consent", "choice"):  # these steps are answered with buttons, not text
             return await prompt(m.bot, m.chat.id, uid)
         if s == "name":
             name = " ".join((m.text or "").split())
@@ -172,6 +182,7 @@ async def register(m: Message):
             if not phone:
                 return await m.answer(TXT_PHONE_BAD)
             db.update_user(uid, phone=phone)
+            await m.answer(TXT_THANKS, reply_markup=ReplyKeyboardRemove())  # the choice comes with inline buttons
         elif s == "location":
             loc = m.location
             if not loc or m.forward_origin:

@@ -30,6 +30,12 @@ WEB_PORT = int(os.environ.get("WEB_PORT", "8787"))
 # Separate key for the signed download links (never reuse the bot token: rotating the token must not break links,
 # and a leaked token must not let anyone forge links). Generate: python -c "import secrets;print(secrets.token_hex(32))"
 LINK_SECRET = os.environ.get("LINK_SECRET", "")
+# Design code PDFs (paths relative to DATA_DIR) and the name the user receives them under: Uzbek = the small edition,
+# Russian = the full one. Replace a file on disk (same path) to publish a new edition.
+DESIGN_CODE = {
+    "uz": (os.environ.get("DESIGN_CODE_UZ", "_design_code/uz.pdf"), "Дизайн-код Тошкент 2026 (ўзбекча).pdf"),
+    "ru": (os.environ.get("DESIGN_CODE_RU", "_design_code/ru.pdf"), "Дизайн-код Ташкента 2026 (русский).pdf"),
+}
 LINK_TTL_HOURS = int(os.environ.get("LINK_TTL_HOURS", "24"))  # a shared link stops working after this
 # Bind the file server to localhost; a reverse proxy (nginx/Caddy) or ngrok exposes it. Use 0.0.0.0 only in a container.
 WEB_HOST = os.environ.get("WEB_HOST", "127.0.0.1")

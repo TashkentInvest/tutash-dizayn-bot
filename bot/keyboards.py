@@ -5,6 +5,26 @@ from . import catalog
 
 TXT_DISTRICTS = "Туманни танланг:"
 BTN_BACK = "⬅️ Орқага"
+TXT_CHOICE = "Нима керак?"
+BTN_DESIGN = "🎨 Дизайн-код"
+BTN_CONCEPT = "🏙 Концепция"
+TXT_LANG = "Дизайн-код қайси тилда керак?"
+BTN_UZ = "🇺🇿 Ўзбекча"
+BTN_RU = "🇷🇺 Русский"
+
+
+def choice_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=BTN_DESIGN, callback_data="pick:design"),
+        InlineKeyboardButton(text=BTN_CONCEPT, callback_data="pick:concept"),
+    ]])
+
+
+def lang_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=BTN_UZ, callback_data="dc:uz"), InlineKeyboardButton(text=BTN_RU, callback_data="dc:ru")],
+        [InlineKeyboardButton(text=BTN_BACK, callback_data="pick:menu")],
+    ])
 
 
 def districts_kb() -> InlineKeyboardMarkup:

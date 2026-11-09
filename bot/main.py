@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
+from types import SimpleNamespace
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -14,13 +15,14 @@ from . import catalog, db, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
+    DESIGN_CODE,
     LINK_SECRET,
     LOCAL_API_URL,
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
 )
 from .guard import Guard, OutgoingLimiter
-from .keyboards import TXT_DISTRICTS, districts_kb, streets_kb
+from .keyboards import TXT_CHOICE, TXT_DISTRICTS, TXT_LANG, choice_kb, districts_kb, lang_kb, streets_kb
 
 TXT_STREETS = "<b>{}</b>\nКўчани танланг:"
 TXT_EMPTY = "<b>{}</b>\nБу туман учун файллар ҳали юкланмаган."
@@ -38,6 +40,10 @@ TXT_NO_FILE = "Бу кўча учун файл ҳали юкланмаган."
 TXT_LINK = "{} — {}\nФайл катта ({} МБ), юклаб олиш учун ҳавола:\n{}\n\n(Ҳавола 24 соат амал қилади)"
 
 router = Router()
+# Main menu (design code / concept): open to anyone who gave a name and phone, so it is NOT behind RequireRegistration
+menu = Router()
+DESIGN_TITLE = "Дизайн-код"
+DESIGN_LANG = {"uz": "Ўзбекча", "ru": "Русский"}
 
 
 class RequireRegistration(BaseMiddleware):
@@ -86,16 +92,65 @@ async def on_error(event: ErrorEvent) -> bool:
     return True
 
 
+def _has_contact(uid: int) -> bool:
+    """Name and phone given: enough for the main menu (the design code needs nothing more)."""
+    return registration.step(uid) not in ("consent", "name", "phone")
+
+
 @router.message(CommandStart())
 async def start(m: Message):
     uid = m.from_user.id
-    if registration.has_access(uid):
-        return await m.answer(TXT_DISTRICTS, reply_markup=districts_kb())
-    if db.is_registered(uid):
-        return await m.answer(registration.TXT_PENDING)
+    if _has_contact(uid):  # everyone past the phone step starts at the main menu, registered or not
+        return await registration.send_choice(m.bot, m.chat.id)
     if registration.step(uid) == "consent":
         await m.answer(registration.TXT_INTRO)
     await registration.prompt(m.bot, m.chat.id, uid)
+
+
+@menu.callback_query(F.data.startswith("pick:") | F.data.startswith("dc:"))
+async def main_menu(c: CallbackQuery):
+    uid = c.from_user.id
+    if not _has_contact(uid):
+        return await c.answer(TXT_NEED_REG, show_alert=True)
+    what = c.data.split(":", 1)[1]
+    if what == "menu":  # "back" from the language choice
+        await _edit(c, TXT_CHOICE, choice_kb())
+    elif what == "design":
+        await _edit(c, TXT_LANG, lang_kb())
+    elif what == "concept":
+        if not (db.get_user(uid) or {}).get("concept_at"):
+            db.update_user(uid, concept_at=registration._now())
+        if registration.has_access(uid):
+            await _edit(c, TXT_DISTRICTS, districts_kb())
+        elif db.is_registered(uid):
+            await c.answer(registration.TXT_PENDING, show_alert=True)
+            return
+        else:  # concept needs the object: location, then photos
+            await c.answer()
+            await _drop_markup(c)
+            return await registration.prompt(c.bot, c.message.chat.id, uid)
+    elif what in DESIGN_CODE:
+        rel, name = DESIGN_CODE[what]
+        f = DATA_DIR / rel
+        if not f.is_file():
+            logging.error("design code file missing: %s", f)
+            return await c.answer(TXT_NO_FILE, show_alert=True)
+        return await _start_send(c, SimpleNamespace(name=DESIGN_TITLE), SimpleNamespace(name=DESIGN_LANG[what]), [(f, name)])
+    await c.answer()
+
+
+async def _edit(c: CallbackQuery, text: str, kb) -> None:
+    try:
+        await c.message.edit_text(text, reply_markup=kb)
+    except TelegramBadRequest:  # message too old / not modified: send the menu anew
+        await c.message.answer(text, reply_markup=kb)
+
+
+async def _drop_markup(c: CallbackQuery) -> None:
+    try:
+        await c.message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        pass
 
 
 @router.callback_query(F.data == "back")
@@ -126,9 +181,13 @@ async def pick_street(c: CallbackQuery):
     if not s:
         return await c.answer(TXT_STALE, show_alert=True)
     named = catalog.named_files(s)
-    files = [f for f, _ in named]
-    if not files:
+    if not named:
         return await c.answer(TXT_NO_FILE, show_alert=True)
+    await _start_send(c, d, s, named)
+
+
+async def _start_send(c: CallbackQuery, d, s, named) -> None:
+    """d.name / s.name only label the caption and the download log (a district and street, or the design code and language)."""
     uid = c.from_user.id
     if uid in _busy:  # one street at a time per user: repeated presses must not multiply the work
         return await c.answer(TXT_BUSY)
@@ -292,8 +351,10 @@ async def main():
     # this router on its way to registration.router) and answer "register first", so nobody could ever register
     router.callback_query.middleware(RequireRegistration())
     private_only(router)
+    private_only(menu)
     private_only(registration.router)
     dp.include_router(router)
+    dp.include_router(menu)
     dp.include_router(registration.router)
     runner = await web.start_web()
     try:

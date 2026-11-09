@@ -97,6 +97,7 @@ def _db():
 REG_COLUMNS = {
     "full_name": "TEXT", "phone": "TEXT", "latitude": "REAL", "longitude": "REAL", "registered_at": "TEXT",
     "consent_at": "TEXT",   # user pressed "I agree" to the personal-data notice
+    "concept_at": "TEXT",   # user chose "Концепция": only then are location and object photos asked
     "approved_at": "TEXT",  # set from the dashboard; only checked when REQUIRE_APPROVAL=1
 }
 
