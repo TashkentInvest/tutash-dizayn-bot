@@ -33,7 +33,7 @@ LINK_SECRET = os.environ.get("LINK_SECRET", "")
 # Design code PDFs (paths relative to DATA_DIR) and the name the user receives them under: Uzbek = the small edition,
 # Russian = the full one. Replace a file on disk (same path) to publish a new edition.
 DESIGN_CODE = {
-    "uz": (os.environ.get("DESIGN_CODE_UZ", "_design_code/uz.pdf"), "Дизайн-код Тошкент 2026 (ўзбекча).pdf"),
+    "uz": (os.environ.get("DESIGN_CODE_UZ", "_design_code/uz.pdf"), "Dizayn-kod Toshkent 2026 (o‘zbekcha).pdf"),
     "ru": (os.environ.get("DESIGN_CODE_RU", "_design_code/ru.pdf"), "Дизайн-код Ташкента 2026 (русский).pdf"),
 }
 LINK_TTL_HOURS = int(os.environ.get("LINK_TTL_HOURS", "24"))  # a shared link stops working after this

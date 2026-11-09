@@ -23,54 +23,17 @@ from .config import (
     MAX_PARALLEL_UPLOADS,
 )
 from .guard import Guard, OutgoingLimiter
-from .keyboards import (
-    FB_LEVELS,
-    TXT_CHOICE,
-    TXT_DISTRICTS,
-    TXT_FB_LEVEL,
-    TXT_LANG,
-    choice_kb,
-    districts_kb,
-    lang_kb,
-    level_kb,
-    streets_kb,
-)
-
-TXT_STREETS = "<b>{}</b>\nКўчани танланг:"
-TXT_EMPTY = "<b>{}</b>\nБу туман учун файллар ҳали юкланмаган."
-TXT_CONTACT = (
-    "\n\n📞 Савол, таклиф ёки эътирозларингиз бўлса, {} бўйича қуйидаги рақамга мурожаат қилинг:\n<b>{}</b>"
-)
-TXT_STALE = "Меню янгиланган. /start босинг."
-TXT_NEED_REG = "Аввал рўйхатдан ўтинг: /start босинг."
-TXT_ERROR = "⚠️ Хатолик юз берди. Бироздан кейин қайта уриниб кўринг."
-TXT_BUSY = "⏳ Олдинги файл юкланмоқда, кутиб туринг."
-TXT_LOADING = "⏳ «{}» юкланмоқда..."
-TXT_ETA = "\nТахминан: {}"
-TXT_FAILED = "❌ «{}» юкланиши тўхтади ({}). Қайта уриниб кўринг ёки ҳаволадан фойдаланинг."
-TXT_NO_FILE = "Бу кўча учун файл ҳали юкланмаган."
-TXT_LINK = "{} — {}\nФайл катта ({} МБ), юклаб олиш учун ҳавола:\n{}\n\n(Ҳавола 24 соат амал қилади)"
+from . import i18n
+from .config import LINK_TTL_HOURS
+from .i18n import t
+from .keyboards import FB_LEVELS, choice_kb, districts_kb, level_kb, streets_kb
 
 router = Router()
 # Main menu (design code / concept): open to anyone who gave a name and phone, so it is NOT behind RequireRegistration
 menu = Router()
-DESIGN_TITLE = "Дизайн-код"
-DESIGN_LANG = {"uz": "Ўзбекча", "ru": "Русский"}
+DESIGN_LANG = {"uz": "Ўзбекча", "ru": "Русский"}  # download log labels (as before), shown in the dashboard
 
-# Requests (мурожаат): level button -> one text message -> saved for the dashboard; the answer comes back through the bot
-TXT_FB_WRITE = (
-    "Муаммо даражаси: {}\n\nМурожаатингиз матнини битта хабарда батафсил ёзиб юборинг "
-    "(манзил, муаммо мазмуни ва таклифингиз).\n\nБекор қилиш учун /start ни босинг."
-)
-TXT_FB_TEXT_ONLY = "Илтимос, мурожаатингизни матн кўринишида юборинг."
-TXT_FB_SHORT = "Мурожаат матни жуда қисқа. Илтимос, муаммони батафсилроқ ёзинг."
-TXT_FB_LONG = "Мурожаат матни {} белгидан ошмаслиги керак. Илтимос, қисқартириб қайта юборинг."
-TXT_FB_LIMIT = "Бир кунда {} тадан ортиқ мурожаат юбориш мумкин эмас. Илтимос, эртага қайта уриниб кўринг."
-TXT_FB_SAVED = (
-    "✅ Мурожаатингиз қабул қилинди.\nМурожаат рақами: №{}\n\n"
-    "Мурожаатингиз масъул ходимлар томонидан кўриб чиқилиб, жавоб шу ерга юборилади."
-)
-TXT_FB_ANSWER = "📩 <b>№{} мурожаатингизга жавоб</b>\n\n<i>Сизнинг мурожаатингиз:</i>\n{}\n\n<b>Жавоб:</b>\n{}"
+# Requests: level button -> one text message -> saved for the dashboard; the answer comes back through the bot
 FB_MIN, FB_MAX, FB_PER_DAY, FB_WAIT_SECONDS = 10, 2000, 5, 1800
 _fb_wait: dict[int, tuple[str, float]] = {}  # user id -> (level, when the level was picked): waiting for the text
 
@@ -92,9 +55,9 @@ class RequireRegistration(BaseMiddleware):
     async def __call__(self, handler, event: CallbackQuery, data):
         uid = event.from_user.id
         if not db.is_registered(uid):
-            return await event.answer(TXT_NEED_REG, show_alert=True)
+            return await event.answer(t(i18n.lang(uid), "need_reg"), show_alert=True)
         if not registration.has_access(uid):
-            return await event.answer(registration.TXT_PENDING, show_alert=True)
+            return await event.answer(t(i18n.lang(uid), "pending"), show_alert=True)
         return await handler(event, data)
 
 
@@ -126,53 +89,61 @@ async def on_error(event: ErrorEvent) -> bool:
     msg = update.message or (update.callback_query.message if update.callback_query else None)
     if msg:
         try:
-            await msg.answer(TXT_ERROR)
+            await msg.answer(t(i18n.cached_lang(msg.chat.id), "error"))
         except Exception:
             pass
     return True
 
 
-def _has_contact(uid: int) -> bool:
-    """Name and phone given: enough for the main menu (the design code needs nothing more)."""
-    return registration.step(uid) not in ("consent", "name", "phone")
+_has_contact = registration.has_contact
 
 
 @router.message(CommandStart())
 async def start(m: Message):
-    uid = m.from_user.id
-    _fb_wait.pop(uid, None)  # /start cancels a request being written
-    if _has_contact(uid):  # everyone past the phone step starts at the main menu, registered or not
-        return await registration.send_choice(m.bot, m.chat.id)
+    """Every /start begins with the language (it is also how a user switches it); the chosen one leads the whole flow."""
+    _fb_wait.pop(m.from_user.id, None)  # /start cancels a request being written
+    await registration.send_lang_pick(m.bot, m.chat.id)
+
+
+@menu.callback_query(F.data.in_({"lang:uz", "lang:ru"}))
+async def pick_lang(c: CallbackQuery):
+    uid, L = c.from_user.id, c.data.split(":")[1]
+    i18n.set_lang(uid, L)
+    await c.answer()
+    await _drop_markup(c)
+    if _has_contact(uid):  # everyone past the phone step goes to the main menu, registered or not
+        return await registration.send_choice(c.bot, c.message.chat.id, L)
     if registration.step(uid) == "consent":
-        await m.answer(registration.TXT_INTRO)
-    await registration.prompt(m.bot, m.chat.id, uid)
+        await c.message.answer(t(L, "intro"))
+    await registration.prompt(c.bot, c.message.chat.id, uid)
 
 
 @menu.callback_query(F.data.startswith("pick:") | F.data.startswith("dc:") | F.data.startswith("fb:"))
 async def main_menu(c: CallbackQuery):
     uid = c.from_user.id
+    L = i18n.lang(uid)
     if not _has_contact(uid):
-        return await c.answer(TXT_NEED_REG, show_alert=True)
+        return await c.answer(t(L, "need_reg"), show_alert=True)
     what = c.data.split(":", 1)[1]
-    if what == "menu":  # "back" from the language / level choice
+    if what == "design":  # the edition in the user's language: Uzbek = the short one, Russian = the full one
+        what = L
+    if what == "menu":  # "back" from the level choice
         _fb_wait.pop(uid, None)
-        await _edit(c, TXT_CHOICE, choice_kb())
+        await _edit(c, t(L, "choice"), choice_kb(L))
     elif what == "feedback":
-        await _edit(c, TXT_FB_LEVEL, level_kb())
+        await _edit(c, t(L, "fb_level"), level_kb(L))
     elif c.data.startswith("fb:") and what in FB_LEVELS:
         if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
-            return await c.answer(TXT_FB_LIMIT.format(FB_PER_DAY), show_alert=True)
+            return await c.answer(t(L, "fb_limit", FB_PER_DAY), show_alert=True)
         _fb_wait[uid] = (what, time.monotonic())
-        await _edit(c, TXT_FB_WRITE.format(FB_LEVELS[what]), None)
-    elif what == "design":
-        await _edit(c, TXT_LANG, lang_kb())
+        await _edit(c, t(L, "fb_write", t(L, f"lvl_{what}")), None)
     elif what == "concept":
         if not (db.get_user(uid) or {}).get("concept_at"):
             db.update_user(uid, concept_at=registration._now())
         if registration.has_access(uid):
-            await _edit(c, TXT_DISTRICTS, districts_kb())
+            await _edit(c, t(L, "districts"), districts_kb(L))
         elif db.is_registered(uid):
-            await c.answer(registration.TXT_PENDING, show_alert=True)
+            await c.answer(t(L, "pending"), show_alert=True)
             return
         else:  # concept needs the object: location, then photos
             await c.answer()
@@ -183,26 +154,30 @@ async def main_menu(c: CallbackQuery):
         f = DATA_DIR / rel
         if not f.is_file():
             logging.error("design code file missing: %s", f)
-            return await c.answer(TXT_NO_FILE, show_alert=True)
-        return await _start_send(c, SimpleNamespace(name=DESIGN_TITLE), SimpleNamespace(name=DESIGN_LANG[what]), [(f, name)])
+            return await c.answer(t(L, "no_file"), show_alert=True)
+        # name = what the download log says (unchanged for the dashboard), label = what the user sees in the caption
+        d = SimpleNamespace(name="Дизайн-код", label=t(L, "design_title"))
+        s = SimpleNamespace(name=DESIGN_LANG[what], label=t(what, "btn_" + what)[3:])
+        return await _start_send(c, d, s, [(f, name)])
     await c.answer()
 
 
 @menu.message(WaitingFeedback())
 async def feedback_text(m: Message):
     uid = m.from_user.id
+    L = i18n.lang(uid)
     text = (m.text or "").strip()
     if not text:
-        return await m.answer(TXT_FB_TEXT_ONLY)
+        return await m.answer(t(L, "fb_text_only"))
     if len(text) < FB_MIN:
-        return await m.answer(TXT_FB_SHORT)
+        return await m.answer(t(L, "fb_short"))
     if len(text) > FB_MAX:
-        return await m.answer(TXT_FB_LONG.format(FB_MAX))
+        return await m.answer(t(L, "fb_long", FB_MAX))
     level, _ = _fb_wait.pop(uid)
     if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
-        return await m.answer(TXT_FB_LIMIT.format(FB_PER_DAY))
+        return await m.answer(t(L, "fb_limit", FB_PER_DAY))
     fid = db.add_feedback(uid, level, text)
-    await m.answer(TXT_FB_SAVED.format(fid))
+    await m.answer(t(L, "fb_saved", fid))
     await registration.send_choice(m.bot, m.chat.id)
 
 
@@ -213,7 +188,7 @@ async def deliver_answers(bot: Bot) -> None:
             for r in db.unsent_answers():
                 text = r["text"] if len(r["text"]) <= 600 else r["text"][:600] + "…"
                 try:
-                    await bot.send_message(r["user_id"], TXT_FB_ANSWER.format(r["id"], html.escape(text), html.escape(r["answer"])),
+                    await bot.send_message(r["user_id"], t(i18n.lang(r["user_id"]), "fb_answer", r["id"], html.escape(text), html.escape(r["answer"])),
                                            parse_mode="HTML")
                     db.mark_answer_sent(r["id"])
                 except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
@@ -240,20 +215,23 @@ async def _drop_markup(c: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "back")
 async def back(c: CallbackQuery):
-    await c.message.edit_text(TXT_DISTRICTS, reply_markup=districts_kb())
+    L = i18n.lang(c.from_user.id)
+    await c.message.edit_text(t(L, "districts"), reply_markup=districts_kb(L))
     await c.answer()
 
 
 @router.callback_query(F.data.startswith("d:"))
 async def pick_district(c: CallbackQuery):
+    L = i18n.lang(c.from_user.id)
     d = catalog.district(int(c.data.split(":")[1]))
     if not d:
-        return await c.answer(TXT_STALE, show_alert=True)
-    kb = streets_kb(d)
+        return await c.answer(t(L, "stale"), show_alert=True)
+    kb = streets_kb(d, L)
     has_streets = len(kb.inline_keyboard) > 1
-    text = (TXT_STREETS if has_streets else TXT_EMPTY).format(d.name)
+    dn = html.escape(i18n.name(L, d.name))
+    text = t(L, "streets" if has_streets else "empty", dn)
     if phone := catalog.format_phone(d.phone):
-        text += TXT_CONTACT.format(d.name, phone)
+        text += t(L, "contact", dn, html.escape(phone))
     await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await c.answer()
 
@@ -264,10 +242,10 @@ async def pick_street(c: CallbackQuery):
     d = catalog.district(int(dn))
     s = catalog.street(d, int(sn)) if d else None
     if not s:
-        return await c.answer(TXT_STALE, show_alert=True)
+        return await c.answer(t(i18n.lang(c.from_user.id), "stale"), show_alert=True)
     named = catalog.named_files(s)
     if not named:
-        return await c.answer(TXT_NO_FILE, show_alert=True)
+        return await c.answer(t(i18n.lang(c.from_user.id), "no_file"), show_alert=True)
     await _start_send(c, d, s, named)
 
 
@@ -275,7 +253,7 @@ async def _start_send(c: CallbackQuery, d, s, named) -> None:
     """d.name / s.name only label the caption and the download log (a district and street, or the design code and language)."""
     uid = c.from_user.id
     if uid in _busy:  # one street at a time per user: repeated presses must not multiply the work
-        return await c.answer(TXT_BUSY)
+        return await c.answer(t(i18n.lang(uid), "busy"))
     _busy.add(uid)
     try:
         await c.answer()
@@ -289,6 +267,10 @@ async def _start_send(c: CallbackQuery, d, s, named) -> None:
 
 
 async def _send_street(c: CallbackQuery, d, s, named, uid: int):
+    """d.name / s.name go to the download log as stored; the user sees them in their language (label)."""
+    L = i18n.lang(uid)
+    dl = getattr(d, "label", None) or i18n.name(L, d.name)
+    sl = getattr(s, "label", None) or i18n.name(L, s.name)
     files = [f for f, _ in named]
     loader = keep_action = None
     try:
@@ -299,7 +281,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
         if eta_s >= 5:
             # only worth a progress message when something really has to be uploaded; files already on
             # Telegram's side go out at once, and every extra message eats the ~30 messages/s Telegram allows
-            loader = await c.message.answer(TXT_LOADING.format(s.name) + TXT_ETA.format(_fmt_eta(eta_s)))
+            loader = await c.message.answer(t(L, "loading", sl) + t(L, "eta", _fmt_eta(eta_s, L)))
             keep_action = asyncio.create_task(_keep_upload_action(c.bot, c.message.chat.id))
         for i, (f, name) in enumerate(named, 1):
             st = f.stat()
@@ -307,22 +289,22 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
             if loader and len(files) > 1:
                 await _safe_edit(
                     loader,
-                    TXT_LOADING.format(s.name) + f" ({i}/{len(files)})" + TXT_ETA.format(_fmt_eta(_estimate(named[i - 1:]))),
+                    t(L, "loading", sl) + f" ({i}/{len(files)})" + t(L, "eta", _fmt_eta(_estimate(named[i - 1:]), L)),
                 )
             sent_ok = False
             if st.st_size <= MAX_FILE_MB * 1024 * 1024 - 2 * 1024 * 1024:  # margin below Telegram's limit
                 try:
-                    await _send_file(c.message, f, st, f"{d.name} — {s.name}", name)
+                    await _send_file(c.message, f, st, f"{dl} — {sl}", name)
                     sent_ok = True
                 except Exception as e:  # upload failed/stalled: tell the user and fall back to a link
                     logging.exception("send failed: %s", f)
-                    await c.message.answer(TXT_FAILED.format(s.name, type(e).__name__))
+                    await c.message.answer(t(L, "failed", sl, type(e).__name__))
             if not sent_ok:
-                await c.message.answer(TXT_LINK.format(d.name, s.name, size_mb, web.link_for(f, name)))
+                await c.message.answer(t(L, "link", dl, sl, size_mb, web.link_for(f, name), LINK_TTL_HOURS))
             db.log_download(uid, d.name, s.name, name)
     except Exception as e:
         logging.exception("street handler failed")
-        await c.message.answer(TXT_FAILED.format(s.name, type(e).__name__))
+        await c.message.answer(t(L, "failed", sl, type(e).__name__))
     finally:
         _busy.discard(uid)  # always released, whatever failed above
         if keep_action:
@@ -385,12 +367,12 @@ def _estimate(named) -> float:
     return total
 
 
-def _fmt_eta(sec: float) -> str:
+def _fmt_eta(sec: float, lang: str = "uz") -> str:
     if sec < 5:
-        return "бир неча сония"
+        return t(lang, "eta_few")
     if sec < 90:
-        return f"~{int(round(sec / 5) * 5)} сония"
-    return f"~{int(round(sec / 60))} дақиқа"
+        return t(lang, "eta_sec", int(round(sec / 5) * 5))
+    return t(lang, "eta_min", int(round(sec / 60)))
 
 
 async def _keep_upload_action(bot: Bot, chat_id: int):

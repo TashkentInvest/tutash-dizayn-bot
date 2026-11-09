@@ -30,7 +30,9 @@ check("file_cache keys are relative", not any(":" in r[0] or "\\" in r[0] for r 
 # registration: consent first, then the heal for "photos saved but registered_at lost"
 u = NS(id=424242, username="t", first_name="T", last_name=None, language_code="uz")
 db.touch_user(u, started=True)
-check("new user starts at consent", reg.step(424242) == "consent")
+check("new user starts at the language choice", reg.step(424242) == "lang")
+db.update_user(424242, lang="uz")
+check("then consent", reg.step(424242) == "consent")
 db.update_user(424242, consent_at="2026-01-01 00:00:00", full_name="Test User", phone="+998901234567", latitude=41.3, longitude=69.2)
 db.add_photo(424242, "a", "ua", "424242/1.jpg"); db.add_photo(424242, "b", "ub", "424242/2.jpg")
 check("lost final write is healed", reg.step(424242) == "done" and db.is_registered(424242))
@@ -102,15 +104,32 @@ async def consent_flow():
     bm.private_only(bm.router); bm.private_only(bm.menu); bm.private_only(reg.router)
     dp.include_router(bm.router); dp.include_router(bm.menu); dp.include_router(reg.router)
     uid = 515151
-    frm = {"id": uid, "is_bot": False, "first_name": "N"}
+    from aiogram.methods import EditMessageText
+    from bot.i18n import t
+    n = [10]
+    async def press(data, who=uid):
+        n[0] += 1
+        f = {"id": who, "is_bot": False, "first_name": "N"}
+        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "callback_query": {"id": f"q{n[0]}", "from": f, "chat_instance": "c", "message": msg, "data": data}}))
+    async def say(text, who=uid):
+        n[0] += 1
+        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": who, "type": "private"}, "from": {"id": who, "is_bot": False, "first_name": "N"}, "text": text}}))
+    texts = lambda: [getattr(m, "text", None) for m in sent if isinstance(m, (SendMessage, EditMessageText))]
+    alerts = lambda: [m.text for m in sent if isinstance(m, AnswerCallbackQuery) and m.text]
     msg = {"message_id": 5, "date": 0, "chat": {"id": uid, "type": "private"}, "from": {"id": 1, "is_bot": True, "first_name": "B"}, "text": "x"}
-    await dp.feed_update(bot, Update.model_validate({"update_id": 1, "callback_query": {"id": "q1", "from": frm, "chat_instance": "c", "message": msg, "data": "consent"}}))
-    alerts = [m.text for m in sent if isinstance(m, AnswerCallbackQuery) and m.text]
-    check("consent button is not blocked by the menu's registration check", not alerts and reg.step(uid) == "name")
-    check("after consent the bot asks for the name", any(isinstance(m, SendMessage) and m.text == reg.TXT_NAME for m in sent))
-    sent.clear()
-    await dp.feed_update(bot, Update.model_validate({"update_id": 2, "callback_query": {"id": "q2", "from": frm, "chat_instance": "c", "message": msg, "data": "d:1"}}))
-    check("menu buttons still need registration", any(isinstance(m, AnswerCallbackQuery) and m.text == bm.TXT_NEED_REG for m in sent))
+
+    # /start always asks the language first; the choice leads the whole flow
+    await say("/start")
+    check("/start asks the language (uz / ru)", t("uz", "pick_lang") in texts() and reg.step(uid) == "lang")
+    sent.clear(); await say("salom")
+    check("text before the language repeats the language choice", t("uz", "pick_lang") in texts())
+    sent.clear(); await press("lang:uz")
+    check("uz -> intro and consent in Uzbek (Latin)", t("uz", "intro") in texts() and t("uz", "consent") in texts())
+    sent.clear(); await press("consent")
+    check("consent button is not blocked by the menu's registration check", not alerts() and reg.step(uid) == "name")
+    check("after consent the bot asks for the name", t("uz", "name") in texts())
+    sent.clear(); await press("d:1")
+    check("menu buttons still need registration", t("uz", "need_reg") in alerts())
     sent.clear()
     grp = {"message_id": 7, "date": 0, "chat": {"id": -100, "type": "supergroup", "title": "g"}, "from": {"id": 777, "is_bot": False, "first_name": "G"}, "text": "/start"}
     await dp.feed_update(bot, Update.model_validate({"update_id": 3, "message": grp}))
@@ -125,18 +144,7 @@ async def consent_flow():
         ev = ErrorEvent(update=Update(update_id=9), exception=e)
         check(f"stale filter matches '{late[:24]}'", await ExceptionMessageFilter(r".*" + late.split(" and")[0].split(":")[0])(ev))
 
-    # main menu after name + phone: design code (UZ/RU PDF, no location/photos) or concept (location, photos, districts)
-    from aiogram.methods import EditMessageText
-    from bot.keyboards import TXT_CHOICE, TXT_LANG
-    n = [10]
-    async def press(data, who=uid):
-        n[0] += 1
-        f = {"id": who, "is_bot": False, "first_name": "N"}
-        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "callback_query": {"id": f"q{n[0]}", "from": f, "chat_instance": "c", "message": msg, "data": data}}))
-    async def say(text, who=uid):
-        n[0] += 1
-        await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": who, "type": "private"}, "from": {"id": who, "is_bot": False, "first_name": "N"}, "text": text}}))
-    texts = lambda: [getattr(m, "text", None) for m in sent if isinstance(m, (SendMessage, EditMessageText))]
+    # main menu after name + phone: design code (edition by language) / concept / request
     sends = []
     async def fake_start_send(c, d, s, named):
         sends.append((d.name, s.name, [x[1] for x in named])); await c.answer()
@@ -145,52 +153,63 @@ async def consent_flow():
     await press("pick:design")
     check("menu is closed before name and phone", sends == [] and reg.step(uid) == "name")
     sent.clear(); await say("Тестов Тест Тестович"); await say("+998 90 123 45 67")
-    check("after the phone the bot asks: design code or concept", reg.step(uid) == "choice" and TXT_CHOICE in texts())
-    sent.clear(); await say("бирон матн")
-    check("text at the choice step repeats the choice", TXT_CHOICE in texts())
-    sent.clear(); await press("pick:design")
-    check("design code -> language flags", TXT_LANG in texts())
+    check("after the phone the bot asks for the section (in Uzbek)", reg.step(uid) == "choice" and t("uz", "choice") in texts())
+    sent.clear(); await say("bir matn")
+    check("text at the choice step repeats the choice", t("uz", "choice") in texts())
     import bot.config as cfg
-    f = DATA_DIR / cfg.DESIGN_CODE["uz"][0]; created = not f.exists()
-    if created:
-        f.parent.mkdir(parents=True, exist_ok=True); f.write_bytes(b"%PDF-1.4 test")
+    made = []
+    for k in ("uz", "ru"):
+        f = DATA_DIR / cfg.DESIGN_CODE[k][0]
+        if not f.exists():
+            f.parent.mkdir(parents=True, exist_ok=True); f.write_bytes(b"%PDF-1.4 test"); made.append(f)
     try:
-        await press("dc:uz")
+        sent.clear(); await press("pick:design")
+        check("uz: design code sends the Uzbek edition at once (no flags)", sends and sends[-1][1] == "Ўзбекча"
+              and sends[-1][2] == [cfg.DESIGN_CODE["uz"][1]] and reg.step(uid) == "choice")
+        sent.clear(); await say("/start"); await press("lang:ru")
+        check("switching to ru at /start: menu in Russian", t("ru", "choice") in texts())
+        await press("pick:design")
+        check("ru: design code sends the Russian edition", sends[-1][1] == "Русский" and sends[-1][2] == [cfg.DESIGN_CODE["ru"][1]])
     finally:
-        if created:
-            f.unlink(); f.parent.rmdir() if not any(f.parent.iterdir()) else None
-    check("UZ flag sends the Uzbek design code without location/photos", sends and sends[-1][1] == "Ўзбекча" and reg.step(uid) == "choice")
+        for f in made:
+            f.unlink()
+        if made and not any(made[0].parent.iterdir()):
+            made[0].parent.rmdir()
     sent.clear(); await press("pick:concept")
-    check("concept -> location step", reg.step(uid) == "location" and reg.TXT_LOCATION in texts())
-    sent.clear(); await say("/start")
-    check("/start mid-registration shows the main menu", TXT_CHOICE in texts())
+    check("concept -> location step in Russian", reg.step(uid) == "location" and t("ru", "location") in texts())
 
-    # a registered (and approved) user: /start -> menu, concept -> districts
-    db.update_user(424242, consent_at="2026-01-01 00:00:00")
-    sent.clear(); await say("/start", 424242); await press("pick:concept", 424242)
-    check("registered user: concept opens the districts", TXT_CHOICE in texts() and bm.TXT_DISTRICTS in texts())
+    # a registered (and approved) user: /start -> language -> menu, concept -> districts in Latin
+    sent.clear(); await say("/start", 424242); await press("lang:uz", 424242); await press("pick:concept", 424242)
+    kb = next(m.reply_markup for m in sent if isinstance(m, (SendMessage, EditMessageText)) and m.text == t("uz", "districts"))
+    labels = [b.text for row in kb.inline_keyboard for b in row]
+    check("registered user: concept opens the districts, names in Latin", t("uz", "choice") in texts()
+          and "Bektemir tumani" in labels and not any("тумани" in x for x in labels))
 
-    # requests (мурожаат): level -> text -> saved; an answer written in the dashboard is delivered by the bot
-    from bot.keyboards import TXT_FB_LEVEL
+    # requests: level -> text -> saved; an answer written in the dashboard is delivered by the bot (in the user's language)
     sent.clear(); await press("pick:feedback")
-    check("request button -> problem level", TXT_FB_LEVEL in texts())
-    await press("fb:high"); sent.clear(); await say("қисқа")
-    check("too short request is refused", bm.TXT_FB_SHORT in texts() and not db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,)))
-    body = "Кўчамизда кечқурун ёритиш ишламайди, пиёдалар учун хавфли <b>"
+    check("request button -> problem level (ru)", t("ru", "fb_level") in texts())
+    await press("fb:high"); sent.clear(); await say("коротко")
+    check("too short request is refused", t("ru", "fb_short") in texts() and not db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,)))
+    body = "На нашей улице вечером не работает освещение, опасно для пешеходов <b>"
     sent.clear(); await say(body)
     rows = db.fetch_all("SELECT id, level, text FROM feedback WHERE user_id=?", (uid,))
     check("request saved with its level", len(rows) == 1 and rows[0]["level"] == "high" and rows[0]["text"] == body
-          and bm.TXT_FB_SAVED.format(rows[0]["id"]) in texts())
-    sent.clear(); await say("бу оддий хабар, мурожаат эмас")
+          and t("ru", "fb_saved", rows[0]["id"]) in texts())
+    sent.clear(); await say("это обычное сообщение, не обращение")
     check("after saving, the next message is not another request", len(db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,))) == 1)
 
-    db.execute("UPDATE feedback SET answer=?, answered_at=datetime('now') WHERE id=?", ("Ёритиш 3 кунда тикланади.", rows[0]["id"]))
+    db.execute("UPDATE feedback SET answer=?, answered_at=datetime('now') WHERE id=?", ("Освещение восстановят за 3 дня.", rows[0]["id"]))
     sent.clear()
-    t = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); t.cancel()
+    task = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); task.cancel()
     msgs = [m for m in sent if isinstance(m, SendMessage) and m.chat_id == uid]
     after = db.fetch_all("SELECT answer_sent_at, answer_error FROM feedback WHERE id=?", (rows[0]["id"],))[0]
-    check("dashboard answer delivered once, user text escaped", len(msgs) == 1 and "Ёритиш 3 кунда тикланади." in msgs[0].text
-          and "&lt;b&gt;" in msgs[0].text and after["answer_sent_at"] and after["answer_error"] is None)
+    check("dashboard answer delivered once, in Russian, user text escaped", len(msgs) == 1 and "Освещение восстановят" in msgs[0].text
+          and "Ответ на ваше обращение" in msgs[0].text and "&lt;b&gt;" in msgs[0].text and after["answer_sent_at"] and after["answer_error"] is None)
+
+    from bot import i18n
+    check("transliteration: Uzbek Cyrillic -> Latin", i18n.latin("Мирзо Улуғбек тумани") == "Mirzo Ulug‘bek tumani"
+          and i18n.latin("Фарғона йўли кўчаси") == "Farg‘ona yo‘li ko‘chasi" and i18n.latin("Ёшлар") == "Yoshlar")
+    check("every text exists in both languages", all(len(v) == 2 and all(v) for v in i18n.TEXTS.values()))
 
 asyncio.run(consent_flow())
 

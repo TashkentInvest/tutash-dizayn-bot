@@ -16,6 +16,7 @@ from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.methods import GetUpdates
 from aiogram.types import CallbackQuery
 
+from .i18n import cached_lang, t
 from .config import (
     GUARD_BURST,
     GUARD_MUTE_SECONDS,
@@ -25,8 +26,6 @@ from .config import (
     TG_OUT_PER_SECOND,
 )
 
-TXT_MUTED = "⛔ Жуда тез-тез босдингиз. Бир неча дақиқадан кейин қайта уриниб кўринг."
-TXT_BUSY = "⏳ Бот банд, бироздан кейин қайта уриниб кўринг."
 
 
 class Guard(BaseMiddleware):
@@ -57,12 +56,12 @@ class Guard(BaseMiddleware):
             if st[2] >= self.strikes:
                 st[2], st[4] = 0, now + self.mute_seconds
                 logging.warning("user %s muted for %ss (flooding)", user.id, self.mute_seconds)
-                return await self._notice(event, TXT_MUTED)
+                return await self._notice(event, t(cached_lang(user.id), "muted"))
             return None
         st[0] -= 1
 
         if self._inflight >= self.max_inflight:  # the whole bot is saturated: shed load, do not queue forever
-            return await self._notice(event, TXT_BUSY)
+            return await self._notice(event, t(cached_lang(user.id), "bot_busy"))
         self._inflight += 1
         try:
             return await handler(event, data)

@@ -25,6 +25,8 @@ class BotUsersTable
             ->columns([
                 TextColumn::make('full_name')->label('F.I.SH.')->placeholder('— ro‘yxatdan o‘tmagan —')->searchable()->sortable(),
                 TextColumn::make('phone')->label('Telefon')->searchable()->copyable()->placeholder('—'),
+                TextColumn::make('lang')->label('Til')->badge()->color('gray')->placeholder('—')
+                    ->formatStateUsing(fn (?string $state) => ['uz' => 'O‘zbekcha', 'ru' => 'Русский'][$state] ?? $state)->toggleable(),
                 TextColumn::make('username')->label('Username')->prefix('@')->searchable()->placeholder('—'),
                 IconColumn::make('is_registered')->label('Ro‘yxatdan o‘tgan')->boolean()
                     ->state(fn ($record) => $record->registered_at !== null),

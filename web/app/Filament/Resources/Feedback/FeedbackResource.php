@@ -20,6 +20,9 @@ class FeedbackResource extends Resource
 {
     public const ANSWER_MAX = 3000; // with the quoted request it stays under Telegram's 4096-character message limit
 
+    /** Bot language the citizen picked at /start (the bot's own texts are in it; the answer should be too). */
+    public const LANGS = ['uz' => 'O‘zbekcha', 'ru' => 'Русский'];
+
     protected static ?string $model = Feedback::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
@@ -64,6 +67,9 @@ class FeedbackResource extends Resource
                         'user',
                         fn ($u) => $u->where('full_name', 'like', "%$search%")->orWhere('phone', 'like', "%$search%")
                     )),
+                TextColumn::make('user.lang')->label('Til')->badge()->color('gray')->placeholder('—')
+                    ->formatStateUsing(fn (?string $state) => self::LANGS[$state] ?? $state)
+                    ->tooltip('Javobni fuqaro tanlagan tilda yozing'),
                 TextColumn::make('level')->label('Daraja')->badge()->sortable()
                     ->formatStateUsing(fn (string $state) => Feedback::LEVELS[$state] ?? $state)
                     ->color(fn (string $state) => Feedback::LEVEL_COLORS[$state] ?? 'gray'),
@@ -121,8 +127,9 @@ class FeedbackResource extends Resource
         return [
             TextEntry::make('who')->label('Fuqaro')
                 ->state(trim(($r->user?->full_name ?? '—').' · '.($r->user?->phone ?? '').($r->user?->username ? ' · @'.$r->user->username : ''), ' ·')),
-            TextEntry::make('meta')->label('Daraja va vaqt')
-                ->state((Feedback::LEVELS[$r->level] ?? $r->level).' · '.$r->created_at?->timezone(config('app.display_timezone'))->format('d.m.Y H:i')),
+            TextEntry::make('meta')->label('Daraja, til va vaqt')
+                ->state((Feedback::LEVELS[$r->level] ?? $r->level).' · '.(self::LANGS[$r->user?->lang] ?? 'til tanlanmagan')
+                    .' · '.$r->created_at?->timezone(config('app.display_timezone'))->format('d.m.Y H:i')),
             TextEntry::make('text')->label('Murojaat matni')->state($r->text)->extraAttributes(['style' => 'white-space: pre-wrap']),
             ...($r->answer !== null ? [
                 TextEntry::make('answer_shown')->label('Javob')->state($r->answer)->extraAttributes(['style' => 'white-space: pre-wrap'])
