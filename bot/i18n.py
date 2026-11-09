@@ -136,6 +136,15 @@ TEXTS: dict[str, tuple[str, str]] = {
         "📩 <b>Ответ на ваше обращение №{}</b>\n\n<i>Ваше обращение:</i>\n{}\n\n<b>Ответ:</b>\n{}",
     ),
 
+    # bot command menu and the one-time announcement after the two-language update (tools/broadcast.py)
+    "cmd_start": ("Botni ishga tushirish / tilni tanlash", "Запустить бота / выбрать язык"),
+    "broadcast_restart": (
+        "Hurmatli foydalanuvchi! Bot yangilandi: endi u o‘zbek va rus tillarida ishlaydi. "
+        "Iltimos, /start ni qaytadan bosing.",
+        "Уважаемый пользователь! Бот обновлён: теперь он работает на узбекском и русском языках. "
+        "Пожалуйста, нажмите /start ещё раз.",
+    ),
+
     # flood protection
     "muted": (
         "⛔ Juda tez-tez bosdingiz. Bir necha daqiqadan keyin qayta urinib ko‘ring.",

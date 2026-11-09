@@ -10,7 +10,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.filters import BaseFilter, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
-from aiogram.types import CallbackQuery, ErrorEvent, FSInputFile, Message
+from aiogram.types import BotCommand, CallbackQuery, ErrorEvent, FSInputFile, Message
 
 from . import catalog, db, registration, web
 from .config import (
@@ -179,6 +179,15 @@ async def feedback_text(m: Message):
     fid = db.add_feedback(uid, level, text)
     await m.answer(t(L, "fb_saved", fid))
     await registration.send_choice(m.bot, m.chat.id)
+
+
+async def set_commands(bot: Bot) -> None:
+    """The "Menu" button next to the message field: /start, described in the Telegram app's language (Russian or Uzbek)."""
+    try:
+        await bot.set_my_commands([BotCommand(command="start", description=t("uz", "cmd_start"))])
+        await bot.set_my_commands([BotCommand(command="start", description=t("ru", "cmd_start"))], language_code="ru")
+    except Exception:  # not worth stopping the bot over
+        logging.exception("set_my_commands failed")
 
 
 async def deliver_answers(bot: Bot) -> None:
@@ -425,6 +434,7 @@ async def main():
     dp.include_router(registration.router)
     runner = await web.start_web()
     answers = asyncio.create_task(deliver_answers(bot))
+    await set_commands(bot)
     try:
         await dp.start_polling(bot)
     finally:
