@@ -28,7 +28,6 @@ MAX_FILE_MB = 2000 if LOCAL_API_URL else 50
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8787").rstrip("/")
 # District staff's Mini App (served by the dashboard). Telegram opens Mini Apps over https only.
 WEBAPP_URL = os.environ.get("WEBAPP_URL", PUBLIC_BASE_URL + "/tg/app").rstrip("/")
-OBJECTS_SYNC_SECONDS = int(os.environ.get("OBJECTS_SYNC_SECONDS", "600"))  # how often new/changed PDFs are split
 WEB_PORT = int(os.environ.get("WEB_PORT", "8787"))
 # Separate key for the signed download links (never reuse the bot token: rotating the token must not break links,
 # and a leaked token must not let anyone forge links). Generate: python -c "import secrets;print(secrets.token_hex(32))"

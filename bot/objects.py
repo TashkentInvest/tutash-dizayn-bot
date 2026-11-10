@@ -14,8 +14,12 @@ No duplicates, no lost work
     new objects; pages that disappeared are marked `gone` (hidden, never deleted).
   * `is_active` is the admin's switch ("not an object"); `gone` is set here. Lists show is_active=1 AND gone=0.
 
-Each object gets a JPEG of its page (DATA_DIR/_objects/<file>/<page>.jpg). Runs in a worker thread from the bot
-(sync_all). Rendering uses PyMuPDF.
+Each object gets a JPEG of its page (DATA_DIR/_objects/<file>/<page>.jpg). Rendering uses PyMuPDF.
+
+Runs as its own process, never inside the bot: page rendering is heavy CPU work that, in the bot's process, held Python's
+interpreter lock and made every answer seconds slower. On the server a systemd timer starts it every 10 minutes at the
+lowest CPU and disk priority (deploy/tutash-objects.service, .timer):
+    python -m bot.objects
 """
 import hashlib
 import logging
@@ -168,3 +172,9 @@ def sync_all(limit: int | None = None) -> dict:
     if total["files"] or total["failed"]:
         logging.info("objects: %s", total)
     return total
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    db.init()
+    print(sync_all())

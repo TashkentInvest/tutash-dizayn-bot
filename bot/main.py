@@ -22,7 +22,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 
-from . import catalog, db, objects, registration, web
+from . import catalog, db, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
@@ -31,7 +31,6 @@ from .config import (
     LOCAL_API_URL,
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
-    OBJECTS_SYNC_SECONDS,
 )
 from .guard import Guard, OutgoingLimiter
 from . import i18n
@@ -271,16 +270,6 @@ async def deliver_answers(bot: Bot) -> None:
         await asyncio.sleep(10)
 
 
-async def split_objects_forever() -> None:
-    """New or changed street PDFs become object pages for the staff Mini App. In a thread: rendering is slow CPU work."""
-    while True:
-        try:
-            await asyncio.to_thread(objects.sync_all)
-        except Exception:
-            logging.exception("objects sync failed")
-        await asyncio.sleep(OBJECTS_SYNC_SECONDS)
-
-
 async def _edit(c: CallbackQuery, text: str, kb) -> None:
     try:
         await c.message.edit_text(text, reply_markup=kb)
@@ -512,13 +501,11 @@ async def main():
     dp.include_router(registration.router)
     runner = await web.start_web()
     answers = asyncio.create_task(deliver_answers(bot))
-    splitter = asyncio.create_task(split_objects_forever())
     await set_commands(bot)
     try:
         await dp.start_polling(bot)
     finally:
         answers.cancel()
-        splitter.cancel()
         await runner.cleanup()
 
 
