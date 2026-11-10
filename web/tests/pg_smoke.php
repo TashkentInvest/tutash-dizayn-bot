@@ -53,7 +53,7 @@ $check('district ranking (grouped)', $top->count() > 0);
 $check('users list with counts', BotUser::query()->withCount(['photos', 'downloads'])->orderByDesc('first_seen')->limit(5)->get()->count() > 0);
 $check('files duplicate subqueries', $db->table('street_files')->selectRaw('street_files.*, (select count(*) from street_files f2 where f2.size = street_files.size and street_files.size > 1024) as same_size')->limit(3)->get()->count() > 0);
 
-$svod = DesignCodeSvod::byDistrict(now(config('app.display_timezone')));
+$svod = DesignCodeSvod::byDistrict(DesignCodeSvod::reportDay());
 $check('svod by district: total = 5835 from the list', $svod['total']['total'] === 5835);
 $first = $svod['rows'][0]['id'];
 $check('svod by street', count(DesignCodeSvod::byStreet($first, now())['rows']) > 0);
@@ -68,7 +68,7 @@ $i = Inspection::create(['object_id' => $o->id, 'staff_id' => $staff->id, 'kind'
     'obj_latitude' => 41.3, 'obj_longitude' => 69.2, 'comment' => 'pg smoke', 'submitted_at' => now()->utc()->format('Y-m-d H:i:s')]);
 $check('approve: object installed + outbox row', InspectionReview::approve($i, 'ok', 'smoke') && $o->fresh()->status === 'installed'
     && $db->table('outbox')->where('user_id', 900000000002)->exists());
-$check('svod counts the approval', DesignCodeSvod::byDistrict(now(config('app.display_timezone')))['total']['day_installed'] >= 1);
+$check('svod counts the approval', DesignCodeSvod::byDistrict(DesignCodeSvod::reportDay())['total']['day_installed'] >= 1);
 // the Mini App's own write lock (not a copy of its SQL): every staff write goes through it
 $locked = new ReflectionMethod(App\Http\Controllers\StaffAppController::class, 'locked');
 $r = $locked->invoke(app(App\Http\Controllers\StaffAppController::class), fn () => response()->json(['ok' => true]));

@@ -23,7 +23,7 @@ class DesignCodeProgressChart extends ChartWidget
 
     protected function getData(): array
     {
-        $rows = DesignCodeSvod::byDistrict(now(config('app.display_timezone')))['rows'];
+        $rows = DesignCodeSvod::byDistrict(DesignCodeSvod::reportDay())['rows'];
         $short = fn (string $name) => trim(str_replace([' тумани', ' tumani'], '', $name));
 
         return [

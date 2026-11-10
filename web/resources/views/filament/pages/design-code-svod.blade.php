@@ -1,8 +1,10 @@
 <x-filament-panels::page>
     @php
+        // Yechildi / Qo'yildi = all time; "Bugun" = the report day (yesterday 18:00 - today 18:00); Jarayonda = waiting for review
+        $dayWord = $isToday ? 'Bugun' : $shownDay->format('d.m');
         $cols = [
-            'total' => 'Jami obyekt (ro‘yxat)', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi (jarayonda)', 'installed' => 'Qo‘yildi (qilindi)',
-            'review' => 'Tekshiruvda', 'day_removed' => 'Shu kuni yechildi', 'day_installed' => 'Shu kuni qo‘yildi',
+            'total' => 'Jami obyekt', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi', 'installed' => 'Qo‘yildi',
+            'day_removed' => $dayWord.' yechildi', 'day_installed' => $dayWord.' qo‘yildi', 'review' => 'Jarayonda',
         ];
         // colour = meaning: amber in progress, green done, blue waiting for review
         $tone = ['removed' => 'amber', 'installed' => 'green', 'review' => 'blue', 'day_removed' => 'amber', 'day_installed' => 'green'];
@@ -43,9 +45,9 @@
 
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <label style="font-size:14px">Kun:
-            <input type="date" class="svod-date" wire:model.live="day" max="{{ now(config('app.display_timezone'))->toDateString() }}">
+            <input type="date" class="svod-date" wire:model.live="day" max="{{ $maxDay }}">
         </label>
-        <span class="svod-hint">“Shu kuni” ustunlari: tanlangan kunda yuborilib, tasdiqlangan dalillar.</span>
+        <span class="svod-hint">“{{ $dayWord }}” ustunlari: {{ $shownDay->copy()->subDay()->format('d.m') }} soat 18:00 dan {{ $shownDay->format('d.m') }} soat 18:00 gacha yuborilib, tasdiqlangan dalillar (har kuni 18:00 da yangilanadi). Yechildi / Qo‘yildi — umumiy. Jarayonda — tasdiq kutayotgan dalillar.</span>
         @if ($waiting)
             <a href="{{ \App\Filament\Resources\Inspections\InspectionResource::getUrl() }}" style="margin-left:auto;color:#d97706;font-weight:600">⏳ {{ $waiting }} ta dalil tasdiq kutmoqda</a>
         @endif

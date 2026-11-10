@@ -5,7 +5,7 @@ from types import SimpleNamespace as NS
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 tmp = tempfile.mkdtemp()
 shutil.copy(os.path.join(ROOT, "bot.db"), os.path.join(tmp, "bot.db"))
-os.environ.update(DB_PATH=os.path.join(tmp, "bot.db"), LINK_SECRET="test-secret", LINK_TTL_HOURS="1", REQUIRE_APPROVAL="1")
+os.environ.update(DB_PATH=os.path.join(tmp, "bot.db"), UPLOADS_DIR=os.path.join(tmp, "uploads"), LINK_SECRET="test-secret", LINK_TTL_HOURS="1", REQUIRE_APPROVAL="1")
 sys.path.insert(0, ROOT)
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -237,6 +237,19 @@ async def consent_flow():
     task = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); task.cancel()
     check("outbox message delivered once", [m.text for m in sent if isinstance(m, SendMessage) and m.chat_id == 424242]
           == ["✅ №1 obyekt bo‘yicha dalilingiz tasdiqlandi"] and not db.unsent_outbox())
+
+    # a report picture from the dashboard: sent as a photo with its caption; a missing file is marked, not retried forever
+    from aiogram.methods import SendPhoto
+    (bm.UPLOADS_DIR / "reports").mkdir(parents=True, exist_ok=True)
+    (bm.UPLOADS_DIR / "reports" / "t.png").write_bytes(b"\x89PNG test")
+    db.execute("INSERT INTO outbox (user_id, text, photo) VALUES (424242, 'Dizayn-kod · svod', 'reports/t.png')")
+    db.execute("INSERT INTO outbox (user_id, text, photo) VALUES (424242, 'yo‘q', 'reports/missing.png')")
+    db.execute("INSERT INTO outbox (user_id, text, photo) VALUES (424242, 'tashqarida', '../bot.db')")
+    sent.clear()
+    task = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); task.cancel()
+    photos = [m for m in sent if isinstance(m, SendPhoto)]
+    check("outbox picture sent as a photo with caption; missing / outside files never sent",
+          [p.caption for p in photos] == ["Dizayn-kod · svod"] and not db.unsent_outbox())
 
     from bot import i18n
     check("transliteration: Uzbek Cyrillic -> Latin", i18n.latin("Мирзо Улуғбек тумани") == "Mirzo Ulug‘bek tumani"

@@ -321,7 +321,7 @@ class StaffAppTest extends TestCase
     public function test_svod_counts_objects_once_per_status_and_the_days_work(): void
     {
         $id = $this->sendEvidence('installed');
-        $day = now(config('app.display_timezone'));
+        $day = Svod::reportDay();  // after 18:00 the work counts for the next day
         $row = collect(Svod::byDistrict($day)['rows'])->firstWhere('id', $this->district);
         $this->assertSame(['total' => 3, 'pending' => 3, 'installed' => 0, 'review' => 1, 'day_installed' => 0],
             array_intersect_key($row, array_flip(['total', 'pending', 'installed', 'review', 'day_installed'])));
@@ -406,5 +406,39 @@ class StaffAppTest extends TestCase
             ->callAction('rankingReport', ['period' => '7'])->assertFileDownloaded();
         Livewire::test(\App\Filament\Widgets\TopDistricts::class)
             ->callAction(TestAction::make('rankingReport')->table(), ['period' => 'all'])->assertFileDownloaded();
+    }
+
+    public function test_svod_report_day_ends_at_18_and_report_pictures_are_queued_for_the_bot(): void
+    {
+        $tz = config('app.display_timezone');
+        $this->assertSame('2026-11-10', Svod::reportDay(\Carbon\Carbon::parse('2026-11-10 17:59', $tz))->toDateString());
+        $this->assertSame('2026-11-11', Svod::reportDay(\Carbon\Carbon::parse('2026-11-10 18:00', $tz))->toDateString());
+        [$from, $to] = Svod::window(\Carbon\Carbon::parse('2026-11-11', $tz));
+        $this->assertSame(['2026-11-10 13:00:00', '2026-11-11 13:00:00'], [$from, $to]);  // 18:00 Tashkent = 13:00 UTC
+
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $db->table('users')->insert(['user_id' => 777001, 'first_name' => 'Rahbar', 'full_name' => 'Rahbar Test']);
+        \App\Models\ReportRecipient::create(['user_id' => 777001, 'label' => 'rahbar']);
+        $db->table('outbox')->delete();
+
+        Livewire::test(DesignCodeSvod::class)
+            ->assertSee('Jarayonda')->assertSee('Bugun yechildi')->assertDontSee('Tekshiruvda')
+            ->callAction('send', ['kinds' => ['svod', 'progress'], 'to' => [777001]])
+            ->assertHasNoActionErrors();
+
+        $rows = $db->table('outbox')->where('user_id', 777001)->orderBy('id')->get();
+        $this->assertCount(2, $rows);
+        foreach ($rows as $r) {
+            $file = $this->tmp.'/uploads/'.$r->photo;
+            $this->assertFileExists($file);
+            $this->assertSame("\x89PNG", substr(file_get_contents($file), 0, 4));
+        }
+        $this->assertStringContainsString('Tumanlar kesimida svod', $rows[0]->text);
+
+        Livewire::test(DesignCodeSvod::class)->callAction('send', ['kinds' => ['svod'], 'to' => []])->assertHasActionErrors(['to']);
+        Livewire::test(\App\Filament\Resources\ReportRecipients\Pages\ManageReportRecipients::class)->assertSee('Rahbar Test')->assertSee('rahbar');
     }
 }

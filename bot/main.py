@@ -31,6 +31,7 @@ from .config import (
     LOCAL_API_URL,
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
+    UPLOADS_DIR,
 )
 from .guard import Guard, OutgoingLimiter
 from . import i18n
@@ -300,10 +301,20 @@ async def deliver_answers(bot: Bot) -> None:
                 except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
                     logging.warning("answer %s not delivered: %s", r["id"], e)
                     db.mark_answer_sent(r["id"], error=str(e)[:200])
-            for r in db.unsent_outbox():  # review results for district staff, written by the dashboard
+            for r in db.unsent_outbox():  # review results for staff and report pictures, written by the dashboard
                 try:
-                    await bot.send_message(r["user_id"], r["text"])
+                    if r["photo"]:
+                        f = (UPLOADS_DIR / r["photo"]).resolve()
+                        if UPLOADS_DIR.resolve() not in f.parents or not f.is_file():
+                            db.mark_outbox_sent(r["id"], error="picture file missing")
+                            continue
+                        await bot.send_photo(r["user_id"], FSInputFile(f), caption=r["text"][:1024] or None)
+                    else:
+                        await bot.send_message(r["user_id"], r["text"])
                     db.mark_outbox_sent(r["id"])
+                except TelegramRetryAfter as e:  # too fast for Telegram: the rest goes next round
+                    await asyncio.sleep(e.retry_after + 1)
+                    break
                 except (TelegramForbiddenError, TelegramBadRequest) as e:
                     logging.warning("outbox %s not delivered: %s", r["id"], e)
                     db.mark_outbox_sent(r["id"], error=str(e)[:200])

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\District;
 use App\Models\Inspection;
+use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -12,10 +13,29 @@ use Illuminate\Support\Facades\DB;
  *   Jami       - the official object list (streets.planned_objects, imported from the Excel list)
  *   Yechildi / Qo'yildi - businesses whose evidence was approved (objects.status)
  *   Kutilmoqda - Jami minus both (never below 0)
- *   Tekshiruvda, and the chosen day's approved work, from the evidence (inspections).
+ *   Jarayonda (evidence waiting for review), and the report day's approved work, from the evidence (inspections).
+ * A report day ends at 18:00 (like the demolition svod): from 18:00 the "Bugun" columns start counting the next day.
  */
 class DesignCodeSvod
 {
+    public const DAY_ENDS_AT = 18;
+
+    /** The report day a moment belongs to: after 18:00 it is already tomorrow's. */
+    public static function reportDay(?CarbonInterface $at = null): CarbonInterface
+    {
+        $at = ($at ?? now())->copy()->setTimezone(config('app.display_timezone'));
+
+        return ($at->hour >= self::DAY_ENDS_AT ? $at->addDay() : $at)->startOfDay();
+    }
+
+    /** [from, to) of a report day in UTC: the day before at 18:00 up to the day at 18:00. */
+    public static function window(CarbonInterface $day): array
+    {
+        $end = Carbon::parse($day->toDateString(), config('app.display_timezone'))->setTime(self::DAY_ENDS_AT, 0);
+
+        return [$end->copy()->subDay()->utc()->format('Y-m-d H:i:s'), $end->copy()->utc()->format('Y-m-d H:i:s')];
+    }
+
     /**
      * @return array{rows: array<int, array<string, mixed>>, total: array<string, mixed>}
      */
@@ -58,12 +78,11 @@ class DesignCodeSvod
                     SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed
              FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where GROUP BY $group", $bind))
             ->keyBy(fn ($r) => (int) $r->g)->all();
-        $from = $day->copy()->startOfDay()->utc()->format('Y-m-d H:i:s');
-        $to = $day->copy()->endOfDay()->utc()->format('Y-m-d H:i:s');
+        [$from, $to] = self::window($day);
         $i = collect($db->select(
             "SELECT $group AS g, SUM(CASE WHEN i.review='pending' THEN 1 ELSE 0 END) AS review,
-                    SUM(CASE WHEN i.review='approved' AND i.kind='removed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_removed,
-                    SUM(CASE WHEN i.review='approved' AND i.kind='installed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_installed
+                    SUM(CASE WHEN i.review='approved' AND i.kind='removed' AND i.submitted_at >= ? AND i.submitted_at < ? THEN 1 ELSE 0 END) AS day_removed,
+                    SUM(CASE WHEN i.review='approved' AND i.kind='installed' AND i.submitted_at >= ? AND i.submitted_at < ? THEN 1 ELSE 0 END) AS day_installed
              FROM inspections i JOIN objects o ON o.id = i.object_id JOIN streets s ON s.id = o.street_id
              WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where GROUP BY $group", [$from, $to, $from, $to, ...$bind]))
             ->keyBy(fn ($r) => (int) $r->g)->all();

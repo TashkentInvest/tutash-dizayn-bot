@@ -152,6 +152,12 @@ CREATE INDEX IF NOT EXISTS idx_inspections_object ON inspections(object_id);
 CREATE INDEX IF NOT EXISTS idx_inspections_review ON inspections(review);
 CREATE INDEX IF NOT EXISTS idx_inspections_staff ON inspections(staff_id);
 -- Messages the dashboard wants delivered (review results to staff); the bot sends them.
+-- who gets the design-code report pictures the dashboard sends (people who started the bot)
+CREATE TABLE IF NOT EXISTS report_recipients (
+    user_id    INTEGER PRIMARY KEY,
+    label      TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS outbox (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL,
@@ -354,6 +360,14 @@ def _drop_page_objects(c) -> None:
     c.commit()
 
 
+def _added_columns():
+    """Columns added after a table was first created: (table, {column: type}). Existing databases get them at start."""
+    return (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
+            ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
+            ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
+            ("outbox", {"photo": "TEXT"}))  # a picture (path under UPLOADS_DIR) sent with the text as its caption
+
+
 def init() -> None:
     if PG:
         _init_pg()
@@ -362,9 +376,7 @@ def init() -> None:
         c.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
         _drop_page_objects(c)
         c.executescript(SCHEMA)
-        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
-                               ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
-                               ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
+        for table, columns in _added_columns():
             have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
             for col, typ in columns.items():  # migrate a database created before a column existed
                 if col not in have:
@@ -377,9 +389,7 @@ def init() -> None:
 def _init_pg() -> None:
     with _db() as c:
         c.executescript(_pg_ddl(SCHEMA))
-        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
-                               ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
-                               ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
+        for table, columns in _added_columns():
             have = {r[0] for r in c.execute(
                 "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?",
                 (table,)).fetchall()}
@@ -570,7 +580,7 @@ def staff_counts(district_id: int) -> dict:
 
 def unsent_outbox(limit: int = 20) -> list:
     with _db() as c:
-        return c.execute("SELECT id, user_id, text FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
+        return c.execute("SELECT id, user_id, text, photo FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
 
 
 def mark_outbox_sent(msg_id: int, error: str | None = None) -> None:
