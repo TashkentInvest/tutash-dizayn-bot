@@ -35,8 +35,8 @@ class Staff extends Model
             $uid = BotUser::query()->where('phone', $s->phone)->value('user_id');
             if ($uid) {
                 $s->getConnection()->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
-                    'text' => '👷 Siz '.($s->district?->name ?? 'tuman').' xodimlari ro‘yxatiga qo‘shildingiz. Tasdiqlash uchun /start ni bosing, '
-                        .'telefon so‘ralganda “📱 Raqamni yuborish” tugmasini bosing.']);
+                    // short on purpose: after /start the bot itself asks for the contact button (the number is on the staff list)
+                    'text' => '👷 Iltimos, /start ni qaytadan bosing.']);
             }
         });
     }

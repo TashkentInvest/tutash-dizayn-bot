@@ -480,7 +480,7 @@ class StaffAppTest extends TestCase
         $db->table('users')->insert(['user_id' => 889001, 'first_name' => 'W', 'phone' => '+998901112233']);
         $s = Staff::create(['full_name' => 'Kutayotgan', 'phone' => '+998901112233', 'district_id' => $this->district, 'is_active' => true]);
         $this->assertSame('waiting', $s->botState());
-        $this->assertStringContainsString('Raqamni yuborish', (string) $db->table('outbox')->where('user_id', 889001)->value('text'));
+        $this->assertStringContainsString('/start ni qaytadan bosing', (string) $db->table('outbox')->where('user_id', 889001)->value('text'));
 
         $absent = Staff::create(['full_name' => 'Kirmagan', 'phone' => '+998901119999', 'district_id' => $this->district, 'is_active' => true]);
         $this->assertSame('absent', $absent->botState());
