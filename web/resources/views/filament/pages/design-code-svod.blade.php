@@ -4,18 +4,48 @@
             'total' => 'Jami obyekt (ro‘yxat)', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi (jarayonda)', 'installed' => 'Qo‘yildi (qilindi)',
             'review' => 'Tekshiruvda', 'day_removed' => 'Shu kuni yechildi', 'day_installed' => 'Shu kuni qo‘yildi',
         ];
-        $color = ['removed' => '#b45309', 'installed' => '#15803d', 'review' => '#2563eb', 'day_removed' => '#b45309', 'day_installed' => '#15803d'];
-        $cell = 'padding:8px 10px;border:1px solid #d1d5db;text-align:center';
-        $head = $cell.';background:#e6f0dc;font-weight:600';
-        $sum = $cell.';background:#dbe9f6;font-weight:700';
+        // colour = meaning: amber in progress, green done, blue waiting for review
+        $tone = ['removed' => 'amber', 'installed' => 'green', 'review' => 'blue', 'day_removed' => 'amber', 'day_installed' => 'green'];
     @endphp
+
+    {{-- one stylesheet for both themes: Filament puts .dark on <html> in dark mode --}}
+    <style>
+        .svod { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; }
+        .svod th, .svod td { padding: 9px 12px; text-align: center; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+        .svod th + th, .svod td + td { border-left: 1px solid #f1f5f9; }
+        .svod thead th { background: #f0fdf4; color: #14532d; font-weight: 600; font-size: 13px; line-height: 1.25; white-space: normal; }
+        .svod .name { text-align: left; }
+        .svod .sum td { background: #eff6ff; color: #0f172a; font-weight: 700; }
+        .svod tbody tr:last-child td { border-bottom: 0; }
+        .svod tr.pick { cursor: pointer; }
+        .svod tr.pick:hover td { background: #f8fafc; }
+        .svod tr.sel td { background: #fef3c7; }
+        .svod .zero { color: #9ca3af; }
+        .svod .amber { color: #b45309; } .svod .green { color: #15803d; } .svod .blue { color: #1d4ed8; }
+        .svod .pct { font-weight: 600; }
+        .svod a { color: #b45309; }
+        .svod-date { margin-left: 6px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: transparent; color: inherit; color-scheme: light; }
+        .svod-hint { font-size: 13px; color: #6b7280; }
+
+        .dark .svod { border-color: rgba(255, 255, 255, .1); }
+        .dark .svod th, .dark .svod td { border-bottom-color: rgba(255, 255, 255, .08); }
+        .dark .svod th + th, .dark .svod td + td { border-left-color: rgba(255, 255, 255, .05); }
+        .dark .svod thead th { background: rgba(34, 197, 94, .12); color: #bbf7d0; }
+        .dark .svod .sum td { background: rgba(59, 130, 246, .16); color: #f1f5f9; }
+        .dark .svod tr.pick:hover td { background: rgba(255, 255, 255, .04); }
+        .dark .svod tr.sel td { background: rgba(245, 158, 11, .16); }
+        .dark .svod .zero { color: #6b7280; }
+        .dark .svod .amber { color: #fbbf24; } .dark .svod .green { color: #4ade80; } .dark .svod .blue { color: #60a5fa; }
+        .dark .svod a { color: #fbbf24; }
+        .dark .svod-date { border-color: rgba(255, 255, 255, .2); color-scheme: dark; }
+        .dark .svod-hint { color: #9ca3af; }
+    </style>
 
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <label style="font-size:14px">Kun:
-            <input type="date" wire:model.live="day" max="{{ now(config('app.display_timezone'))->toDateString() }}"
-                   style="margin-left:6px;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px">
+            <input type="date" class="svod-date" wire:model.live="day" max="{{ now(config('app.display_timezone'))->toDateString() }}">
         </label>
-        <span style="font-size:13px;color:#6b7280">“Shu kuni” ustunlari: tanlangan kunda yuborilib, tasdiqlangan dalillar.</span>
+        <span class="svod-hint">“Shu kuni” ustunlari: tanlangan kunda yuborilib, tasdiqlangan dalillar.</span>
         @if ($waiting)
             <a href="{{ \App\Filament\Resources\Inspections\InspectionResource::getUrl() }}" style="margin-left:auto;color:#d97706;font-weight:600">⏳ {{ $waiting }} ta dalil tasdiq kutmoqda</a>
         @endif
@@ -23,33 +53,34 @@
 
     @foreach (array_filter([['Tumanlar kesimida — '.$shownDay->format('d.m.Y'), $svod, true], $streets ? [$districtName.' — ko‘chalar kesimida', $streets, false] : null]) as [$title, $data, $clickable])
         <div style="overflow-x:auto">
-            <h3 style="font-weight:600;margin:6px 0 8px">{{ $title }}</h3>
-            <table style="border-collapse:collapse;width:100%;font-size:14px">
+            <h3 style="font-weight:600;margin:6px 0 10px">{{ $title }}</h3>
+            <table class="svod">
                 <thead><tr>
-                    <th style="{{ $head }}">№</th><th style="{{ $head }};text-align:left">{{ $clickable ? 'Tuman' : 'Ko‘cha' }}</th>
-                    @foreach ($cols as $label)<th style="{{ $head }}">{{ $label }}</th>@endforeach
-                    <th style="{{ $head }}">Bajarilish</th>
+                    <th style="width:44px">№</th><th class="name">{{ $clickable ? 'Tuman' : 'Ko‘cha' }}</th>
+                    @foreach ($cols as $label)<th>{{ $label }}</th>@endforeach
+                    <th>Bajarilish</th>
                 </tr></thead>
                 <tbody>
-                    <tr>
-                        <td style="{{ $sum }}"></td><td style="{{ $sum }};text-align:left">{{ $data['total']['name'] }}</td>
-                        @foreach ($cols as $k => $label)<td style="{{ $sum }};color:{{ $color[$k] ?? 'inherit' }}">{{ $data['total'][$k] }}</td>@endforeach
-                        <td style="{{ $sum }}">{{ \App\Services\DesignCodeSvod::pct($data['total']['pct']) }}</td>
+                    <tr class="sum">
+                        <td></td><td class="name">{{ $data['total']['name'] }}</td>
+                        @foreach ($cols as $k => $label)<td class="{{ $tone[$k] ?? '' }}">{{ $data['total'][$k] }}</td>@endforeach
+                        <td class="pct">{{ \App\Services\DesignCodeSvod::pct($data['total']['pct']) }}</td>
                     </tr>
                     @foreach ($data['rows'] as $n => $r)
-                        <tr @if ($clickable) wire:click="pick({{ $r['id'] }})" style="cursor:pointer;{{ $district === $r['id'] ? 'background:#fef3c7' : '' }}" title="Ko‘chalar kesimini ko‘rish" @endif>
-                            <td style="{{ $cell }}">{{ $n + 1 }}</td>
-                            <td style="{{ $cell }};text-align:left">
+                        <tr @if ($clickable) wire:click="pick({{ $r['id'] }})" class="pick {{ $district === $r['id'] ? 'sel' : '' }}" title="Ko‘chalar kesimini ko‘rish" @endif>
+                            <td>{{ $n + 1 }}</td>
+                            <td class="name">
                                 @if ($clickable){{ $r['name'] }}
-                                @else<a href="{{ \App\Filament\Resources\DesignObjects\DesignObjectResource::getUrl('index', ['filters' => ['street_id' => ['value' => $r['id']]]]) }}" style="color:#d97706">{{ $r['name'] }}</a>@endif
+                                @else<a href="{{ \App\Filament\Resources\DesignObjects\DesignObjectResource::getUrl('index', ['filters' => ['street_id' => ['value' => $r['id']]]]) }}">{{ $r['name'] }}</a>@endif
                             </td>
-                            @foreach ($cols as $k => $label)<td style="{{ $cell }};color:{{ $color[$k] ?? 'inherit' }}">{{ $r[$k] }}</td>@endforeach
-                            <td style="{{ $cell }}">{{ \App\Services\DesignCodeSvod::pct($r['pct']) }}</td>
+                            {{-- a 0 is greyed out, so the numbers that matter stand out --}}
+                            @foreach ($cols as $k => $label)<td class="{{ $r[$k] ? ($tone[$k] ?? '') : 'zero' }}">{{ $r[$k] }}</td>@endforeach
+                            <td class="pct {{ $r['pct'] ? '' : 'zero' }}">{{ \App\Services\DesignCodeSvod::pct($r['pct']) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
-            @if ($clickable)<p style="font-size:13px;color:#6b7280;margin-top:6px">Tuman qatorini bossangiz, uning ko‘chalari kesimi pastda chiqadi.</p>@endif
+            @if ($clickable)<p class="svod-hint" style="margin-top:6px">Tuman qatorini bossangiz, uning ko‘chalari kesimi pastda chiqadi.</p>@endif
         </div>
     @endforeach
 </x-filament-panels::page>

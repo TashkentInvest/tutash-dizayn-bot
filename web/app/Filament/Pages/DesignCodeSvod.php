@@ -8,6 +8,7 @@ use App\Services\DesignCodeSvod as Svod;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Livewire\Attributes\Url;
 
@@ -27,6 +28,9 @@ class DesignCodeSvod extends Page
     protected static ?int $navigationSort = 0;
 
     protected string $view = 'filament.pages.design-code-svod';
+
+    // a wide table: use the whole width of the screen
+    protected Width|string|null $maxContentWidth = Width::Full;
 
     #[Url]
     public ?string $day = null;
