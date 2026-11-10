@@ -403,7 +403,7 @@ class StaffAppController extends Controller
     private function locked(callable $fn): JsonResponse
     {
         return DB::connection('bot')->transaction(function () use ($fn) {
-            DB::connection('bot')->statement("INSERT INTO kv (key, value) VALUES ('__lock', 0) ON CONFLICT(key) DO UPDATE SET value = value + 1");
+            DB::connection('bot')->statement("INSERT INTO kv (key, value) VALUES ('__lock', 0) ON CONFLICT(key) DO UPDATE SET value = kv.value + 1");
 
             return $fn();
         }, 3);

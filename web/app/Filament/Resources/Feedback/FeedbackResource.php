@@ -8,6 +8,7 @@ use App\Models\Feedback;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
@@ -68,7 +69,7 @@ class FeedbackResource extends Resource
                     ->description(fn (Feedback $r) => $r->user?->phone)
                     ->searchable(query: fn (Builder $query, string $search) => $query->whereHas(
                         'user',
-                        fn ($u) => $u->where('full_name', 'like', "%$search%")->orWhere('phone', 'like', "%$search%")
+                        fn ($u) => $u->whereLike('full_name', "%$search%")->orWhereLike('phone', "%$search%")
                     )),
                 TextColumn::make('user.lang')->label('Til')->badge()->color('gray')->placeholder('—')
                     ->formatStateUsing(fn (?string $state) => self::LANGS[$state] ?? $state)
@@ -112,13 +113,17 @@ class FeedbackResource extends Resource
                         Textarea::make('answer')->label('Javob matni')->required()->rows(6)
                             ->minLength(2)->maxLength(self::ANSWER_MAX),
                     ])
-                    ->action(function (Feedback $r, array $data) {
+                    ->action(function (Feedback $r, array $data, Action $action) {
                         // only an unanswered request: two admins answering at once must not overwrite each other
-                        Feedback::query()->whereKey($r->getKey())->whereNull('answer')->update([
+                        $n = Feedback::query()->whereKey($r->getKey())->whereNull('answer')->update([
                             'answer' => trim($data['answer']),
                             'answered_at' => now()->utc()->format('Y-m-d H:i:s'),
                             'answered_by' => auth()->user()?->email,
                         ]);
+                        if (! $n) {  // someone else answered first: theirs is the one the citizen gets
+                            Notification::make()->title('Bu murojaatga boshqa admin allaqachon javob bergan')->warning()->send();
+                            $action->cancel();
+                        }
                     })
                     ->successNotificationTitle('Javob saqlandi, bot uni fuqaroga yuboradi'),
             ]);

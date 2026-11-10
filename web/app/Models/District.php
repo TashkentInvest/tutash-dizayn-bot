@@ -36,4 +36,9 @@ class District extends Model
     {
         return $this->hasManyThrough(StreetFile::class, Street::class, 'district_id', 'street_id');
     }
+
+    public function hasObjects(): bool
+    {
+        return DesignObject::query()->whereIn('street_id', $this->streets()->select('id'))->exists();
+    }
 }

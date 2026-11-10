@@ -84,6 +84,7 @@ TEXTS: dict[str, tuple[str, str]] = {
     "mb": ("MB", "МБ"),
     "stale": ("Menyu yangilangan. /start ni bosing.", "Меню обновлено. Нажмите /start."),
     "error": ("⚠️ Xatolik yuz berdi. Birozdan keyin qayta urinib ko‘ring.", "⚠️ Произошла ошибка. Попробуйте ещё раз чуть позже."),
+    "just_sent": ("✅ Bu fayl hozirgina yuborildi — chatda yuqoriroqda.", "✅ Этот файл только что отправлен — он выше в чате."),
     "busy": ("⏳ Oldingi fayl yuklanmoqda, kutib turing.", "⏳ Предыдущий файл ещё отправляется, подождите."),
     "loading": ("⏳ «{}» yuklanmoqda...", "⏳ «{}» загружается..."),
     "eta": ("\nTaxminan: {}", "\nПримерно: {}"),
@@ -91,8 +92,8 @@ TEXTS: dict[str, tuple[str, str]] = {
     "eta_sec": ("~{} soniya", "~{} сек."),
     "eta_min": ("~{} daqiqa", "~{} мин."),
     "failed": (
-        "❌ «{}» yuklanishi to‘xtadi ({}). Qayta urinib ko‘ring yoki havoladan foydalaning.",
-        "❌ Отправка «{}» прервалась ({}). Попробуйте ещё раз или воспользуйтесь ссылкой.",
+        "❌ «{}» yuklanishi to‘xtadi. Qayta urinib ko‘ring yoki havoladan foydalaning.",
+        "❌ Отправка «{}» прервалась. Попробуйте ещё раз или воспользуйтесь ссылкой.",
     ),
     "no_file": ("Bu bo‘lim uchun fayl hali yuklanmagan.", "Файл для этого раздела ещё не загружен."),
     "link": (

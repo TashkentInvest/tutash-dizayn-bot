@@ -28,6 +28,10 @@ $check = function (string $name, bool $cond) use (&$ok) {
     echo ($cond ? 'PASS ' : 'FAIL ').$name."\n";
 };
 $check('driver is pgsql', $db->getDriverName() === 'pgsql');
+if (! str_ends_with((string) $db->getDatabaseName(), '_check')) {  // it writes and unlinks staff: never on the live database
+    exit("Refusing: run it on a copy whose name ends in _check
+");
+}
 
 $t = BotStats::totals();
 $check('BotStats::totals', $t['users'] > 0);
@@ -65,7 +69,10 @@ $i = Inspection::create(['object_id' => $o->id, 'staff_id' => $staff->id, 'kind'
 $check('approve: object installed + outbox row', InspectionReview::approve($i, 'ok', 'smoke') && $o->fresh()->status === 'installed'
     && $db->table('outbox')->where('user_id', 900000000002)->exists());
 $check('svod counts the approval', DesignCodeSvod::byDistrict(now(config('app.display_timezone')))['total']['day_installed'] >= 1);
-$db->statement("INSERT INTO kv (key, value) VALUES ('__lock', 0) ON CONFLICT(key) DO UPDATE SET value = kv.value + 1");
+// the Mini App's own write lock (not a copy of its SQL): every staff write goes through it
+$locked = new ReflectionMethod(App\Http\Controllers\StaffAppController::class, 'locked');
+$r = $locked->invoke(app(App\Http\Controllers\StaffAppController::class), fn () => response()->json(['ok' => true]));
+$check('Mini App write lock', $r->getData(true)['ok'] === true);
 $check('kv lock statement', true);
 $check('feedback list', Feedback::query()->with('user')->latest('created_at')->limit(5)->get() !== null);
 

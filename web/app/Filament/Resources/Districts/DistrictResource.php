@@ -70,6 +70,7 @@ class DistrictResource extends Resource
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make()
+                    ->hidden(fn ($record) => $record->hasObjects())
                     ->modalDescription('Tuman, uning barcha ko‘chalari va fayllari o‘chiriladi. Fayllar o‘chirilmaydi, data/_trash papkasiga ko‘chiriladi.'),
             ]);
     }

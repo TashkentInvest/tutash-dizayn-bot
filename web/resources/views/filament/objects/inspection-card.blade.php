@@ -1,11 +1,11 @@
 @php($tz = config('app.display_timezone'))
-<div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:12px">
+<div style="border:1px solid rgba(127,127,127,.3);border-radius:10px;padding:12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
         <b>{{ \App\Models\Inspection::KINDS[$i->kind] ?? $i->kind }}</b>
         <span>{{ \App\Models\Inspection::REVIEWS[$i->review] ?? '' }}
             @if ($i->reviewed_by) · {{ $i->reviewed_by }} @endif</span>
     </div>
-    <div style="font-size:13px;color:#6b7280;margin:4px 0 8px">
+    <div style="font-size:13px;opacity:.65;margin:4px 0 8px">
         {{ $i->staff?->full_name }} · {{ $i->submitted_at?->timezone($tz)->format('d.m.Y H:i') }}
         @if ($i->objectMapUrl()) · <a href="{{ $i->objectMapUrl() }}" target="_blank" style="color:#d97706">obyekt joyi (xodim belgilagan)</a>@endif
         @if ($i->mapUrl()) · <a href="{{ $i->mapUrl() }}" target="_blank" style="color:#d97706">xodim turgan joy</a>@endif
@@ -21,7 +21,7 @@
         @endif
     </div>
     @if ($i->comment)
-        <p style="margin:10px 0 0;color:#dc2626;font-weight:700;white-space:pre-wrap">{{ $i->comment }}</p>
+        <p style="margin:10px 0 0;font-weight:600;white-space:pre-wrap">{{ $i->comment }}</p>
     @endif
     @if ($i->review_note)
         <p style="margin:6px 0 0;font-size:13px">Admin izohi: {{ $i->review_note }}</p>

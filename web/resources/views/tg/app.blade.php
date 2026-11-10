@@ -42,6 +42,8 @@
   textarea { min-height: 90px; }
   .btn { display: block; width: 100%; border: 0; border-radius: 10px; padding: 13px; font: 600 15px inherit; background: var(--btn); color: var(--btn-text); margin-top: 10px; }
   .btn.alt { background: var(--card); color: var(--text); }
+  .card .btn.alt { background: var(--bg); border: 1px solid var(--line, rgba(127,127,127,.35)); }
+  .row > * { min-width: 0; overflow-wrap: anywhere; }
   .btn.danger { background: var(--red); color: #fff; }
   .btn:disabled { opacity: .55; }
   .err { color: var(--red); margin: 8px 0; white-space: pre-wrap; }
@@ -62,12 +64,16 @@
 (function () {
   'use strict';
   var tg = window.Telegram && window.Telegram.WebApp;
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg) {
+    tg.ready(); tg.expand();
+    // dragging the map or marker must not minimise the app
+    if (tg.disableVerticalSwipes) try { tg.disableVerticalSwipes(); } catch (e) {}
+  }
   var params = new URLSearchParams(location.search);
   var LANG = params.get('lang') === 'ru' ? 'ru' : 'uz';
   var T = {
     uz: { loading: 'Yuklanmoqda…', title: 'Obyektlar', total: 'Jami', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tekshiruvda',
-      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.',
+      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
@@ -86,7 +92,7 @@
       openOther: 'Yo‘q, o‘sha obyektni ochish', kindRemoved: 'Yechildi', kindInstalled: 'Qo‘yildi', netErr: 'Internet bilan muammo. Qayta urinib ko‘ring.',
       noTg: 'Bu oyna faqat Telegram ichida ishlaydi. Botdagi “Obyektlarni ochish” tugmasini bosing.' },
     ru: { loading: 'Загрузка…', title: 'Объекты', total: 'Всего', removed: 'Снято', installed: 'Установлено', review: 'На проверке',
-      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.',
+      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
@@ -113,9 +119,16 @@
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function h(html) { app.innerHTML = html; window.scrollTo(0, 0); }
-  function stopCamera() { if (stream) { stream.getTracks().forEach(function (tr) { tr.stop(); }); stream = null; } }
-  function show(screen) { stopCamera(); stack.push(screen); backBtn.hidden = stack.length < 2; screen(); }
-  function back() { stopCamera(); stack.pop(); var s = stack[stack.length - 1]; backBtn.hidden = stack.length < 2; if (s) s(); }
+  // nav changes with every screen change: a response that arrives after the user left its screen draws nothing
+  var nav = 0, camReq = 0, lastPush = 0;
+  function stopCamera() { camReq++; if (stream) { stream.getTracks().forEach(function (tr) { tr.stop(); }); stream = null; } }
+  function show(screen) {
+    var now = Date.now();
+    if (now - lastPush < 400) return;  // a double tap opens the screen once
+    lastPush = now; nav++;
+    stopCamera(); stack.push(screen); backBtn.hidden = stack.length < 2; screen();
+  }
+  function back() { nav++; stopCamera(); stack.pop(); var s = stack[stack.length - 1]; backBtn.hidden = stack.length < 2; if (s) s(); }
   backBtn.onclick = back;
   if (tg && tg.BackButton) { tg.BackButton.onClick(function () { if (stack.length > 1) back(); else tg.close(); }); }
   function syncBack() { if (tg && tg.BackButton) { if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide(); } }
@@ -126,9 +139,11 @@
     var headers = { 'X-Telegram-Init-Data': tg ? tg.initData : '', 'Accept': 'application/json' };
     var body = opts.body;
     if (body && !(body instanceof FormData)) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(body); }
+    var my = nav;
     return fetch('/tg/api' + path, { method: opts.method || (body ? 'POST' : 'GET'), headers: headers, body: body })
       .catch(function () { throw { error: t('netErr') }; })
       .then(function (r) {
+        if (my !== nav) return new Promise(function () {});  // the user moved on: never render this answer
         return r.json().catch(function () { return {}; }).then(function (d) {
           if (!r.ok) { d.status = r.status; if (!d.error) d.error = d.message || ('Xato ' + r.status); throw d; }
           return d;
@@ -222,7 +237,8 @@
       busy(go, function () {
         var body = {}; ['shop_name', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
         return api('/streets/' + s.id + '/objects', { body: body }).then(function (d) {
-          stack.pop(); stack.push(function () { object(d.object.id); }); object(d.object.id);
+          var fl = d.already ? t('exists') : null;
+          nav++; stack.pop(); stack.push(function () { object(d.object.id); }); object(d.object.id, fl);
         });
       });
     };
@@ -353,9 +369,12 @@
 
   function openCamera(videoEl) {
     stopCamera();
+    var my = camReq;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject({ error: t('camErr') });
     return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
-      .then(function (s) { stream = s; videoEl.srcObject = s; videoEl.muted = true; videoEl.setAttribute('playsinline', ''); return videoEl.play(); })
+      .then(function (s) {
+        if (my !== camReq) { s.getTracks().forEach(function (tr) { tr.stop(); }); return; }  // superseded: never leave a camera on
+        stream = s; videoEl.srcObject = s; videoEl.muted = true; videoEl.setAttribute('playsinline', ''); return videoEl.play(); })
       .catch(function () { throw { error: t('camErr') }; });
   }
 

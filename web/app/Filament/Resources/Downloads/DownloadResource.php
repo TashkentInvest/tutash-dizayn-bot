@@ -50,7 +50,7 @@ class DownloadResource extends Resource
                     ->description(fn ($record) => $record->user?->phone)
                     ->searchable(query: fn (Builder $query, string $search) => $query->whereHas(
                         'user',
-                        fn ($u) => $u->where('full_name', 'like', "%$search%")->orWhere('phone', 'like', "%$search%")->orWhere('username', 'like', "%$search%")
+                        fn ($u) => $u->whereLike('full_name', "%$search%")->orWhereLike('phone', "%$search%")->orWhereLike('username', "%$search%")
                     )),
                 TextColumn::make('district')->label('Tuman')->searchable()->sortable(),
                 TextColumn::make('street')->label('Ko‘cha')->searchable()->sortable(),

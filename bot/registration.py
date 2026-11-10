@@ -230,3 +230,12 @@ async def register(m: Message):
                 db.forget_access(uid)
                 return await finish(m)
         await prompt(m.bot, m.chat.id, uid)
+
+
+@router.message()
+async def fallback(m: Message):
+    """Registered users who type something no step expects (or a contact that is not on the staff list) get the menu
+    again instead of silence."""
+    if not m.from_user:
+        return
+    await send_choice(m.bot, m.chat.id, None, m.from_user.id)

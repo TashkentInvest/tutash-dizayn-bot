@@ -71,6 +71,31 @@ class RequireRegistration(BaseMiddleware):
         return await handler(event, data)
 
 
+class OncePerPress(BaseMiddleware):
+    """A button pressed several times quickly (or a double tap) is handled once: the repeats only stop the spinner.
+    aiogram runs every update as its own task, so without this two presses race and send the menu/file twice."""
+
+    WINDOW = 2.0
+
+    def __init__(self):
+        self.seen: dict[tuple, float] = {}
+
+    async def __call__(self, handler, event: CallbackQuery, data):
+        msg = event.message
+        key = (event.from_user.id, msg.message_id if msg else 0, event.data)
+        now = time.monotonic()
+        if now - self.seen.get(key, 0) < self.WINDOW:
+            try:
+                await event.answer()
+            except Exception:
+                pass
+            return None
+        self.seen[key] = now
+        if len(self.seen) > 5000:  # forget old presses
+            self.seen = {k: v for k, v in self.seen.items() if now - v < self.WINDOW}
+        return await handler(event, data)
+
+
 class TrackUsers(BaseMiddleware):
     """Save/update every user who interacts with the bot."""
 
@@ -96,7 +121,13 @@ async def on_error(event: ErrorEvent) -> bool:
     """Last resort: log with traceback and never leave the user in silence."""
     logging.error("unhandled error", exc_info=event.exception)
     update = event.update
-    msg = update.message or (update.callback_query.message if update.callback_query else None)
+    cq = update.callback_query
+    if cq:
+        try:
+            await cq.answer()  # otherwise the button keeps spinning
+        except Exception:
+            pass
+    msg = update.message or (cq.message if cq else None)
     if msg:
         try:
             await msg.answer(t(i18n.cached_lang(msg.chat.id), "error"))
@@ -228,10 +259,14 @@ async def feedback_text(m: Message):
         return await m.answer(t(L, "fb_short"))
     if len(text) > FB_MAX:
         return await m.answer(t(L, "fb_long", FB_MAX))
-    level, _ = _fb_wait.pop(uid)
+    w = _fb_wait.get(uid)
+    if not w:  # the same text arrived twice (a split long message): the first one already saved it
+        return
     if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
+        _fb_wait.pop(uid, None)
         return await m.answer(t(L, "fb_limit", FB_PER_DAY))
-    fid = db.add_feedback(uid, level, text)
+    fid = db.add_feedback(uid, w[0], text)  # if this fails the user can simply send the text again
+    _fb_wait.pop(uid, None)
     await m.answer(t(L, "fb_saved", fid))
     await registration.send_choice(m.bot, m.chat.id)
 
@@ -273,8 +308,10 @@ async def deliver_answers(bot: Bot) -> None:
 async def _edit(c: CallbackQuery, text: str, kb) -> None:
     try:
         await c.message.edit_text(text, reply_markup=kb)
-    except TelegramBadRequest:  # message too old / not modified: send the menu anew
-        await c.message.answer(text, reply_markup=kb)
+    except TelegramBadRequest as e:
+        if "not modified" in str(e):  # already showing it (a repeated press): nothing to send
+            return
+        await c.message.answer(text, reply_markup=kb)  # message too old to edit: send the menu anew
 
 
 async def _drop_markup(c: CallbackQuery) -> None:
@@ -325,6 +362,13 @@ async def _start_send(c: CallbackQuery, d, s, named) -> None:
     uid = c.from_user.id
     if uid in _busy:  # one street at a time per user: repeated presses must not multiply the work
         return await c.answer(t(i18n.lang(uid), "busy"))
+    key, now = (uid, tuple(str(f) for f, _ in named)), time.monotonic()
+    if now - _recent.get(key, 0) < RESEND_SECONDS:  # the same file was just sent: it is right above in the chat
+        return await c.answer(t(i18n.lang(uid), "just_sent"), show_alert=True)
+    _recent[key] = now
+    if len(_recent) > 5000:
+        for k in [k for k, v in _recent.items() if now - v > RESEND_SECONDS]:
+            del _recent[k]
     _busy.add(uid)
     try:
         await c.answer()
@@ -369,7 +413,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
                     sent_ok = True
                 except Exception as e:  # upload failed/stalled: tell the user and fall back to a link
                     logging.exception("send failed: %s", f)
-                    await c.message.answer(t(L, "failed", sl, type(e).__name__))
+                    await c.message.answer(t(L, "failed", sl))
             if not sent_ok:
                 # the long signed URL hides behind a short "Havola" / "Ссылка" word; no preview (it would only fetch the file)
                 url = web.link_for(f, name)
@@ -380,7 +424,8 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
             db.log_download(uid, d.name, s.name, name)
     except Exception as e:
         logging.exception("street handler failed")
-        await c.message.answer(t(L, "failed", sl, type(e).__name__))
+        _recent.pop((uid, tuple(str(f) for f in files)), None)  # let the user try again at once
+        await c.message.answer(t(L, "failed", sl))
     finally:
         _busy.discard(uid)  # always released, whatever failed above
         if keep_action:
@@ -393,6 +438,8 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
 
 
 _busy: set[int] = set()
+RESEND_SECONDS = 60
+_recent: dict[tuple, float] = {}  # (user, files) -> when they were last sent
 _tasks: set[asyncio.Task] = set()  # running street sends (a reference keeps them from being garbage-collected)
 _file_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 _upload_slots = asyncio.Semaphore(MAX_PARALLEL_UPLOADS)
@@ -484,6 +531,7 @@ async def main():
     guard = Guard()  # first in line: flooded events are dropped before they cost a database write or an API call
     dp.message.outer_middleware(guard)
     dp.callback_query.outer_middleware(guard)
+    dp.callback_query.outer_middleware(OncePerPress())
     dp.message.outer_middleware(TrackUsers())
     dp.callback_query.outer_middleware(TrackUsers())
     # the exception text starts with "Telegram server says - Bad Request: ...", and the filter matches from the start

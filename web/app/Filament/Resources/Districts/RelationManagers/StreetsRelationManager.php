@@ -47,7 +47,8 @@ class StreetsRelationManager extends RelationManager
                 Action::make('files')->label('Fayllar')->icon('heroicon-o-document-arrow-up')
                     ->url(fn ($record) => StreetResource::getUrl('edit', ['record' => $record])),
                 EditAction::make(),
-                DeleteAction::make()->modalDescription('Ko‘cha va uning fayllari o‘chiriladi. Fayllar data/_trash papkasiga ko‘chiriladi.'),
+                DeleteAction::make()->modalDescription('Ko‘cha va uning fayllari o‘chiriladi. Fayllar data/_trash papkasiga ko‘chiriladi.')
+                    ->hidden(fn ($record) => $record->objects()->exists()),
             ]);
     }
 }

@@ -36,4 +36,10 @@ class Street extends Model
     {
         return $this->hasMany(StreetFile::class, 'street_id');
     }
+
+    /** businesses on this street (entered by district staff); a street that has them is not deleted */
+    public function objects(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(DesignObject::class, 'street_id');
+    }
 }

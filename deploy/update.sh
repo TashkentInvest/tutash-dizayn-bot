@@ -10,10 +10,14 @@ sudo -u tutash git checkout -q -f -B main origin/main
 sudo -u tutash "$APP/venv/bin/pip" install -q -r requirements.txt
 cd web
 sudo -u tutash composer install --no-dev -o --no-interaction -q
+sudo -u tutash php artisan config:cache -q   # first: migrate must see the current .env, not the last deploy's
 sudo -u tutash php artisan migrate --force -q
 sudo -u tutash php artisan filament:assets -q
-sudo -u tutash php artisan config:cache -q
+sudo -u tutash php artisan view:clear -q
 chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cache
-systemctl reload php8.4-fpm
+# the bot owns the bot database schema (adds columns/indexes at start): restart it before the new dashboard goes live
 systemctl restart tutash-bot
-sleep 3; systemctl is-active tutash-bot && echo "deployed: $(sudo -u tutash git -C $APP rev-parse --short HEAD)"
+sleep 10   # longer than RestartSec: a crash loop would not look "active" by now
+systemctl is-active tutash-bot
+systemctl reload php8.4-fpm
+echo "deployed: $(sudo -u tutash git -C $APP rev-parse --short HEAD)"

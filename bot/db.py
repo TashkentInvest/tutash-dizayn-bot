@@ -221,11 +221,24 @@ class _PgConn:
             names = [d.name for d in cur.description] if cur.description else []
             return lambda values: Row(names, values)
 
-        self.c = psycopg.connect(DATABASE_URL, autocommit=True, row_factory=rows, connect_timeout=10)
+        self._connect = lambda: psycopg.connect(
+            DATABASE_URL, autocommit=True, row_factory=rows, connect_timeout=10,
+            # a stuck lock or a dead socket must fail fast: every call runs on the bot's event loop
+            options="-c statement_timeout=15000 -c lock_timeout=5000 -c idle_in_transaction_session_timeout=60000",
+            keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
+        self._broken = (psycopg.OperationalError, psycopg.InterfaceError)
+        self.c = self._connect()
 
     def execute(self, sql, params=()):
         q, want_id = _pg_sql(sql, bool(params))
-        return _PgCursor(self.c.execute(q, params or None), want_id)
+        try:
+            cur = self.c.execute(q, params or None)
+        except self._broken:
+            if not self.c.closed and not self.c.broken:
+                raise  # a real error (timeout, constraint): not a lost connection
+            self.c = self._connect()  # PostgreSQL restarted / network dropped: reconnect once and repeat
+            cur = self.c.execute(q, params or None)
+        return _PgCursor(cur, want_id)
 
     def executescript(self, script):
         self.c.execute(script)
@@ -313,6 +326,11 @@ CREATE INDEX IF NOT EXISTS idx_photos_user ON user_photos(user_id);
 CREATE INDEX IF NOT EXISTS idx_files_size ON street_files(size);
 CREATE INDEX IF NOT EXISTS idx_files_name ON street_files(file_name);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_files_path ON street_files(path);
+CREATE INDEX IF NOT EXISTS idx_inspections_photo_hash ON inspections(photo_hash);
+CREATE INDEX IF NOT EXISTS idx_inspections_video_hash ON inspections(video_hash);
+CREATE INDEX IF NOT EXISTS idx_outbox_unsent ON outbox(id) WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_feedback_unanswered ON feedback(id) WHERE answer IS NULL;
+CREATE INDEX IF NOT EXISTS idx_feedback_undelivered ON feedback(answered_at) WHERE answer IS NOT NULL AND answer_sent_at IS NULL;
 """
 
 
@@ -357,7 +375,12 @@ def _init_pg() -> None:
         for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
                                ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
                                ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
+            have = {r[0] for r in c.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?",
+                (table,)).fetchall()}
             for col, typ in columns.items():
+                if col in have:  # ALTER takes an exclusive table lock even when the column exists: skip it
+                    continue
                 c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {_pg_ddl('    ' + col + ' ' + typ).strip()}")
         c.executescript(INDEXES)
 

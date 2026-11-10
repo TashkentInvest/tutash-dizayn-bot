@@ -3,5 +3,5 @@
 @forelse ($items as $i)
     @include('filament.objects.inspection-card', ['i' => $i])
 @empty
-    <p style="color:#6b7280">Hali dalil yuborilmagan.</p>
+    <p style="opacity:.65;">Hali dalil yuborilmagan.</p>
 @endforelse

@@ -74,7 +74,8 @@ class StreetResource extends Resource
             ])
             ->recordActions([
                 EditAction::make()->label('Fayllar / tahrirlash'),
-                DeleteAction::make()->modalDescription('Ko‘cha va uning fayllari o‘chiriladi. Fayllar data/_trash papkasiga ko‘chiriladi.'),
+                DeleteAction::make()->modalDescription('Ko‘cha va uning fayllari o‘chiriladi. Fayllar data/_trash papkasiga ko‘chiriladi.')
+                    ->hidden(fn ($record) => $record->objects()->exists()),  // has businesses: hide it from the bot instead
             ]);
     }
 
