@@ -42,15 +42,6 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-file/{file}', functio
     ]);
 })->name('bot-file');
 
-// A design-code object's page picture (rendered by the bot from the street PDF into data/_objects/).
-Route::middleware(['auth', 'can:access-admin'])->get('/bot-object-image/{object}', function (\App\Models\DesignObject $object) {
-    $root = realpath((string) config('filesystems.disks.bot_data.root'));
-    $file = $root && $object->image ? realpath($root.DIRECTORY_SEPARATOR.$object->image) : false;
-    abort_unless($file && str_starts_with($file, $root.DIRECTORY_SEPARATOR) && is_file($file), 404);
-
-    return response()->file($file, ['Content-Type' => 'image/jpeg', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => 'sandbox']);
-})->name('bot-object-image');
-
 // Evidence a staff member sent from the Mini App: the live photo or the live video (stored under BOT_UPLOADS_PATH).
 Route::middleware(['auth', 'can:access-admin'])->get('/bot-inspection/{inspection}/{media}', function (\App\Models\Inspection $inspection, string $media) {
     abort_unless(in_array($media, ['photo', 'video'], true) && $inspection->{$media}, 404);

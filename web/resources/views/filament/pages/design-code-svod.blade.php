@@ -1,7 +1,7 @@
 <x-filament-panels::page>
     @php
         $cols = [
-            'total' => 'Jami obyekt', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi (jarayonda)', 'installed' => 'Qo‘yildi (qilindi)',
+            'total' => 'Jami obyekt (ro‘yxat)', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi (jarayonda)', 'installed' => 'Qo‘yildi (qilindi)',
             'review' => 'Tekshiruvda', 'day_removed' => 'Shu kuni yechildi', 'day_installed' => 'Shu kuni qo‘yildi',
         ];
         $color = ['removed' => '#b45309', 'installed' => '#15803d', 'review' => '#2563eb', 'day_removed' => '#b45309', 'day_installed' => '#15803d'];

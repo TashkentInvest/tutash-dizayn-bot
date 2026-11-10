@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\DB;
 class InspectionReview
 {
     private const TEXT = [
-        'approved' => ["✅ №%d obyekt (%s) bo‘yicha dalilingiz tasdiqlandi: %s.", "✅ Ваши доказательства по объекту №%d (%s) подтверждены: %s."],
-        'rejected' => ["❌ №%d obyekt (%s) bo‘yicha dalilingiz rad etildi: %s.\nSabab: %s\n\nMini App’da obyektni ochib, qayta yuboring.",
-            "❌ Ваши доказательства по объекту №%d (%s) отклонены: %s.\nПричина: %s\n\nОткройте объект в Mini App и отправьте снова."],
+        'approved' => ["✅ «%s» (%s) bo‘yicha dalilingiz tasdiqlandi: %s.", "✅ Ваши доказательства по «%s» (%s) подтверждены: %s."],
+        'rejected' => ["❌ «%s» (%s) bo‘yicha dalilingiz rad etildi: %s.\nSabab: %s\n\nMini App’da obyektni ochib, qayta yuboring.",
+            "❌ Ваши доказательства по «%s» (%s) отклонены: %s.\nПричина: %s\n\nОткройте объект в Mini App и отправьте снова."],
         'note' => ["\nAdmin izohi: %s", "\nКомментарий администратора: %s"],
         'kind' => ['removed' => ['eski peshtaxta yechildi', 'старая вывеска снята'], 'installed' => ['dizayn-kod bo‘yicha qo‘yildi', 'установлено по дизайн-коду']],
     ];
@@ -76,8 +76,8 @@ class InspectionReview
         $kind = self::TEXT['kind'][$i->kind][$ru] ?? $i->kind;
         $street = (string) $i->object?->street?->name;
         $text = $result === 'approved'
-            ? sprintf(self::TEXT['approved'][$ru], $i->object->number(), $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : '')
-            : sprintf(self::TEXT['rejected'][$ru], $i->object->number(), $street, $kind, $note);
+            ? sprintf(self::TEXT['approved'][$ru], $i->object->shop_name, $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : '')
+            : sprintf(self::TEXT['rejected'][$ru], $i->object->shop_name, $street, $kind, $note);
         DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'text' => $text]);
     }
 }

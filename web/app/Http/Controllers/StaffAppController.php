@@ -6,6 +6,7 @@ use App\Models\DesignObject;
 use App\Models\Inspection;
 use App\Models\Staff;
 use App\Models\Street;
+use App\Models\StreetFile;
 use App\Support\Phone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,8 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\URL;
 
 /**
- * The district staff Mini App: streets of the staff member's district -> objects (PDF pages) -> evidence wizard
+ * The district staff Mini App: streets of the staff member's district (the street's concept PDF, whole) -> businesses
+ * the staff add themselves -> evidence wizard
  * (live photo -> where the staff member stands -> the object's place picked on a map -> live video -> comment). Every step is saved on the server, so a closed window resumes where
  * it stopped; repeating a step that is already done answers "already saved" instead of an error.
  */
@@ -66,10 +68,11 @@ class StaffAppController extends Controller
     public function me(Request $r): JsonResponse
     {
         $staff = $this->staff($r);
-        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']);
-        $counts = DB::connection('bot')->table('objects')->where('is_active', 1)->where('gone', 0)
+        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
+            ->get(['id', 'name', 'planned_objects']);
+        $counts = DB::connection('bot')->table('objects')->where('is_active', 1)
             ->whereIn('street_id', $streets->pluck('id'))
-            ->selectRaw("street_id, COUNT(*) AS total, SUM(status='removed') AS removed, SUM(status='installed') AS installed")
+            ->selectRaw("street_id, COUNT(*) AS added, SUM(status='removed') AS removed, SUM(status='installed') AS installed")
             ->groupBy('street_id')->get()->keyBy('street_id');
         $review = DB::connection('bot')->table('inspections')->join('objects', 'objects.id', '=', 'inspections.object_id')
             ->where('inspections.review', Inspection::PENDING)->whereIn('objects.street_id', $streets->pluck('id'))
@@ -78,9 +81,11 @@ class StaffAppController extends Controller
 
         $rows = $streets->map(fn ($s) => [
             'id' => $s->id, 'name' => $s->name, 'priority' => in_array($s->id, $priority, true),
-            'total' => (int) ($counts[$s->id]->total ?? 0), 'removed' => (int) ($counts[$s->id]->removed ?? 0),
+            // total: from the official list (Excel); added: businesses the staff already entered
+            'total' => (int) $s->planned_objects, 'added' => (int) ($counts[$s->id]->added ?? 0),
+            'removed' => (int) ($counts[$s->id]->removed ?? 0),
             'installed' => (int) ($counts[$s->id]->installed ?? 0), 'review' => (int) ($review[$s->id] ?? 0),
-        ])->filter(fn ($s) => $s['total'] > 0)
+        ])->filter(fn ($s) => $s['total'] > 0 || $s['added'] > 0)
             ->sortBy(fn ($s) => [$s['priority'] ? 0 : 1, $s['priority'] ? array_search($s['id'], $priority, true) : 0])->values();
 
         $draft = Inspection::query()->where('staff_id', $staff->id)->where('step', '!=', 'submitted')->latest('id')->first();
@@ -103,12 +108,39 @@ class StaffAppController extends Controller
             return $this->fail($r, 'not_yours', 403);
         }
         $objects = DesignObject::query()->active()->where('street_id', $street->id)->with('pendingInspection')
-            ->orderBy('file_id')->orderBy('page')->get();
+            ->orderBy('shop_name')->orderBy('id')->get();
+        // the street's concept PDF(s), whole: opened in the phone's browser through a signed link
+        $files = StreetFile::query()->where('street_id', $street->id)->orderBy('sort_order')->orderBy('id')->get(['id', 'file_name', 'size']);
 
         return response()->json([
-            'street' => ['id' => $street->id, 'name' => $street->name],
+            'street' => ['id' => $street->id, 'name' => $street->name, 'total' => (int) $street->planned_objects],
+            'files' => $files->map(fn (StreetFile $f) => [
+                'name' => $f->file_name, 'mb' => max(1, (int) round($f->size / 1048576)),
+                'url' => URL::temporarySignedRoute('tg.file', now()->addHours(12), ['file' => $f->id], absolute: false),
+            ])->values(),
             'objects' => $objects->map(fn (DesignObject $o) => $this->brief($o))->values(),
         ]);
+    }
+
+    /** A business the staff member found on the street (shop / firm name required). */
+    public function create(Request $r, Street $street): JsonResponse
+    {
+        if ((int) $street->district_id !== (int) $this->staff($r)->district_id) {
+            return $this->fail($r, 'not_yours', 403);
+        }
+        $data = $this->validateDetails($r, true);
+
+        return $this->locked(function () use ($r, $street, $data) {
+            // pressed twice / sent again: the same name on the same street is the same business
+            $same = DesignObject::query()->active()->where('street_id', $street->id)
+                ->whereRaw('LOWER(TRIM(shop_name)) = ?', [mb_strtolower(trim($data['shop_name']))])->first();
+            if ($same) {
+                return response()->json(['ok' => true, 'already' => true, 'object' => $this->brief($same)]);
+            }
+            $o = DesignObject::create(['street_id' => $street->id, 'created_by' => $this->staff($r)->id] + $data);
+
+            return response()->json(['ok' => true, 'object' => $this->brief($o->fresh())]);
+        });
     }
 
     public function show(Request $r, DesignObject $object): JsonResponse
@@ -122,7 +154,7 @@ class StaffAppController extends Controller
 
         return response()->json($this->brief($object) + [
             'street' => $object->street?->name,
-            'owner_name' => $object->owner_name, 'owner_phone' => $object->owner_phone, 'stir' => $object->stir,
+            'owner_phone' => $object->owner_phone,
             'has_point' => $object->latitude !== null,
             'draft' => $draft ? $this->draftState($draft) : null,
             'history' => $history->map(fn (Inspection $i) => [
@@ -137,18 +169,31 @@ class StaffAppController extends Controller
         if ($resp = $this->guardObject($r, $object)) {
             return $resp;
         }
+        $data = $this->validateDetails($r, false);
+        $object->forceFill($data + ['updated_at' => now()->utc()->format('Y-m-d H:i:s')])->save();
+
+        return response()->json(['ok' => true, 'message' => $this->msg($r, 'saved')]);
+    }
+
+    /** @return array<string, string|null> */
+    private function validateDetails(Request $r, bool $creating): array
+    {
+        $ru = $r->attributes->get('lang') === 'ru';
         $data = $r->validate([
-            'shop_name' => ['nullable', 'string', 'max:150'],
+            'shop_name' => [$creating ? 'required' : 'sometimes', 'string', 'min:2', 'max:150'],
             'owner_name' => ['nullable', 'string', 'max:150'],
             'owner_phone' => ['nullable', 'string', 'max:30'],
             'stir' => ['nullable', 'regex:/^\d{9}$|^\d{14}$/'],
-        ], ['stir.regex' => $r->attributes->get('lang') === 'ru' ? 'ИНН: 9 цифр (ПИНФЛ: 14).' : 'STIR: 9 ta raqam (JShShIR: 14).']);
+        ], [
+            'stir.regex' => $ru ? 'ИНН: 9 цифр (ПИНФЛ: 14).' : 'STIR: 9 ta raqam (JShShIR: 14).',
+            'shop_name.required' => $ru ? 'Укажите название магазина / фирмы.' : 'Do‘kon yoki firma nomini kiriting.',
+            'shop_name.min' => $ru ? 'Укажите название магазина / фирмы.' : 'Do‘kon yoki firma nomini kiriting.',
+        ]);
         if (! empty($data['owner_phone'])) {
             $data['owner_phone'] = Phone::normalize($data['owner_phone']) ?? $data['owner_phone'];
         }
-        $object->forceFill(array_map(fn ($v) => $v === '' ? null : $v, $data) + ['updated_at' => now()->utc()->format('Y-m-d H:i:s')])->save();
 
-        return response()->json(['ok' => true, 'message' => $this->msg($r, 'saved')]);
+        return array_map(fn ($v) => is_string($v) && trim($v) === '' ? null : (is_string($v) ? trim($v) : $v), $data);
     }
 
     // ---------------------------------------------------------------- the evidence wizard
@@ -308,14 +353,19 @@ class StaffAppController extends Controller
         });
     }
 
-    /** The PDF page picture of an object; opened through a signed link (an <img> cannot send the initData header). */
-    public function image(DesignObject $object)
+    /** A street's concept PDF, whole; opened through a signed link from the Mini App (the browser cannot send initData). */
+    public function file(StreetFile $file)
     {
         $root = realpath((string) config('filesystems.disks.bot_data.root'));
-        $file = $root && $object->image ? realpath($root.DIRECTORY_SEPARATOR.$object->image) : false;
-        abort_unless($file && str_starts_with($file, $root.DIRECTORY_SEPARATOR) && is_file($file), 404);
+        $path = $root ? realpath($root.DIRECTORY_SEPARATOR.$file->path) : false;
+        abort_unless($path && str_starts_with($path, $root.DIRECTORY_SEPARATOR) && is_file($path), 404);
+        $pdf = strtolower(pathinfo($file->file_name, PATHINFO_EXTENSION)) === 'pdf';
 
-        return response()->file($file, ['Content-Type' => 'image/jpeg', 'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, max-age=86400']);
+        return response()->file($path, [
+            'Content-Type' => $pdf ? 'application/pdf' : 'application/octet-stream',
+            'Content-Disposition' => ($pdf ? 'inline' : 'attachment')."; filename*=UTF-8''".rawurlencode($file->file_name),
+            'X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -362,15 +412,14 @@ class StaffAppController extends Controller
     {
         $districtId = Street::query()->whereKey($object->street_id)->value('district_id');
 
-        return (! $object->is_active || $object->gone || (int) $districtId !== (int) $this->staff($r)->district_id) ? $this->fail($r, 'not_yours', 403) : null;
+        return (! $object->is_active || (int) $districtId !== (int) $this->staff($r)->district_id) ? $this->fail($r, 'not_yours', 403) : null;
     }
 
     private function brief(DesignObject $o): array
     {
         return [
-            'id' => $o->id, 'number' => $o->number(), 'shop_name' => $o->shop_name, 'status' => $o->status,
+            'id' => $o->id, 'shop_name' => $o->shop_name, 'owner_name' => $o->owner_name, 'stir' => $o->stir, 'status' => $o->status,
             'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->where('review', Inspection::PENDING)->exists(),
-            'image' => URL::temporarySignedRoute('tg.image', now()->addHours(12), ['object' => $o->id], absolute: false),
         ];
     }
 

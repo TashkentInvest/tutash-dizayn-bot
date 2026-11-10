@@ -12,7 +12,7 @@ class ViewDesignObject extends ViewRecord
 
     public function getTitle(): string
     {
-        return $this->record->street?->name.' · №'.$this->record->number();
+        return $this->record->street?->name.' · '.$this->record->shop_name;
     }
 
     protected function getHeaderActions(): array

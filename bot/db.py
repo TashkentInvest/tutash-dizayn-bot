@@ -93,36 +93,22 @@ CREATE TABLE IF NOT EXISTS staff (
     is_active        INTEGER NOT NULL DEFAULT 1,
     created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
--- Street PDFs already split into object pages (redone when the file changes).
-CREATE TABLE IF NOT EXISTS object_sources (
-    file_id  INTEGER PRIMARY KEY,               -- street_files.id
-    size     INTEGER NOT NULL,
-    mtime    INTEGER NOT NULL,
-    pages    INTEGER NOT NULL,
-    kind     TEXT,                              -- text (concept PDF) / images (picture-only concept) / extra (renders, not objects)
-    objects  INTEGER NOT NULL DEFAULT 0,
-    error    TEXT,
-    done_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
--- One page of a street's concept PDF (after the cover) = one object: a business whose facade must follow the design code.
+-- A business on a street (an "object" of the design code), added by district staff in the Mini App. How many each street
+-- should have comes from the official list (streets.planned_objects); the street's concept PDF stays whole.
 CREATE TABLE IF NOT EXISTS objects (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     street_id   INTEGER NOT NULL REFERENCES streets(id),
-    file_id     INTEGER NOT NULL,               -- street_files.id
-    page        INTEGER NOT NULL,               -- page in that PDF (1 is the cover, objects start at 2)
-    image       TEXT,                           -- the page as a picture, relative to DATA_DIR
-    shop_name   TEXT,
+    shop_name   TEXT NOT NULL,
     owner_name  TEXT,
     owner_phone TEXT,
     stir        TEXT,
     status      TEXT NOT NULL DEFAULT 'pending', -- pending / removed (old sign taken down) / installed (design code done)
-    latitude    REAL,                           -- from the first approved inspection; later ones must be near it
+    latitude    REAL,                           -- from the latest approved inspection; later ones must be near it
     longitude   REAL,
-    is_active   INTEGER NOT NULL DEFAULT 1,     -- the admin's switch: 0 = "not an object" (a scheme, a summary page)
-    gone        INTEGER NOT NULL DEFAULT 0,     -- 1: the page is no longer in any current PDF (kept with its history)
-    page_hash   TEXT,                           -- fingerprint of the page: no duplicates, and a re-uploaded PDF keeps its objects
-    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (file_id, page)
+    is_active   INTEGER NOT NULL DEFAULT 1,     -- the admin's switch: 0 = added by mistake / a duplicate
+    created_by  INTEGER REFERENCES staff(id),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_objects_street ON objects(street_id);
 CREATE INDEX IF NOT EXISTS idx_objects_status ON objects(status);
@@ -203,7 +189,6 @@ REG_COLUMNS = {
 # Indexes the dashboard's counts/filters/sorts depend on (measured: users list 9 s -> 0.6 s at 100k users).
 # Created after the column migration, because some columns are added there.
 INDEXES = """
-CREATE INDEX IF NOT EXISTS idx_objects_hash ON objects(page_hash);
 CREATE INDEX IF NOT EXISTS idx_users_registered ON users(registered_at);
 CREATE INDEX IF NOT EXISTS idx_users_first_seen ON users(first_seen);
 CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen);
@@ -217,13 +202,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_files_path ON street_files(path);
 """
 
 
+def _drop_page_objects(c) -> None:
+    """Objects once were pages split out of the street PDFs. That was dropped: the PDFs stay whole and staff add the
+    businesses themselves. The old table (and its split bookkeeping) goes, unless staff evidence already points at it."""
+    cols = {r[1] for r in c.execute("PRAGMA table_info(objects)")}
+    if "page" not in cols:
+        return
+    has_evidence = c.execute("SELECT name FROM sqlite_master WHERE name='inspections'").fetchone() and \
+        c.execute("SELECT 1 FROM inspections LIMIT 1").fetchone()
+    if has_evidence:
+        raise RuntimeError("objects still has PDF pages and inspections point at them: migrate by hand")
+    c.execute("DROP TABLE objects")
+    c.execute("DROP TABLE IF EXISTS object_sources")
+    c.commit()
+
+
 def init() -> None:
     with _db() as c:
         c.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
+        _drop_page_objects(c)
         c.executescript(SCHEMA)
         for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
-                               ("objects", {"gone": "INTEGER NOT NULL DEFAULT 0", "page_hash": "TEXT"}),
-                               ("object_sources", {"kind": "TEXT", "objects": "INTEGER NOT NULL DEFAULT 0"}),
+                               ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
                                ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
             have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
             for col, typ in columns.items():  # migrate a database created before a column existed
@@ -399,14 +399,15 @@ def link_staff(staff_id: int, user_id: int) -> None:
 def staff_counts(district_id: int) -> dict:
     with _db() as c:
         r = c.execute(
-            "SELECT COUNT(*) AS total, SUM(o.status='removed') AS removed, SUM(o.status='installed') AS installed "
-            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active=1 AND o.gone=0", (district_id,)
+            "SELECT SUM(o.status='removed') AS removed, SUM(o.status='installed') AS installed "
+            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active=1", (district_id,)
         ).fetchone()
+        planned = c.execute("SELECT COALESCE(SUM(planned_objects), 0) FROM streets WHERE district_id=?", (district_id,)).fetchone()[0]
         pending = c.execute(
             "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id JOIN streets s ON s.id=o.street_id "
             "WHERE s.district_id=? AND i.review='pending'", (district_id,)
         ).fetchone()[0]
-    return {"total": r["total"] or 0, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
+    return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
 
 
 def unsent_outbox(limit: int = 20) -> list[sqlite3.Row]:

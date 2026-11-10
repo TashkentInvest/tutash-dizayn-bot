@@ -37,9 +37,6 @@
   .chip { border: 1px solid var(--hint); border-radius: 14px; padding: 4px 10px; font-size: 13px; white-space: nowrap; background: none; color: var(--text); }
   .chip.on { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
   .page { width: 100%; border-radius: 10px; display: block; }
-  .zoom { position: fixed; inset: 0; background: #000; z-index: 20; overflow: auto; }
-  .zoom img { width: 220%; display: block; }
-  .zoom button { position: fixed; top: 10px; right: 10px; z-index: 21; }
   label { display: block; font-size: 13px; color: var(--hint); margin: 8px 0 3px; }
   input, textarea { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--hint); background: var(--bg); color: var(--text); }
   textarea { min-height: 90px; }
@@ -71,6 +68,7 @@
   var T = {
     uz: { loading: 'Yuklanmoqda…', title: 'Obyektlar', total: 'Jami', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tekshiruvda',
       pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.',
+      added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
       inReview: 'Bu obyekt bo‘yicha dalil tekshiruvda. Admin natijasini kuting.', continueDraft: 'Tugallanmagan tekshiruvni davom ettirish',
@@ -89,6 +87,7 @@
       noTg: 'Bu oyna faqat Telegram ichida ishlaydi. Botdagi “Obyektlarni ochish” tugmasini bosing.' },
     ru: { loading: 'Загрузка…', title: 'Объекты', total: 'Всего', removed: 'Снято', installed: 'Установлено', review: 'На проверке',
       pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.',
+      added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
       inReview: 'Доказательства по этому объекту на проверке. Дождитесь решения администратора.', continueDraft: 'Продолжить незавершённую проверку',
@@ -169,7 +168,7 @@
       d.streets.forEach(function (s) {
         html += '<div class="card street" data-id="' + s.id + '"><div class="row"><span class="name">' + esc(s.name) + '</span>' +
           (s.priority ? '<span class="pill">⭐ ' + t('priority') + '</span>' : '') + '</div><div>' +
-          '<span class="pill">' + t('total') + ': ' + s.total + '</span><span class="pill s-removed">' + t('removed') + ': ' + s.removed + '</span>' +
+          '<span class="pill">' + t('total') + ': ' + s.total + '</span><span class="pill">' + t('added') + ': ' + s.added + '</span><span class="pill s-removed">' + t('removed') + ': ' + s.removed + '</span>' +
           '<span class="pill s-installed">' + t('installed') + ': ' + s.installed + '</span>' + (s.review ? '<span class="pill s-review">' + t('review') + ': ' + s.review + '</span>' : '') +
           '</div></div>';
       });
@@ -191,22 +190,50 @@
         return '<button class="chip' + (f === filter ? ' on' : '') + '" data-f="' + f + '">' + t(f) + '</button>';
       }).join('');
       var list = d.objects.filter(keep).map(function (o) {
-        return '<div class="obj" data-id="' + o.id + '"><img loading="lazy" src="' + esc(o.image) + '" alt=""><div><b>№' + o.number + '</b> ' +
-          esc(o.shop_name || '') + '<br>' + statusPill(o) + '</div></div>';
+        return '<div class="card obj" data-id="' + o.id + '"><div class="row"><b>' + esc(o.shop_name) + '</b>' + statusPill(o) + '</div>' +
+          (o.owner_name || o.stir ? '<div class="muted">' + esc(o.owner_name || '') + (o.stir ? ' · STIR ' + esc(o.stir) : '') + '</div>' : '') + '</div>';
       }).join('');
-      h('<div class="chips">' + chips + '</div>' + (list ? '<div class="grid">' + list + '</div>' : '<p class="muted">' + t('none') + '</p>'));
+      var files = d.files.map(function (f) {
+        return '<button class="btn alt pdf" data-url="' + esc(f.url) + '">' + t('pdf') + ' · ' + f.mb + ' MB</button>';
+      }).join('');
+      h(files + '<p class="muted">' + t('total') + ': ' + d.street.total + ' · ' + t('added') + ': ' + d.objects.length + '</p>' +
+        '<button class="btn" id="add">' + t('addBtn') + '</button><div class="chips" style="margin-top:12px">' + chips + '</div>' +
+        (list || '<p class="muted">' + t('none') + '</p>'));
+      app.querySelectorAll('.pdf').forEach(function (b) {
+        // the PDF opens in the phone's browser / PDF viewer (a Mini App cannot show a large PDF itself)
+        b.onclick = function () { var u = location.origin + b.dataset.url; if (tg && tg.openLink) tg.openLink(u); else window.open(u, '_blank'); };
+      });
+      document.getElementById('add').onclick = function () { show(function () { addObject(s); }); };
       app.querySelectorAll('.chip').forEach(function (c) { c.onclick = function () { stack[stack.length - 1] = function () { street(s, c.dataset.f); }; street(s, c.dataset.f); }; });
       app.querySelectorAll('.obj').forEach(function (el) { el.onclick = function () { show(function () { object(+el.dataset.id); }); }; });
     }).catch(fatal);
+  }
+
+  // a business the staff member found on the street
+  function addObject(s) {
+    titleEl.textContent = t('addTitle'); syncBack();
+    h('<p class="muted">' + esc(s.name) + '. ' + t('addHint') + '</p><div class="card"><label>' + t('shop') + ' *</label><input id="shop_name" maxlength="150">' +
+      '<label>' + t('owner') + '</label><input id="owner_name" maxlength="150">' +
+      '<label>' + t('phone') + '</label><input id="owner_phone" inputmode="tel" maxlength="30">' +
+      '<label>' + t('stir') + '</label><input id="stir" inputmode="numeric" maxlength="14"></div><div id="err" class="err"></div>' +
+      '<button class="btn" id="go">' + t('create') + '</button>');
+    var go = document.getElementById('go');
+    go.onclick = function () {
+      busy(go, function () {
+        var body = {}; ['shop_name', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
+        return api('/streets/' + s.id + '/objects', { body: body }).then(function (d) {
+          stack.pop(); stack.push(function () { object(d.object.id); }); object(d.object.id);
+        });
+      });
+    };
   }
 
   function object(id, flash) {
     syncBack();
     h('<p class="muted center">' + t('loading') + '</p>');
     api('/objects/' + id).then(function (o) {
-      titleEl.textContent = t('obj') + ' №' + o.number;
-      var html = '<img class="page" id="pg" src="' + esc(o.image) + '" alt="">' +
-        '<div class="card" style="margin-top:10px"><div class="row"><span>' + esc(o.street || '') + '</span>' + statusPill(o) + '</div></div>' +
+      titleEl.textContent = o.shop_name;
+      var html = '<div class="card"><div class="row"><span>' + esc(o.street || '') + '</span>' + statusPill(o) + '</div></div>' +
         (flash ? '<p class="ok">' + esc(flash) + '</p>' : '') + '<div id="err" class="err"></div>';
       if (o.draft) {
         html += '<button class="btn" id="cont">↩︎ ' + t('continueDraft') + ' (' + t(o.draft.kind === 'removed' ? 'kindRemoved' : 'kindInstalled') + ')</button>';
@@ -228,7 +255,6 @@
         }).join('');
       }
       h(html);
-      document.getElementById('pg').onclick = function () { zoom(o.image); };
       var cont = document.getElementById('cont');
       if (cont) cont.onclick = function () { show(function () { wizard(o, o.draft); }); };
       app.querySelectorAll('[data-kind]').forEach(function (b) { b.onclick = function () { busy(b, function () { return begin(o, b.dataset.kind, false); }); }; });
@@ -263,7 +289,7 @@
   function wizard(o, draft) {
     syncBack();
     var stepNo = { photo: 1, location: 2, point: 3, video: 4, comment: 5 }[draft.step] || 5;
-    titleEl.textContent = t('obj') + ' №' + o.number + ' · ' + t(draft.kind === 'removed' ? 'kindRemoved' : 'kindInstalled');
+    titleEl.textContent = o.shop_name + ' · ' + t(draft.kind === 'removed' ? 'kindRemoved' : 'kindInstalled');
     var bar = '<div class="steps">' + [1, 2, 3, 4, 5].map(function (n) { return '<i class="' + (n <= stepNo ? 'on' : '') + '"></i>'; }).join('') + '</div>';
     var next = function (d) { draft = d.draft; if (draft.step === 'submitted') return finished(o); wizard(o, draft); };
     // order: live photo -> where the staff member stands -> the object's place on the map -> live video -> comment
@@ -423,13 +449,6 @@
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     h('<div class="card center" style="margin-top:20px"><p style="font-size:40px;margin:0">✅</p><p>' + t('done') + '</p></div><button class="btn" id="to">' + t('toObject') + '</button>');
     document.getElementById('to').onclick = function () { stack = stack.slice(0, -1); stack[stack.length - 1] = function () { object(o.id); }; object(o.id); };
-  }
-
-  function zoom(src) {
-    var z = document.createElement('div'); z.className = 'zoom';
-    z.innerHTML = '<button class="btn alt" style="width:auto">✕</button><img src="' + esc(src) + '" alt="">';
-    z.querySelector('button').onclick = function () { z.remove(); };
-    document.body.appendChild(z);
   }
 
   function fatal(e) {

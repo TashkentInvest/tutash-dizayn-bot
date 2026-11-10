@@ -245,68 +245,6 @@ async def consent_flow():
 
 asyncio.run(consent_flow())
 
-# street PDF -> objects: cover skipped, every other page one object; render albums are not objects; no duplicates;
-# a re-uploaded PDF keeps its objects (status, details) even when pages moved
-def objects_split():
-    import fitz
-    from bot import objects
-    data = tempfile.mkdtemp()
-    old_data, objects.DATA_DIR = objects.DATA_DIR, __import__("pathlib").Path(data)
-
-    def make(name, pages, text=True):
-        doc = fitz.open()
-        for label in pages:
-            pg = doc.new_page()
-            if text:
-                pg.insert_text((72, 72), label)
-            pg.draw_rect(fitz.Rect(100, 100 + 20 * len(label), 300, 300), color=(0, 0, 0), fill=(0.1 * (len(label) % 9), 0.4, 0.6))
-        doc.save(os.path.join(data, name))
-        os.utime(os.path.join(data, name), (time.time() + len(name), time.time() + len(name)))
-
-    def add(street, name):
-        return db.execute("INSERT INTO street_files (street_id, file_name, path, size) VALUES (?, ?, ?, 1)", (street, name, name))
-
-    try:
-        s1, s2 = [r["id"] for r in db.fetch_all("SELECT id FROM streets ORDER BY id LIMIT 2")]
-        db.execute("DELETE FROM object_sources")  # only the test files matter here
-        for f in db.fetch_all("SELECT id FROM street_files"):
-            db.execute("INSERT INTO object_sources (file_id, size, mtime, pages) VALUES (?, -1, -1, 0)", (f["id"],))
-        pages = ["cover", "A · TAKLIF KO`RINISH", "BB · TAKLIF KO`RINISH", "CCC · TAKLIF KO`RINISH"]
-        make("t.pdf", pages)
-        fid = add(s1, "t.pdf")
-        r = objects.sync_all()
-        rows = db.fetch_all("SELECT id, page, image FROM objects WHERE file_id=? AND gone=0 ORDER BY page", (fid,))
-        check("concept PDF: cover skipped, 3 objects with pictures",
-              r["new"] == 3 and [x["page"] for x in rows] == [2, 3, 4] and all(os.path.getsize(os.path.join(data, x["image"])) > 1000 for x in rows))
-        check("unchanged file is not split again", objects.sync_all()["files"] == 0)
-
-        # a picture-only render album next to the concept PDF: not objects
-        make("render.pdf", ["r1", "r22", "r333"], text=False)
-        add(s1, "render.pdf")
-        r = objects.sync_all()
-        check("render album next to a concept PDF adds no objects", r["files"] == 1 and r["pages"] == 0)
-
-        # the same page uploaded again on another street: no duplicate object
-        make("copy.pdf", ["cover2", pages[2]])
-        add(s2, "copy.pdf")
-        r = objects.sync_all()
-        check("a page already shown from another PDF is not added twice", r["duplicates"] == 1 and r["new"] == 0)
-
-        # new version of t.pdf: pages reordered, "BB" removed -> A and CCC keep their objects (and status), BB is gone
-        a_id = next(x["id"] for x in rows if x["page"] == 2)
-        db.execute("UPDATE objects SET status='installed', shop_name='Market' WHERE id=?", (a_id,))
-        make("t.pdf", ["cover", pages[3], pages[1]])
-        r = objects.sync_all()
-        now = {x["id"]: (x["page"], x["gone"], x["status"], x["shop_name"]) for x in db.fetch_all(
-            "SELECT id, page, gone, status, shop_name FROM objects WHERE file_id=? OR id IN (SELECT id FROM objects WHERE gone=1)", (fid,))}
-        check("re-uploaded PDF keeps objects with their status, even on another page", r["kept"] == 2 and r["new"] == 0
-              and now[a_id] == (3, 0, "installed", "Market"))
-        check("a page removed from the PDF is hidden (gone), not deleted", sum(1 for v in now.values() if v[1] == 1) == 1)
-    finally:
-        objects.DATA_DIR = old_data
-        shutil.rmtree(data, ignore_errors=True)
-
-objects_split()
 
 os.environ["WEB_PORT"] = "8799"; web.WEB_PORT = 8799
 asyncio.run(http())

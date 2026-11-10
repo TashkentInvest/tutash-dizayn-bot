@@ -50,7 +50,7 @@ class StaffAppTest extends TestCase
     {
         parent::setUp();
         $this->tmp = storage_path('framework/testing/staff-'.uniqid());
-        File::makeDirectory($this->tmp.'/data/_objects/1', 0777, true);
+        File::makeDirectory($this->tmp.'/data', 0777, true);
         File::makeDirectory($this->tmp.'/uploads', 0777, true);
         copy(base_path('../bot.db'), $this->tmp.'/bot.db');
         config([
@@ -67,14 +67,18 @@ class StaffAppTest extends TestCase
         $this->district = (int) $db->table('districts')->orderBy('id')->value('id');
         $this->otherDistrict = (int) $db->table('districts')->where('id', '!=', $this->district)->orderBy('id')->value('id');
         $this->street = (int) $db->table('streets')->where('district_id', $this->district)->orderBy('id')->value('id');
-        $fileId = (int) $db->table('street_files')->where('street_id', $this->street)->value('id') ?: 1;
-        file_put_contents($this->tmp.'/data/_objects/1/2.jpg', $this->jpeg(200));
+        // the official list: 3 businesses on this street, none elsewhere in the district
+        $db->table('streets')->update(['planned_objects' => 0]);
+        $db->table('streets')->where('id', $this->street)->update(['planned_objects' => 3]);
+        $db->table('street_files')->where('street_id', $this->street)->delete();
+        file_put_contents($this->tmp.'/data/concept.pdf', "%PDF-1.4\n%test\n");
+        $db->table('street_files')->insert(['street_id' => $this->street, 'file_name' => 'Konsepsiya.pdf', 'path' => 'concept.pdf', 'size' => 15]);
 
         $db->table('users')->insertOrIgnore(['user_id' => 555001, 'first_name' => 'S', 'lang' => 'uz']);
         $this->staff = Staff::create(['full_name' => 'Test Xodim', 'phone' => '+998901110001', 'district_id' => $this->district, 'is_active' => true]);
         $db->table('staff')->where('id', $this->staff->id)->update(['user_id' => 555001]);
         $this->staff->refresh();
-        $oid = $db->table('objects')->insertGetId(['street_id' => $this->street, 'file_id' => $fileId, 'page' => 2, 'image' => '_objects/1/2.jpg']);
+        $oid = $db->table('objects')->insertGetId(['street_id' => $this->street, 'shop_name' => 'Market 24']);
         $this->object = DesignObject::findOrFail($oid);
     }
 
@@ -177,10 +181,23 @@ class StaffAppTest extends TestCase
     public function test_full_wizard_creates_one_pending_inspection_and_leaves_the_object_unchanged(): void
     {
         $me = $this->getJson('/tg/api/me', $this->headers())->assertOk();
-        $this->assertSame(1, $me->json('totals.total'));
+        $this->assertSame(3, $me->json('totals.total'), 'the total comes from the official list');
         $list = $this->getJson("/tg/api/streets/{$this->street}/objects", $this->headers())->assertOk();
-        $this->assertSame(1, $list->json('objects.0.number'));
-        $this->get($list->json('objects.0.image'))->assertOk(); // signed picture link works without the header
+        $this->assertSame('Market 24', $list->json('objects.0.shop_name'));
+        // the street's whole PDF opens through a signed link (the phone's browser sends no initData)
+        $this->get($list->json('files.0.url'))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->get('/tg/file/'.DB::connection('bot')->table('street_files')->where('street_id', $this->street)->value('id'))->assertForbidden();
+
+        // staff add a business; sending it again (double tap) does not add it twice
+        $h = $this->headers();
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => ''], $h)->assertStatus(422);
+        $new = $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Gul do‘koni', 'stir' => '123456789', 'owner_phone' => '90 123 45 67'], $h)->assertOk();
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => ' gul DO‘KONI '], $h)->assertOk()->assertJsonPath('already', true);
+        $this->assertSame(2, DesignObject::query()->where('street_id', $this->street)->count());
+        $this->assertSame('+998901234567', DesignObject::find($new->json('object.id'))->owner_phone);
+        $this->assertSame($this->staff->id, DesignObject::find($new->json('object.id'))->created_by);
+        $other = (int) DB::connection('bot')->table('streets')->where('district_id', $this->otherDistrict)->value('id');
+        $this->postJson("/tg/api/streets/$other/objects", ['shop_name' => 'Boshqa'], $h)->assertStatus(403);
 
         $id = $this->sendEvidence('removed');
         $i = Inspection::findOrFail($id);
@@ -257,7 +274,7 @@ class StaffAppTest extends TestCase
         $this->post("/tg/api/inspections/$id/photo", ['photo' => $this->photo()], $h)->assertOk();
 
         $second = DesignObject::findOrFail(DB::connection('bot')->table('objects')->insertGetId(
-            ['street_id' => $this->street, 'file_id' => $this->object->file_id, 'page' => 3, 'image' => '_objects/1/2.jpg']));
+            ['street_id' => $this->street, 'shop_name' => 'Ikkinchi do‘kon']));
         $this->postJson("/tg/api/objects/{$second->id}/inspections", ['kind' => 'removed'], $h)
             ->assertStatus(409)->assertJsonPath('other.object_id', $this->object->id);
         $this->assertNotNull(Inspection::find($id), 'kept until the user says so');
@@ -293,13 +310,12 @@ class StaffAppTest extends TestCase
         $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status);
         $this->assertStringContainsString('Rasmda peshtaxta ko‘rinmayapti', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
 
-        // admin pages open: svod, objects list and the object page (picture + PDF iframe), staff list, media
+        // admin pages open: svod, objects list and the object page (street PDF + evidence), staff list, media
         Livewire::test(DesignCodeSvod::class)->assertSee('Toshkent shahar jami')->call('pick', $this->district)->assertSee('ko‘chalar kesimida');
         Livewire::test(ListDesignObjects::class)->assertCanSeeTableRecords([$o]);
-        Livewire::test(ViewDesignObject::class, ['record' => $o->id])->assertSee('#page=2', false)->assertSee('Eski peshtaxta olib tashlandi');
+        Livewire::test(ViewDesignObject::class, ['record' => $o->id])->assertSee('Konsepsiya.pdf')->assertSee('Eski peshtaxta olib tashlandi');
         Livewire::test(ManageStaff::class)->assertCanSeeTableRecords([$this->staff]);
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
-        $this->get(route('bot-object-image', $o))->assertOk();
     }
 
     public function test_svod_counts_objects_once_per_status_and_the_days_work(): void
@@ -307,13 +323,14 @@ class StaffAppTest extends TestCase
         $id = $this->sendEvidence('installed');
         $day = now(config('app.display_timezone'));
         $row = collect(Svod::byDistrict($day)['rows'])->firstWhere('id', $this->district);
-        $this->assertSame(['total' => 1, 'pending' => 1, 'installed' => 0, 'review' => 1, 'day_installed' => 0],
+        $this->assertSame(['total' => 3, 'pending' => 3, 'installed' => 0, 'review' => 1, 'day_installed' => 0],
             array_intersect_key($row, array_flip(['total', 'pending', 'installed', 'review', 'day_installed'])));
 
         \App\Services\InspectionReview::approve(Inspection::find($id), null, 'test');
         $svod = Svod::byDistrict($day);
         $row = collect($svod['rows'])->firstWhere('id', $this->district);
-        $this->assertSame([1, 0, 1, 0, 1, 100.0], [$row['total'], $row['pending'], $row['installed'], $row['review'], $row['day_installed'], $row['pct']]);
+        // total from the official list (3); one approved "installed" -> 2 still waiting, 33.3 %
+        $this->assertSame([3, 2, 1, 0, 1, 33.3], [$row['total'], $row['pending'], $row['installed'], $row['review'], $row['day_installed'], $row['pct']]);
         $this->assertSame($svod['total']['installed'], array_sum(array_column($svod['rows'], 'installed')), 'the total row is the sum of the rows');
         $street = collect(Svod::byStreet($this->district, $day)['rows'])->firstWhere('id', $this->street);
         $this->assertSame(1, $street['installed']);

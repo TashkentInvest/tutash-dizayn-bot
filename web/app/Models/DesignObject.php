@@ -9,9 +9,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * One business on a street: one page (after the cover) of the street's concept PDF (table `objects`, filled by the bot).
- * Status changes only through approved inspections: pending -> removed (old sign taken down, "jarayonda")
- * -> installed (design-code sign up, "qilindi").
+ * A business on a street (table `objects`), added by district staff in the Mini App. How many each street should have
+ * comes from the official list (streets.planned_objects). Status changes only through approved inspections:
+ * pending -> removed (old sign taken down, "jarayonda") -> installed (design-code sign up, "qilindi").
  */
 class DesignObject extends Model
 {
@@ -31,11 +31,12 @@ class DesignObject extends Model
 
     public $timestamps = false;
 
-    protected $guarded = ['id', 'street_id', 'file_id', 'page', 'image', 'gone', 'page_hash'];
+    protected $guarded = ['id'];
 
     protected function casts(): array
     {
-        return ['street_id' => 'integer', 'file_id' => 'integer', 'is_active' => 'boolean', 'gone' => 'boolean', 'latitude' => 'float', 'longitude' => 'float', 'page' => 'integer'];
+        return ['street_id' => 'integer', 'created_by' => 'integer', 'is_active' => 'boolean', 'latitude' => 'float', 'longitude' => 'float',
+            'created_at' => 'datetime', 'updated_at' => 'datetime'];
     }
 
     public function street(): BelongsTo
@@ -43,9 +44,9 @@ class DesignObject extends Model
         return $this->belongsTo(Street::class, 'street_id');
     }
 
-    public function file(): BelongsTo
+    public function creator(): BelongsTo
     {
-        return $this->belongsTo(StreetFile::class, 'file_id');
+        return $this->belongsTo(Staff::class, 'created_by');
     }
 
     public function inspections(): HasMany
@@ -58,15 +59,9 @@ class DesignObject extends Model
         return $this->hasOne(Inspection::class, 'object_id')->where('review', Inspection::PENDING)->latestOfMany();
     }
 
-    /** Number of the object on its street, as staff and admins call it: page 2 of the PDF is object 1. */
-    public function number(): int
-    {
-        return $this->page - 1;
-    }
-
     public function scopeActive(Builder $q): Builder
     {
-        return $q->where('objects.is_active', true)->where('objects.gone', 0); // admin did not switch it off, and it is still in a PDF
+        return $q->where('objects.is_active', true);
     }
 
     public function scopeInDistrict(Builder $q, int $districtId): Builder
@@ -76,6 +71,6 @@ class DesignObject extends Model
 
     public function label(): string
     {
-        return '№'.$this->number().($this->shop_name ? ' · '.$this->shop_name : '');
+        return (string) $this->shop_name;
     }
 }

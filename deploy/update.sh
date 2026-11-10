@@ -15,9 +15,5 @@ sudo -u tutash php artisan filament:assets -q
 sudo -u tutash php artisan config:cache -q
 chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cache
 systemctl reload php8.4-fpm
-# the PDF splitter runs as its own low-priority timer, never inside the bot
-install -m 644 "$APP/deploy/tutash-objects.service" "$APP/deploy/tutash-objects.timer" /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now tutash-objects.timer >/dev/null
 systemctl restart tutash-bot
 sleep 3; systemctl is-active tutash-bot && echo "deployed: $(sudo -u tutash git -C $APP rev-parse --short HEAD)"

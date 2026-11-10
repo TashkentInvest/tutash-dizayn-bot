@@ -44,6 +44,8 @@ class StreetResource extends Resource
             TextInput::make('name')->label('Ko‘cha nomi')->required()->maxLength(255),
             TextInput::make('sort_order')->label('Tartib raqami')->numeric()->default(0)
                 ->helperText('Tuman ichida shu raqam bo‘yicha tartiblanadi'),
+            TextInput::make('planned_objects')->label('Obyektlar soni (rasmiy ro‘yxat)')->integer()->minValue(0)->default(0)->required()
+                ->helperText('Dizayn-kod svodidagi “Jami obyekt”. Odatda Excel ro‘yxatidan import qilinadi (tools/import_object_plan.py).'),
             Toggle::make('is_active')->label('Botda ko‘rinsin')->default(true),
         ]);
     }
@@ -57,6 +59,7 @@ class StreetResource extends Resource
                 TextColumn::make('district.name')->label('Tuman')->sortable()->searchable(),
                 TextColumn::make('name')->label('Ko‘cha')->searchable(),
                 TextColumn::make('files_count')->label('Fayllar')->sortable(),
+                TextColumn::make('planned_objects')->label('Obyektlar (ro‘yxat)')->sortable(),
                 ToggleColumn::make('is_active')->label('Botda ko‘rinadi'),
             ])
             ->filters([

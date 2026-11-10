@@ -14,13 +14,14 @@ Route::get('/app', fn () => response()
     ->view('tg.app', ['version' => config('telegram.asset_version')])
     ->header('Cache-Control', 'no-store'))->name('tg.app');
 
-// object page pictures: an <img> cannot send the initData header, so the API hands out signed links
-// relative signature: the link stays valid behind the proxy whatever host/scheme Laravel sees
-Route::get('/img/{object}', [StaffAppController::class, 'image'])->middleware(['signed:relative', SubstituteBindings::class])->name('tg.image');
+// street concept PDFs: the browser cannot send the initData header, so the API hands out signed links
+// (relative signature: the link stays valid behind the proxy whatever host/scheme Laravel sees)
+Route::get('/file/{file}', [StaffAppController::class, 'file'])->middleware(['signed:relative', SubstituteBindings::class])->name('tg.file');
 
 Route::prefix('api')->middleware([TelegramWebApp::class, 'throttle:tg', SubstituteBindings::class])->group(function () {
     Route::get('/me', [StaffAppController::class, 'me']);
     Route::get('/streets/{street}/objects', [StaffAppController::class, 'objects']);
+    Route::post('/streets/{street}/objects', [StaffAppController::class, 'create']);
     Route::get('/objects/{object}', [StaffAppController::class, 'show']);
     Route::post('/objects/{object}', [StaffAppController::class, 'update']);
     Route::post('/objects/{object}/inspections', [StaffAppController::class, 'start']);

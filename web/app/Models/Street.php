@@ -19,7 +19,7 @@ class Street extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'sort_order' => 'integer'];
+        return ['is_active' => 'boolean', 'sort_order' => 'integer', 'planned_objects' => 'integer'];
     }
 
     protected static function booted(): void
