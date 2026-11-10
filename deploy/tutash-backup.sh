@@ -10,9 +10,14 @@ D=$(date +%F)
 mkdir -p "$B/$D"
 chmod 700 "$B"
 
-# SQLite (current) - a consistent copy even while the bot is writing. After the PostgreSQL move replace with:
-#   sudo -u postgres pg_dump -Fc tutash > "$B/$D/db.dump"
-sqlite3 "$APP/bot.db" ".backup '$B/$D/bot.db'"
+# The bot's database: PostgreSQL when DATABASE_URL is set in the bot's .env (a consistent dump while the bot runs),
+# otherwise the SQLite file. Restore: pg_restore -d tutash --clean db.dump
+DBURL=$(grep -m1 '^DATABASE_URL=' "$APP/.env" | cut -d= -f2- || true)
+if [ -n "$DBURL" ]; then
+  pg_dump -Fc "$DBURL" > "$B/$D/bot-db.dump"
+else
+  sqlite3 "$APP/bot.db" ".backup '$B/$D/bot.db'"
+fi
 sqlite3 "$APP/web/database/database.sqlite" ".backup '$B/$D/laravel.sqlite'"
 
 install -m 600 "$APP/.env" "$B/$D/bot.env"
