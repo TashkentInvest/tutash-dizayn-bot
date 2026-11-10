@@ -1,0 +1,134 @@
+<?php
+
+namespace App\Filament\Resources\DesignObjects;
+
+use App\Filament\NavGroups;
+use App\Filament\Resources\DesignObjects\Pages\EditDesignObject;
+use App\Filament\Resources\DesignObjects\Pages\ListDesignObjects;
+use App\Filament\Resources\DesignObjects\Pages\ViewDesignObject;
+use App\Models\DesignObject;
+use App\Models\District;
+use App\Models\Street;
+use App\Support\Phone;
+use BackedEnum;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Components\ViewEntry;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+/** Businesses on the streets (one page of the street's concept PDF each) and how far each is with the design code. */
+class DesignObjectResource extends Resource
+{
+    protected static ?string $model = DesignObject::class;
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingStorefront;
+
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::STAFF;
+
+    protected static ?string $modelLabel = 'obyekt';
+
+    protected static ?string $pluralModelLabel = 'Obyektlar (tadbirkorlar)';
+
+    protected static ?string $navigationLabel = 'Obyektlar (tadbirkorlar)';
+
+    protected static ?string $slug = 'obyektlar';
+
+    protected static ?int $navigationSort = 3;
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->columns(2)->components([
+            TextInput::make('shop_name')->label('Do‘kon / firma nomi')->maxLength(150),
+            TextInput::make('owner_name')->label('Tadbirkor F.I.Sh.')->maxLength(150),
+            TextInput::make('owner_phone')->label('Tadbirkor telefoni')->tel()->maxLength(30)
+                ->dehydrateStateUsing(fn ($state) => filled($state) ? (Phone::normalize($state) ?? $state) : null),
+            TextInput::make('stir')->label('STIR')->regex('/^\d{9}$|^\d{14}$/')->validationMessages(['regex' => 'STIR: 9 ta raqam (JShShIR: 14).']),
+            Select::make('status')->label('Holat')->options(DesignObject::STATUSES)->required()
+                ->helperText('Odatda holat xodim dalili tasdiqlanganda o‘zgaradi. Bu yerda faqat xatoni tuzatish uchun.'),
+            Toggle::make('is_active')->label('Obyekt (hisobga olinsin)')
+                ->helperText('PDF sahifasi obyekt bo‘lmasa (sxema, umumiy ko‘rinish), belgini o‘chiring: svod va xodim ro‘yxatidan chiqadi.'),
+        ]);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make()->columns(4)->schema([
+                TextEntry::make('street.district.name')->label('Tuman'),
+                TextEntry::make('street.name')->label('Ko‘cha'),
+                TextEntry::make('number')->label('Obyekt №')->state(fn (DesignObject $o) => $o->number().' (PDF '.$o->page.'-sahifa)'),
+                TextEntry::make('status')->label('Holat')->badge()
+                    ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
+                    ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray'),
+                TextEntry::make('shop_name')->label('Do‘kon / firma')->placeholder('—'),
+                TextEntry::make('owner_name')->label('Tadbirkor')->placeholder('—'),
+                TextEntry::make('owner_phone')->label('Telefon')->placeholder('—')->formatStateUsing(fn ($state) => Phone::pretty($state)),
+                TextEntry::make('stir')->label('STIR')->placeholder('—')->copyable(),
+                TextEntry::make('point')->label('Joylashuv')->placeholder('Hali tasdiqlangan dalil yo‘q')
+                    ->state(fn (DesignObject $o) => $o->latitude ? "{$o->latitude}, {$o->longitude}" : null)
+                    ->url(fn (DesignObject $o) => $o->latitude ? "https://maps.google.com/?q={$o->latitude},{$o->longitude}" : null, shouldOpenInNewTab: true),
+            ]),
+            Section::make('Konsepsiya sahifasi')->schema([
+                ViewEntry::make('page')->hiddenLabel()->view('filament.objects.page-preview'),
+            ]),
+            Section::make('Xodim dalillari')->schema([
+                ViewEntry::make('inspections')->hiddenLabel()->view('filament.objects.inspections'),
+            ]),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->where('gone', 0)->with(['street.district', 'pendingInspection']))
+            ->defaultSort('id')
+            ->columns([
+                ImageColumn::make('image')->label('')->state(fn (DesignObject $o) => route('bot-object-image', $o))
+                    ->imageHeight(56)->checkFileExistence(false),
+                TextColumn::make('street.district.name')->label('Tuman'),
+                TextColumn::make('street.name')->label('Ko‘cha')->wrap(),
+                TextColumn::make('page')->label('№')->formatStateUsing(fn ($state) => $state - 1)->sortable(),
+                TextColumn::make('shop_name')->label('Do‘kon / firma')->placeholder('—')->searchable()
+                    ->description(fn (DesignObject $o) => trim(($o->owner_name ?? '').' '.($o->stir ? 'STIR '.$o->stir : '')) ?: null),
+                TextColumn::make('status')->label('Holat')->badge()
+                    ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
+                    ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray')
+                    ->description(fn (DesignObject $o) => $o->pendingInspection ? '⏳ dalil tekshiruvda' : null),
+            ])
+            ->filters([
+                SelectFilter::make('district')->label('Tuman')
+                    ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))
+                    ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->inDistrict((int) $data['value']) : $query),
+                SelectFilter::make('street_id')->label('Ko‘cha')->searchable()
+                    ->options(fn () => Street::query()->orderBy('name')->pluck('name', 'id')),
+                SelectFilter::make('status')->label('Holat')->options(DesignObject::STATUSES),
+                Filter::make('in_review')->label('Dalili tekshiruvda')->toggle()
+                    ->query(fn (Builder $query) => $query->whereHas('pendingInspection')),
+                TernaryFilter::make('is_active')->label('Obyekt sifatida hisoblanadi')->default(true),
+            ])
+            ->recordActions([ViewAction::make(), EditAction::make()]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListDesignObjects::route('/'),
+            'view' => ViewDesignObject::route('/{record}'),
+            'edit' => EditDesignObject::route('/{record}/edit'),
+        ];
+    }
+}

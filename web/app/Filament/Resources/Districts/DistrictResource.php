@@ -8,6 +8,7 @@ use App\Filament\Resources\Districts\Pages\ListDistricts;
 use App\Filament\Resources\Districts\RelationManagers\StreetsRelationManager;
 use App\Models\District;
 use App\Support\Phone;
+use App\Filament\NavGroups;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -26,7 +27,7 @@ class DistrictResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMapPin;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Katalog';
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CATALOG;
 
     protected static ?string $modelLabel = 'tuman';
 

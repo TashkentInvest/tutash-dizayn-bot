@@ -10,9 +10,19 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from aiogram.filters import BaseFilter, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
-from aiogram.types import BotCommand, CallbackQuery, ErrorEvent, FSInputFile, LinkPreviewOptions, Message
+from aiogram.types import (
+    BotCommand,
+    CallbackQuery,
+    ErrorEvent,
+    FSInputFile,
+    KeyboardButton,
+    LinkPreviewOptions,
+    Message,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+)
 
-from . import catalog, db, registration, web
+from . import catalog, db, objects, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
@@ -21,6 +31,7 @@ from .config import (
     LOCAL_API_URL,
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
+    OBJECTS_SYNC_SECONDS,
 )
 from .guard import Guard, OutgoingLimiter
 from . import i18n
@@ -112,7 +123,9 @@ async def pick_lang(c: CallbackQuery):
     await c.answer()
     await _drop_markup(c)
     if _has_contact(uid):  # everyone past the phone step goes to the main menu, registered or not
-        return await registration.send_choice(c.bot, c.message.chat.id, L)
+        if not db.staff_by_user(uid) and db.staff_by_phone((db.get_user(uid) or {}).get("phone") or ""):
+            return await _ask_staff_contact(c.message, L)  # on the staff list: confirm the phone with the contact button
+        return await registration.send_choice(c.bot, c.message.chat.id, L, uid)
     if registration.step(uid) == "consent":
         await c.message.answer(t(L, "intro"))
     await registration.prompt(c.bot, c.message.chat.id, uid)
@@ -162,6 +175,49 @@ async def main_menu(c: CallbackQuery):
     await c.answer()
 
 
+async def _ask_staff_contact(msg: Message, L: str) -> None:
+    kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]],
+                             resize_keyboard=True, one_time_keyboard=True)
+    await msg.answer(t(L, "staff_confirm"), reply_markup=kb)
+
+
+class StaffContact(BaseFilter):
+    """The user's own contact (sent with the button, not forwarded) whose number is on the staff list."""
+
+    async def __call__(self, m: Message) -> bool | dict:
+        if not (m.contact and m.from_user and m.contact.user_id == m.from_user.id and not m.forward_origin):
+            return False
+        phone = registration.normalize_phone(m.contact.phone_number or "")
+        staff = db.staff_by_phone(phone) if phone else None
+        return {"staff": staff, "phone": phone} if staff else False
+
+
+@menu.message(StaffContact())
+async def staff_contact(m: Message, staff: dict, phone: str):
+    """Links the account to the staff member: at the phone step of registration or later, from the confirm prompt."""
+    uid = m.from_user.id
+    L = i18n.lang(uid)
+    if not (db.get_user(uid) or {}).get("phone"):
+        db.update_user(uid, phone=phone)
+    db.link_staff(staff["id"], uid)
+    await m.answer(t(L, "staff_linked"), reply_markup=ReplyKeyboardRemove())
+    await registration.send_choice(m.bot, m.chat.id, L, uid)
+
+
+@menu.callback_query(F.data == "staff:refresh")
+async def staff_refresh(c: CallbackQuery):
+    L = i18n.lang(c.from_user.id)
+    staff = db.staff_by_user(c.from_user.id)
+    if not staff:
+        return await c.answer(t(L, "stale"), show_alert=True)
+    text, kb = registration.staff_menu(staff, L)
+    try:
+        await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:  # nothing changed
+        pass
+    await c.answer()
+
+
 @menu.message(WaitingFeedback())
 async def feedback_text(m: Message):
     uid = m.from_user.id
@@ -203,9 +259,26 @@ async def deliver_answers(bot: Bot) -> None:
                 except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
                     logging.warning("answer %s not delivered: %s", r["id"], e)
                     db.mark_answer_sent(r["id"], error=str(e)[:200])
+            for r in db.unsent_outbox():  # review results for district staff, written by the dashboard
+                try:
+                    await bot.send_message(r["user_id"], r["text"])
+                    db.mark_outbox_sent(r["id"])
+                except (TelegramForbiddenError, TelegramBadRequest) as e:
+                    logging.warning("outbox %s not delivered: %s", r["id"], e)
+                    db.mark_outbox_sent(r["id"], error=str(e)[:200])
         except Exception:  # database busy, network: try again next round
             logging.exception("deliver_answers failed")
         await asyncio.sleep(10)
+
+
+async def split_objects_forever() -> None:
+    """New or changed street PDFs become object pages for the staff Mini App. In a thread: rendering is slow CPU work."""
+    while True:
+        try:
+            await asyncio.to_thread(objects.sync_all)
+        except Exception:
+            logging.exception("objects sync failed")
+        await asyncio.sleep(OBJECTS_SYNC_SECONDS)
 
 
 async def _edit(c: CallbackQuery, text: str, kb) -> None:
@@ -439,11 +512,13 @@ async def main():
     dp.include_router(registration.router)
     runner = await web.start_web()
     answers = asyncio.create_task(deliver_answers(bot))
+    splitter = asyncio.create_task(split_objects_forever())
     await set_commands(bot)
     try:
         await dp.start_polling(bot)
     finally:
         answers.cancel()
+        splitter.cancel()
         await runner.cleanup()
 
 

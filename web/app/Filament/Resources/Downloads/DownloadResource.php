@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Downloads;
 
 use App\Filament\Resources\Downloads\Pages\ListDownloads;
+use App\Filament\NavGroups;
 use App\Models\Download;
 use BackedEnum;
 use Carbon\Carbon;
@@ -21,6 +22,8 @@ class DownloadResource extends Resource
     protected static ?string $model = Download::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowDownTray;
+
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CITIZENS;
 
     protected static ?string $modelLabel = 'yuklab olish';
 

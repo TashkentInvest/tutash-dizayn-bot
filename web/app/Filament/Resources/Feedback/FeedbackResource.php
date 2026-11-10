@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Feedback;
 
 use App\Filament\Resources\Feedback\Pages\ListFeedback;
+use App\Filament\NavGroups;
 use App\Models\Feedback;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -27,13 +28,15 @@ class FeedbackResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CITIZENS;
+
     protected static ?string $modelLabel = 'murojaat';
 
     protected static ?string $pluralModelLabel = 'Murojaatlar';
 
     protected static ?string $slug = 'murojaatlar';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 3;
 
     public static function canCreate(): bool
     {

@@ -206,12 +206,107 @@ async def consent_flow():
     check("dashboard answer delivered once, in Russian, user text escaped", len(msgs) == 1 and "Освещение восстановят" in msgs[0].text
           and "Ответ на ваше обращение" in msgs[0].text and "&lt;b&gt;" in msgs[0].text and after["answer_sent_at"] and after["answer_error"] is None)
 
+    # district staff: the phone confirmed with the contact button links the account; the staff menu replaces the citizens' one
+    sid = db.execute("INSERT INTO staff (full_name, phone, district_id) VALUES ('Test Xodim', '+998901110001', (SELECT MIN(id) FROM districts))")
+    sent.clear(); await say("/start", 424242)
+    # 424242's stored phone is not on the list -> normal menu
+    db.update_user(424242, phone="+998901110001")
+    sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
+    check("staff phone not yet confirmed -> asked for the contact button", t("uz", "staff_confirm") in texts() and not db.staff_by_user(424242))
+    n[0] += 1
+    contact = {"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": 424242, "type": "private"},
+               "from": {"id": 424242, "is_bot": False, "first_name": "N"},
+               "contact": {"phone_number": "998901110001", "first_name": "N", "user_id": 424242}}}
+    sent.clear(); await dp.feed_update(bot, Update.model_validate(contact))
+    staff_msg = next((m for m in sent if isinstance(m, SendMessage) and "Tuman xodimi" in (m.text or "")), None)
+    check("own contact links the staff member and opens the staff menu", db.staff_by_user(424242) and db.staff_by_user(424242)["id"] == sid
+          and t("uz", "staff_linked") in texts() and staff_msg is not None)
+    btn = staff_msg.reply_markup.inline_keyboard[0][0] if staff_msg else None
+    check("staff menu: button to the Mini App", btn is not None and (btn.web_app or btn.url) and "/tg/app" in ((btn.web_app.url if btn.web_app else btn.url) or ""))
+    forged = {**contact, "update_id": n[0] + 1}
+    forged["message"] = {**contact["message"], "message_id": n[0] + 1, "from": {"id": 515151, "is_bot": False, "first_name": "X"},
+                         "chat": {"id": 515151, "type": "private"}}
+    n[0] += 1; await dp.feed_update(bot, Update.model_validate(forged))
+    check("someone else's contact links nothing", db.staff_by_user(515151) is None)
+    sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
+    check("next /start: straight to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()) and t("uz", "choice") not in texts())
+
+    # review results written by the dashboard reach the staff member through the bot
+    db.execute("INSERT INTO outbox (user_id, text) VALUES (424242, '✅ №1 obyekt bo‘yicha dalilingiz tasdiqlandi')")
+    sent.clear()
+    task = asyncio.create_task(bm.deliver_answers(bot)); await asyncio.sleep(0.3); task.cancel()
+    check("outbox message delivered once", [m.text for m in sent if isinstance(m, SendMessage) and m.chat_id == 424242]
+          == ["✅ №1 obyekt bo‘yicha dalilingiz tasdiqlandi"] and not db.unsent_outbox())
+
     from bot import i18n
     check("transliteration: Uzbek Cyrillic -> Latin", i18n.latin("Мирзо Улуғбек тумани") == "Mirzo Ulug‘bek tumani"
           and i18n.latin("Фарғона йўли кўчаси") == "Farg‘ona yo‘li ko‘chasi" and i18n.latin("Ёшлар") == "Yoshlar")
     check("every text exists in both languages", all(len(v) == 2 and all(v) for v in i18n.TEXTS.values()))
 
 asyncio.run(consent_flow())
+
+# street PDF -> objects: cover skipped, every other page one object; render albums are not objects; no duplicates;
+# a re-uploaded PDF keeps its objects (status, details) even when pages moved
+def objects_split():
+    import fitz
+    from bot import objects
+    data = tempfile.mkdtemp()
+    old_data, objects.DATA_DIR = objects.DATA_DIR, __import__("pathlib").Path(data)
+
+    def make(name, pages, text=True):
+        doc = fitz.open()
+        for label in pages:
+            pg = doc.new_page()
+            if text:
+                pg.insert_text((72, 72), label)
+            pg.draw_rect(fitz.Rect(100, 100 + 20 * len(label), 300, 300), color=(0, 0, 0), fill=(0.1 * (len(label) % 9), 0.4, 0.6))
+        doc.save(os.path.join(data, name))
+        os.utime(os.path.join(data, name), (time.time() + len(name), time.time() + len(name)))
+
+    def add(street, name):
+        return db.execute("INSERT INTO street_files (street_id, file_name, path, size) VALUES (?, ?, ?, 1)", (street, name, name))
+
+    try:
+        s1, s2 = [r["id"] for r in db.fetch_all("SELECT id FROM streets ORDER BY id LIMIT 2")]
+        db.execute("DELETE FROM object_sources")  # only the test files matter here
+        for f in db.fetch_all("SELECT id FROM street_files"):
+            db.execute("INSERT INTO object_sources (file_id, size, mtime, pages) VALUES (?, -1, -1, 0)", (f["id"],))
+        pages = ["cover", "A · TAKLIF KO`RINISH", "BB · TAKLIF KO`RINISH", "CCC · TAKLIF KO`RINISH"]
+        make("t.pdf", pages)
+        fid = add(s1, "t.pdf")
+        r = objects.sync_all()
+        rows = db.fetch_all("SELECT id, page, image FROM objects WHERE file_id=? AND gone=0 ORDER BY page", (fid,))
+        check("concept PDF: cover skipped, 3 objects with pictures",
+              r["new"] == 3 and [x["page"] for x in rows] == [2, 3, 4] and all(os.path.getsize(os.path.join(data, x["image"])) > 1000 for x in rows))
+        check("unchanged file is not split again", objects.sync_all()["files"] == 0)
+
+        # a picture-only render album next to the concept PDF: not objects
+        make("render.pdf", ["r1", "r22", "r333"], text=False)
+        add(s1, "render.pdf")
+        r = objects.sync_all()
+        check("render album next to a concept PDF adds no objects", r["files"] == 1 and r["pages"] == 0)
+
+        # the same page uploaded again on another street: no duplicate object
+        make("copy.pdf", ["cover2", pages[2]])
+        add(s2, "copy.pdf")
+        r = objects.sync_all()
+        check("a page already shown from another PDF is not added twice", r["duplicates"] == 1 and r["new"] == 0)
+
+        # new version of t.pdf: pages reordered, "BB" removed -> A and CCC keep their objects (and status), BB is gone
+        a_id = next(x["id"] for x in rows if x["page"] == 2)
+        db.execute("UPDATE objects SET status='installed', shop_name='Market' WHERE id=?", (a_id,))
+        make("t.pdf", ["cover", pages[3], pages[1]])
+        r = objects.sync_all()
+        now = {x["id"]: (x["page"], x["gone"], x["status"], x["shop_name"]) for x in db.fetch_all(
+            "SELECT id, page, gone, status, shop_name FROM objects WHERE file_id=? OR id IN (SELECT id FROM objects WHERE gone=1)", (fid,))}
+        check("re-uploaded PDF keeps objects with their status, even on another page", r["kept"] == 2 and r["new"] == 0
+              and now[a_id] == (3, 0, "installed", "Market"))
+        check("a page removed from the PDF is hidden (gone), not deleted", sum(1 for v in now.values() if v[1] == 1) == 1)
+    finally:
+        objects.DATA_DIR = old_data
+        shutil.rmtree(data, ignore_errors=True)
+
+objects_split()
 
 os.environ["WEB_PORT"] = "8799"; web.WEB_PORT = 8799
 asyncio.run(http())

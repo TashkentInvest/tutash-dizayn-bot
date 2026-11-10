@@ -7,6 +7,7 @@ use App\Filament\Resources\Streets\Pages\EditStreet;
 use App\Filament\Resources\Streets\Pages\ListStreets;
 use App\Filament\Resources\Streets\RelationManagers\FilesRelationManager;
 use App\Models\Street;
+use App\Filament\NavGroups;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -27,7 +28,7 @@ class StreetResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Katalog';
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CATALOG;
 
     protected static ?string $modelLabel = 'ko‘cha';
 

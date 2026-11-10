@@ -20,7 +20,7 @@ class StatsOverview extends StatsOverviewWidget
         $t = BotStats::totals();
 
         return [
-            Stat::make('Foydalanuvchilar', $t['users'])
+            Stat::make('Aholi (bot foydalanuvchilari)', $t['users'])
                 ->description("Bugun +{$t['new_today']}  ·  ro‘yxatni ochish")
                 ->url(BotUserResource::getUrl('index')),
             Stat::make('Ro‘yxatdan o‘tganlar', $t['registered'])

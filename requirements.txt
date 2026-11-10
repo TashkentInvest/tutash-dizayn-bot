@@ -1,2 +1,3 @@
 aiogram==3.20.0.post0
 aiohttp==3.11.12
+PyMuPDF==1.26.3

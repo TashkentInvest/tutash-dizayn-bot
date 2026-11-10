@@ -26,3 +26,6 @@ web/public/fonts/filament/
 web/database/*.sqlite*
 web/storage/framework/testing/
 venv/
+
+# local lists with personal data (staff names/phones): never in the public repository
+*.local.json

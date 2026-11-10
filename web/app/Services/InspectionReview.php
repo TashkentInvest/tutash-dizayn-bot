@@ -1,0 +1,83 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\DesignObject;
+use App\Models\Inspection;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Approving or rejecting a staff member's evidence. Only an approval changes the object:
+ * "removed" -> the object is in progress (unless it is already done), "installed" -> done.
+ * The staff member is told the result through the bot (outbox table, sent by the bot).
+ */
+class InspectionReview
+{
+    private const TEXT = [
+        'approved' => ["✅ №%d obyekt (%s) bo‘yicha dalilingiz tasdiqlandi: %s.", "✅ Ваши доказательства по объекту №%d (%s) подтверждены: %s."],
+        'rejected' => ["❌ №%d obyekt (%s) bo‘yicha dalilingiz rad etildi: %s.\nSabab: %s\n\nMini App’da obyektni ochib, qayta yuboring.",
+            "❌ Ваши доказательства по объекту №%d (%s) отклонены: %s.\nПричина: %s\n\nОткройте объект в Mini App и отправьте снова."],
+        'note' => ["\nAdmin izohi: %s", "\nКомментарий администратора: %s"],
+        'kind' => ['removed' => ['eski peshtaxta yechildi', 'старая вывеска снята'], 'installed' => ['dizayn-kod bo‘yicha qo‘yildi', 'установлено по дизайн-коду']],
+    ];
+
+    /** @return bool false when somebody else reviewed it first */
+    public static function approve(Inspection $inspection, ?string $note, ?string $by): bool
+    {
+        return DB::connection('bot')->transaction(function () use ($inspection, $note, $by) {
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::PENDING)->update([
+                'review' => Inspection::APPROVED, 'review_note' => $note ?: null, 'reviewed_by' => $by,
+                'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
+            if (! $done) {
+                return false;
+            }
+            $i = $inspection->fresh(['object.street', 'staff']);
+            $o = $i->object;
+            $status = $i->kind === DesignObject::INSTALLED ? DesignObject::INSTALLED
+                : ($o->status === DesignObject::INSTALLED ? DesignObject::INSTALLED : DesignObject::REMOVED);
+            $o->forceFill([
+                'status' => $status,
+                // the place picked on the map in the approved evidence becomes the object's place: later evidence must be
+                // taken near it (falls back to where the staff member stood)
+                'latitude' => $i->obj_latitude ?? $o->latitude ?? $i->latitude,
+                'longitude' => $i->obj_longitude ?? $o->longitude ?? $i->longitude,
+                'updated_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ])->save();
+            self::tell($i, 'approved', $note);
+
+            return true;
+        });
+    }
+
+    /** @return bool false when somebody else reviewed it first */
+    public static function reject(Inspection $inspection, string $reason, ?string $by): bool
+    {
+        return DB::connection('bot')->transaction(function () use ($inspection, $reason, $by) {
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::PENDING)->update([
+                'review' => Inspection::REJECTED, 'review_note' => $reason, 'reviewed_by' => $by,
+                'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
+            if ($done) {
+                self::tell($inspection->fresh(['object.street', 'staff']), 'rejected', $reason);
+            }
+
+            return (bool) $done;
+        });
+    }
+
+    private static function tell(Inspection $i, string $result, ?string $note): void
+    {
+        $uid = $i->staff?->user_id;
+        if (! $uid) {
+            return;
+        }
+        $ru = DB::connection('bot')->table('users')->where('user_id', $uid)->value('lang') === 'ru' ? 1 : 0;
+        $kind = self::TEXT['kind'][$i->kind][$ru] ?? $i->kind;
+        $street = (string) $i->object?->street?->name;
+        $text = $result === 'approved'
+            ? sprintf(self::TEXT['approved'][$ru], $i->object->number(), $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : '')
+            : sprintf(self::TEXT['rejected'][$ru], $i->object->number(), $street, $kind, $note);
+        DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'text' => $text]);
+    }
+}

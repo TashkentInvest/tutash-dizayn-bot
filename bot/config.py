@@ -26,6 +26,9 @@ MAX_FILE_MB = 2000 if LOCAL_API_URL else 50
 # Files above the limit are sent as a link served by the built-in web server (web.py).
 # PUBLIC_BASE_URL must be reachable by users: ngrok / domain / VPS address (localhost works only on this PC).
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8787").rstrip("/")
+# District staff's Mini App (served by the dashboard). Telegram opens Mini Apps over https only.
+WEBAPP_URL = os.environ.get("WEBAPP_URL", PUBLIC_BASE_URL + "/tg/app").rstrip("/")
+OBJECTS_SYNC_SECONDS = int(os.environ.get("OBJECTS_SYNC_SECONDS", "600"))  # how often new/changed PDFs are split
 WEB_PORT = int(os.environ.get("WEB_PORT", "8787"))
 # Separate key for the signed download links (never reuse the bot token: rotating the token must not break links,
 # and a leaked token must not let anyone forge links). Generate: python -c "import secrets;print(secrets.token_hex(32))"

@@ -7,6 +7,7 @@ use App\Filament\Resources\BotUsers\Pages\ViewBotUser;
 use App\Filament\Resources\BotUsers\RelationManagers\DownloadsRelationManager;
 use App\Filament\Resources\BotUsers\Schemas\BotUserInfolist;
 use App\Filament\Resources\BotUsers\Tables\BotUsersTable;
+use App\Filament\NavGroups;
 use App\Models\BotUser;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -20,9 +21,13 @@ class BotUserResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
-    protected static ?string $modelLabel = 'foydalanuvchi';
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CITIZENS;
 
-    protected static ?string $pluralModelLabel = 'Foydalanuvchilar';
+    protected static ?string $modelLabel = 'fuqaro';
+
+    protected static ?string $pluralModelLabel = 'Aholi (bot foydalanuvchilari)';
+
+    protected static ?string $navigationLabel = 'Aholi (bot foydalanuvchilari)';
 
     protected static ?int $navigationSort = 1;
 

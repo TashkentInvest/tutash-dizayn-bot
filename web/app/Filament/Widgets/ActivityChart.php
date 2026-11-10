@@ -10,7 +10,7 @@ class ActivityChart extends ChartWidget
 {
     protected ?string $pollingInterval = '60s';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 3;
 
     protected ?string $heading = 'Kunlik faollik';
 

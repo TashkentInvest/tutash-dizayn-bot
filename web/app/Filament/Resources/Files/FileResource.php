@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Files;
 use App\Filament\Resources\Files\Pages\ListFiles;
 use App\Filament\Resources\Streets\StreetResource;
 use App\Models\StreetFile;
+use App\Filament\NavGroups;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -33,7 +34,7 @@ class FileResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentDuplicate;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Katalog';
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::CATALOG;
 
     protected static ?string $modelLabel = 'fayl';
 

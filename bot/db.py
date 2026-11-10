@@ -80,6 +80,89 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
+
+-- District staff: check on the spot that businesses take down old signs and put up design-code ones.
+CREATE TABLE IF NOT EXISTS staff (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name        TEXT NOT NULL,
+    phone            TEXT NOT NULL UNIQUE,      -- +998XXXXXXXXX; the person confirms it with the contact button
+    district_id      INTEGER NOT NULL REFERENCES districts(id),
+    streets_note     TEXT,                      -- the streets named when the person was assigned (free text)
+    priority_streets TEXT,                      -- JSON array of street ids listed first in the Mini App
+    user_id          INTEGER UNIQUE,            -- Telegram id, set once the phone was confirmed
+    is_active        INTEGER NOT NULL DEFAULT 1,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- Street PDFs already split into object pages (redone when the file changes).
+CREATE TABLE IF NOT EXISTS object_sources (
+    file_id  INTEGER PRIMARY KEY,               -- street_files.id
+    size     INTEGER NOT NULL,
+    mtime    INTEGER NOT NULL,
+    pages    INTEGER NOT NULL,
+    kind     TEXT,                              -- text (concept PDF) / images (picture-only concept) / extra (renders, not objects)
+    objects  INTEGER NOT NULL DEFAULT 0,
+    error    TEXT,
+    done_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+-- One page of a street's concept PDF (after the cover) = one object: a business whose facade must follow the design code.
+CREATE TABLE IF NOT EXISTS objects (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    street_id   INTEGER NOT NULL REFERENCES streets(id),
+    file_id     INTEGER NOT NULL,               -- street_files.id
+    page        INTEGER NOT NULL,               -- page in that PDF (1 is the cover, objects start at 2)
+    image       TEXT,                           -- the page as a picture, relative to DATA_DIR
+    shop_name   TEXT,
+    owner_name  TEXT,
+    owner_phone TEXT,
+    stir        TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending', -- pending / removed (old sign taken down) / installed (design code done)
+    latitude    REAL,                           -- from the first approved inspection; later ones must be near it
+    longitude   REAL,
+    is_active   INTEGER NOT NULL DEFAULT 1,     -- the admin's switch: 0 = "not an object" (a scheme, a summary page)
+    gone        INTEGER NOT NULL DEFAULT 0,     -- 1: the page is no longer in any current PDF (kept with its history)
+    page_hash   TEXT,                           -- fingerprint of the page: no duplicates, and a re-uploaded PDF keeps its objects
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (file_id, page)
+);
+CREATE INDEX IF NOT EXISTS idx_objects_street ON objects(street_id);
+CREATE INDEX IF NOT EXISTS idx_objects_status ON objects(status);
+-- Evidence sent from the Mini App: location -> live photo -> live video -> comment. Changes the object only once approved.
+CREATE TABLE IF NOT EXISTS inspections (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    object_id    INTEGER NOT NULL REFERENCES objects(id),
+    staff_id     INTEGER NOT NULL REFERENCES staff(id),
+    kind         TEXT NOT NULL,                 -- removed / installed
+    step         TEXT NOT NULL DEFAULT 'photo', -- photo / location / point / video / comment / submitted
+    latitude     REAL,                          -- where the staff member stood (the phone's location)
+    longitude    REAL,
+    accuracy     REAL,
+    obj_latitude REAL,                          -- the object's place, picked on the map by the staff member
+    obj_longitude REAL,
+    distance_m   REAL,                          -- staff member <-> picked object place
+    photo        TEXT,                          -- relative to UPLOADS_DIR
+    photo_hash   TEXT,
+    video        TEXT,
+    video_hash   TEXT,
+    comment      TEXT,
+    review       TEXT,                          -- set on submit: pending / approved / rejected
+    review_note  TEXT,
+    reviewed_by  TEXT,
+    reviewed_at  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    submitted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_inspections_object ON inspections(object_id);
+CREATE INDEX IF NOT EXISTS idx_inspections_review ON inspections(review);
+CREATE INDEX IF NOT EXISTS idx_inspections_staff ON inspections(staff_id);
+-- Messages the dashboard wants delivered (review results to staff); the bot sends them.
+CREATE TABLE IF NOT EXISTS outbox (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    text       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    sent_at    TEXT,
+    error      TEXT
+);
 """
 
 
@@ -120,6 +203,7 @@ REG_COLUMNS = {
 # Indexes the dashboard's counts/filters/sorts depend on (measured: users list 9 s -> 0.6 s at 100k users).
 # Created after the column migration, because some columns are added there.
 INDEXES = """
+CREATE INDEX IF NOT EXISTS idx_objects_hash ON objects(page_hash);
 CREATE INDEX IF NOT EXISTS idx_users_registered ON users(registered_at);
 CREATE INDEX IF NOT EXISTS idx_users_first_seen ON users(first_seen);
 CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen);
@@ -137,7 +221,10 @@ def init() -> None:
     with _db() as c:
         c.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
         c.executescript(SCHEMA)
-        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"})):
+        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
+                               ("objects", {"gone": "INTEGER NOT NULL DEFAULT 0", "page_hash": "TEXT"}),
+                               ("object_sources", {"kind": "TEXT", "objects": "INTEGER NOT NULL DEFAULT 0"}),
+                               ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
             have = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
             for col, typ in columns.items():  # migrate a database created before a column existed
                 if col not in have:
@@ -284,6 +371,52 @@ def unsent_answers(limit: int = 20) -> list[sqlite3.Row]:
 def mark_answer_sent(feedback_id: int, error: str | None = None) -> None:
     with _db() as c:
         c.execute("UPDATE feedback SET answer_sent_at=datetime('now'), answer_error=? WHERE id=?", (error, feedback_id))
+        c.commit()
+
+
+def staff_by_user(user_id: int) -> dict | None:
+    """The active staff member linked to this Telegram account, with the district name."""
+    with _db() as c:
+        row = c.execute("SELECT s.*, d.name AS district FROM staff s JOIN districts d ON d.id = s.district_id "
+                        "WHERE s.user_id=? AND s.is_active=1", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def staff_by_phone(phone: str) -> dict | None:
+    with _db() as c:
+        row = c.execute("SELECT * FROM staff WHERE phone=? AND is_active=1", (phone,)).fetchone()
+    return dict(row) if row else None
+
+
+def link_staff(staff_id: int, user_id: int) -> None:
+    """One Telegram account per staff member: a new confirmation moves the link (a changed phone / account)."""
+    with _db() as c:
+        c.execute("UPDATE staff SET user_id=NULL WHERE user_id=? AND id<>?", (user_id, staff_id))
+        c.execute("UPDATE staff SET user_id=? WHERE id=?", (user_id, staff_id))
+        c.commit()
+
+
+def staff_counts(district_id: int) -> dict:
+    with _db() as c:
+        r = c.execute(
+            "SELECT COUNT(*) AS total, SUM(o.status='removed') AS removed, SUM(o.status='installed') AS installed "
+            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active=1 AND o.gone=0", (district_id,)
+        ).fetchone()
+        pending = c.execute(
+            "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id JOIN streets s ON s.id=o.street_id "
+            "WHERE s.district_id=? AND i.review='pending'", (district_id,)
+        ).fetchone()[0]
+    return {"total": r["total"] or 0, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
+
+
+def unsent_outbox(limit: int = 20) -> list[sqlite3.Row]:
+    with _db() as c:
+        return c.execute("SELECT id, user_id, text FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
+
+
+def mark_outbox_sent(msg_id: int, error: str | None = None) -> None:
+    with _db() as c:
+        c.execute("UPDATE outbox SET sent_at=datetime('now'), error=? WHERE id=?", (error, msg_id))
         c.commit()
 
 

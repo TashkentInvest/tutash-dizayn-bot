@@ -136,6 +136,21 @@ TEXTS: dict[str, tuple[str, str]] = {
         "📩 <b>Ответ на ваше обращение №{}</b>\n\n<i>Ваше обращение:</i>\n{}\n\n<b>Ответ:</b>\n{}",
     ),
 
+    # district staff
+    "staff_menu": (
+        "👷 Tuman xodimi: <b>{}</b>\n{}\n\nObyektlar: <b>{}</b>\n🔧 Yechildi (jarayonda): <b>{}</b>\n"
+        "✅ Dizayn-kod bo‘yicha qo‘yildi: <b>{}</b>\n⏳ Tekshiruvda: <b>{}</b>\n\nObyektlar bilan ishlash uchun pastdagi tugmani bosing.",
+        "👷 Сотрудник района: <b>{}</b>\n{}\n\nОбъектов: <b>{}</b>\n🔧 Снято (в процессе): <b>{}</b>\n"
+        "✅ Установлено по дизайн-коду: <b>{}</b>\n⏳ На проверке: <b>{}</b>\n\nДля работы с объектами нажмите кнопку ниже.",
+    ),
+    "btn_objects": ("📋 Obyektlarni ochish", "📋 Открыть объекты"),
+    "btn_refresh": ("🔄 Yangilash", "🔄 Обновить"),
+    "staff_confirm": (
+        "Siz tuman xodimlari ro‘yxatidasiz. Tasdiqlash uchun pastdagi tugma orqali raqamingizni yuboring.",
+        "Вы есть в списке сотрудников района. Для подтверждения отправьте свой номер кнопкой ниже.",
+    ),
+    "staff_linked": ("✅ Xodim sifatida tasdiqlandingiz.", "✅ Вы подтверждены как сотрудник."),
+
     # bot command menu and the one-time announcement after the two-language update (tools/broadcast.py)
     "cmd_start": ("Botni ishga tushirish / tilni tanlash", "Запустить бота / выбрать язык"),
     "broadcast_restart": (

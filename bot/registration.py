@@ -5,6 +5,7 @@ The current step is derived from what is already saved in the database, so a res
 (or a user coming back later) simply continues where they stopped.
 """
 import asyncio
+import html
 import logging
 import re
 from collections import defaultdict
@@ -20,10 +21,11 @@ from aiogram.types import (
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    WebAppInfo,
 )
 
 from . import db, i18n
-from .config import REQUIRE_APPROVAL, UPLOADS_DIR
+from .config import REQUIRE_APPROVAL, UPLOADS_DIR, WEBAPP_URL
 from .i18n import t
 from .keyboards import choice_kb, districts_kb, lang_pick_kb
 
@@ -119,10 +121,28 @@ async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
         await bot.send_message(chat_id, t(L, "photo", PHOTOS_NEEDED, n + 1), reply_markup=ReplyKeyboardRemove())
 
 
-async def send_choice(bot: Bot, chat_id: int, lang: str | None = None) -> None:
+async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: int | None = None) -> None:
     """Main menu. In a private chat the chat id is the user id, so it also tells the language."""
     L = lang or i18n.lang(chat_id)
+    if staff := db.staff_by_user(user_id or chat_id):  # district staff get their own menu instead of the citizens' one
+        return await send_staff_menu(bot, chat_id, staff, L)
     await bot.send_message(chat_id, t(L, "choice"), reply_markup=choice_kb(L))
+
+
+def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
+    n = db.staff_counts(staff["district_id"])
+    text = t(L, "staff_menu", html.escape(staff["full_name"]), html.escape(i18n.name(L, staff["district"])),
+             n["total"], n["removed"], n["installed"], n["review"])
+    # Telegram opens Mini Apps over https only; a plain link keeps a local http setup usable for testing
+    open_btn = (InlineKeyboardButton(text=t(L, "btn_objects"), web_app=WebAppInfo(url=f"{WEBAPP_URL}?lang={L}"))
+                if WEBAPP_URL.startswith("https://") else InlineKeyboardButton(text=t(L, "btn_objects"), url=WEBAPP_URL))
+    kb = InlineKeyboardMarkup(inline_keyboard=[[open_btn], [InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")]])
+    return text, kb
+
+
+async def send_staff_menu(bot: Bot, chat_id: int, staff: dict, L: str) -> None:
+    text, kb = staff_menu(staff, L)
+    await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
 
 async def finish(m: Message) -> None:
