@@ -51,7 +51,17 @@ class DesignCodeSvod extends Page
         $this->day ??= Svod::reportDay()->toDateString();  // from 18:00 that is already tomorrow
     }
 
-    private function shownDay(): Carbon
+/** Report recipients plus every staff member linked in the bot ("Ism · tuman xodimi"); one entry per Telegram account. */
+    private static function recipientOptions(): array
+    {
+        $staff = \App\Models\Staff::query()->whereNotNull('user_id')->where('is_active', true)->with('district')->get()
+            ->mapWithKeys(fn ($s) => [$s->user_id => $s->full_name.' · xodim'.($s->district ? ' ('.$s->district->name.')' : '')]);
+        $recipients = ReportRecipient::query()->with('botUser')->get()->mapWithKeys(fn (ReportRecipient $r) => [$r->user_id => $r->title()]);
+
+        return $recipients->union($staff)->sort()->all();
+    }
+
+        private function shownDay(): Carbon
     {
         return Carbon::parse($this->day ?: Svod::reportDay()->toDateString(), config('app.display_timezone'));
     }
@@ -66,9 +76,9 @@ class DesignCodeSvod extends Page
                 ->schema([
                     CheckboxList::make('kinds')->label('Rasmlar')->options(SvodImage::KINDS)->default(array_keys(SvodImage::KINDS))
                         ->columns(2)->required()->live(),
-                    CheckboxList::make('to')->label('Kimlarga (oldindan — “Hisobot oluvchilar” bo‘limida qo‘shiladi)')
-                        ->options(fn () => ReportRecipient::query()->with('botUser')->get()
-                            ->mapWithKeys(fn (ReportRecipient $r) => [$r->user_id => $r->title()])->sort()->all())
+                    CheckboxList::make('to')->label('Kimlarga: hisobot oluvchilar va botga ulangan tuman xodimlari')
+                        ->helperText('Xodim bu ro‘yxatda botda raqamini tasdiqlagach chiqadi. Boshqa odamni “Hisobot oluvchilar” bo‘limida qo‘shing.')
+                        ->options(fn () => self::recipientOptions())
                         ->searchable()->bulkToggleable()->columns(2)->required()
                         ->noSearchResultsMessage('Topilmadi')
                         ->validationMessages(['required' => 'Kamida bitta oluvchini belgilang.']),

@@ -439,6 +439,11 @@ class StaffAppTest extends TestCase
         $this->assertStringContainsString('Tumanlar kesimida svod', $rows[0]->text);
 
         Livewire::test(DesignCodeSvod::class)->callAction('send', ['kinds' => ['svod'], 'to' => []])->assertHasActionErrors(['to']);
+        // linked staff are offered too, without being added as recipients
+        $this->staff->forceFill(['user_id' => 555001])->save();
+        $db->table('outbox')->delete();
+        Livewire::test(DesignCodeSvod::class)->callAction('send', ['kinds' => ['progress'], 'to' => [555001]])->assertHasNoActionErrors();
+        $this->assertSame(1, $db->table('outbox')->where('user_id', 555001)->count());
         Livewire::test(\App\Filament\Resources\ReportRecipients\Pages\ManageReportRecipients::class)->assertSee('Rahbar Test')->assertSee('rahbar');
     }
 }
