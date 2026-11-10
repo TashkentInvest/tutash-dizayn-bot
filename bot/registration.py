@@ -195,6 +195,11 @@ async def register(m: Message):
             phone = normalize_phone(raw)
             if not phone:
                 return await m.answer(t(L, "phone_bad"))
+            if not m.contact and db.staff_by_phone(phone):
+                # a district staff number typed by hand: only Telegram's contact button proves it is theirs (and links them)
+                kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]],
+                                         resize_keyboard=True, one_time_keyboard=True)
+                return await m.answer(t(L, "staff_confirm"), reply_markup=kb)
             db.update_user(uid, phone=phone)
             await m.answer(t(L, "thanks"), reply_markup=ReplyKeyboardRemove())  # the choice comes with inline buttons
         elif s == "location":

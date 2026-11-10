@@ -228,6 +228,12 @@ async def consent_flow():
                          "chat": {"id": 515151, "type": "private"}}
     n[0] += 1; await dp.feed_update(bot, Update.model_validate(forged))
     check("someone else's contact links nothing", db.staff_by_user(515151) is None)
+    # a new person typing a staff number by hand is asked for the contact button, not registered as a citizen
+    w = 636363
+    await say("/start", w); await press("lang:uz", w); await press("consent", w); await say("Yozuvchi Xodim Test", w)
+    sent.clear(); await say("+998 90 111 00 01", w)
+    check("typed staff number -> contact button asked, phone not taken", t("uz", "staff_confirm") in texts()
+          and not (db.get_user(w) or {}).get("phone") and reg.step(w) == "phone")
     sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
     check("next /start: straight to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()) and t("uz", "choice") not in texts())
 
