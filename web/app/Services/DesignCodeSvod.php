@@ -35,7 +35,7 @@ class DesignCodeSvod
     {
         $streets = DB::connection('bot')->table('streets')->where('district_id', $districtId)
             ->where(fn ($q) => $q->where('planned_objects', '>', 0)
-                ->orWhereIn('id', DB::connection('bot')->table('objects')->where('is_active', 1)->select('street_id')))
+                ->orWhereIn('id', DB::connection('bot')->table('objects')->where('is_active', true)->select('street_id')))
             ->orderBy('sort_order')->orderBy('name')->get(['id', 'name']);
         $rows = $streets->map(fn ($s) => ['id' => $s->id, 'name' => $s->name] + self::counts('s.id = ?', [$s->id], $day))->all();
 
@@ -47,16 +47,17 @@ class DesignCodeSvod
         $db = DB::connection('bot');
         $total = (int) $db->selectOne("SELECT COALESCE(SUM(s.planned_objects), 0) AS n FROM streets s WHERE $where", $bind)->n;
         $o = $db->selectOne(
-            "SELECT SUM(o.status='removed') AS removed, SUM(o.status='installed') AS installed
-             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = 1 AND $where", $bind);
+            "SELECT SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed,
+                    SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed
+             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where", $bind);
         $from = $day->copy()->startOfDay()->utc()->format('Y-m-d H:i:s');
         $to = $day->copy()->endOfDay()->utc()->format('Y-m-d H:i:s');
         $i = $db->selectOne(
-            "SELECT SUM(i.review='pending') AS review,
-                    SUM(i.review='approved' AND i.kind='removed' AND i.submitted_at BETWEEN ? AND ?) AS day_removed,
-                    SUM(i.review='approved' AND i.kind='installed' AND i.submitted_at BETWEEN ? AND ?) AS day_installed
+            "SELECT SUM(CASE WHEN i.review='pending' THEN 1 ELSE 0 END) AS review,
+                    SUM(CASE WHEN i.review='approved' AND i.kind='removed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_removed,
+                    SUM(CASE WHEN i.review='approved' AND i.kind='installed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_installed
              FROM inspections i JOIN objects o ON o.id = i.object_id JOIN streets s ON s.id = o.street_id
-             WHERE o.is_active = 1 AND i.review IS NOT NULL AND $where", [$from, $to, $from, $to, ...$bind]);
+             WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where", [$from, $to, $from, $to, ...$bind]);
         $removed = (int) $o->removed;
         $installed = (int) $o->installed;
 

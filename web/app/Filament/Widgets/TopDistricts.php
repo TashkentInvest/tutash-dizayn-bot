@@ -34,6 +34,7 @@ class TopDistricts extends TableWidget
                     ->groupBy('district')
             )
             ->defaultSort('total', 'desc')
+            ->defaultKeySort(false) // grouped rows: PostgreSQL refuses an ORDER BY on a column that is not grouped
             ->paginated(false)
             ->filters([self::periodFilter()])
             ->columns([

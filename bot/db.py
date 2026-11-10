@@ -1,9 +1,18 @@
+"""The bot's database: PostgreSQL in production (DATABASE_URL), a SQLite file for local work and the tests.
+
+Queries are written once, SQLite style ("?" placeholders, datetime('now')); for PostgreSQL they are translated on the way
+(see _pg_sql). Booleans are compared with TRUE, upserts use ON CONFLICT: both work on either database.
+One long-lived connection, guarded by a lock (the bot is a single process): no connect cost per query.
+"""
+import re
 import sqlite3
 import threading
 import time
 from contextlib import contextmanager
 
-from .config import DB_PATH
+from .config import DATABASE_URL, DB_PATH
+
+PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -43,7 +52,7 @@ CREATE TABLE IF NOT EXISTS districts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    is_active  INTEGER NOT NULL DEFAULT 1,
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
     phone      TEXT                         -- contact shown when the district is opened (Chamber of Commerce representative)
 );
 CREATE TABLE IF NOT EXISTS streets (
@@ -51,7 +60,7 @@ CREATE TABLE IF NOT EXISTS streets (
     district_id INTEGER NOT NULL REFERENCES districts(id),
     name        TEXT NOT NULL,
     sort_order  INTEGER NOT NULL DEFAULT 0,
-    is_active   INTEGER NOT NULL DEFAULT 1
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE
 );
 CREATE INDEX IF NOT EXISTS idx_streets_district ON streets(district_id);
 CREATE TABLE IF NOT EXISTS street_files (
@@ -90,7 +99,7 @@ CREATE TABLE IF NOT EXISTS staff (
     streets_note     TEXT,                      -- the streets named when the person was assigned (free text)
     priority_streets TEXT,                      -- JSON array of street ids listed first in the Mini App
     user_id          INTEGER UNIQUE,            -- Telegram id, set once the phone was confirmed
-    is_active        INTEGER NOT NULL DEFAULT 1,
+    is_active        BOOLEAN NOT NULL DEFAULT TRUE,
     created_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 -- A business on a street (an "object" of the design code), added by district staff in the Mini App. How many each street
@@ -105,7 +114,7 @@ CREATE TABLE IF NOT EXISTS objects (
     status      TEXT NOT NULL DEFAULT 'pending', -- pending / removed (old sign taken down) / installed (design code done)
     latitude    REAL,                           -- from the latest approved inspection; later ones must be near it
     longitude   REAL,
-    is_active   INTEGER NOT NULL DEFAULT 1,     -- the admin's switch: 0 = added by mistake / a duplicate
+    is_active   BOOLEAN NOT NULL DEFAULT TRUE,  -- the admin's switch: 0 = added by mistake / a duplicate
     created_by  INTEGER REFERENCES staff(id),
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -152,7 +161,89 @@ CREATE TABLE IF NOT EXISTS outbox (
 """
 
 
-def _conn() -> sqlite3.Connection:
+class Row:
+    """A result row readable by column name and by index, and convertible with dict() - like sqlite3.Row."""
+
+    __slots__ = ("_names", "_values")
+
+    def __init__(self, names, values):
+        self._names, self._values = names, tuple(values)
+
+    def __getitem__(self, k):
+        return self._values[k] if isinstance(k, int) else self._values[self._names.index(k)]
+
+    def keys(self):
+        return list(self._names)
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+
+# tables whose rows have an "id": an INSERT into them returns it (lastrowid) on PostgreSQL too
+_ID_TABLES = {"downloads", "user_photos", "districts", "streets", "street_files", "feedback", "staff", "objects",
+              "inspections", "outbox"}
+
+
+def _pg_sql(sql: str, has_params: bool = True) -> tuple[str, bool]:
+    """SQLite-style query -> PostgreSQL: placeholders, the current UTC time, RETURNING id for inserts.
+    A literal % is doubled only when parameters are passed (psycopg parses the query only then)."""
+    if has_params:
+        sql = sql.replace("%", "%%")
+    sql = sql.replace("datetime('now', ?)", "((now() AT TIME ZONE 'utc') + CAST(? AS interval))")
+    sql = sql.replace("datetime('now')", "(now() AT TIME ZONE 'utc')").replace("?", "%s")
+    m = re.match(r"\s*INSERT\s+INTO\s+(\w+)", sql, re.I)
+    want_id = bool(m and m.group(1).lower() in _ID_TABLES and "RETURNING" not in sql.upper())
+    return (sql + " RETURNING id" if want_id else sql), want_id
+
+
+class _PgCursor:
+    def __init__(self, cur, want_id: bool):
+        self._cur = cur
+        self.lastrowid = cur.fetchone()[0] if want_id else None
+
+    def fetchone(self):
+        return self._cur.fetchone() if self._cur.description else None
+
+    def fetchall(self):
+        return self._cur.fetchall() if self._cur.description else []
+
+
+class _PgConn:
+    """psycopg connection with the sqlite3 calls this module uses. Autocommit: never an open idle transaction."""
+
+    def __init__(self):
+        import psycopg
+
+        def rows(cur):
+            names = [d.name for d in cur.description] if cur.description else []
+            return lambda values: Row(names, values)
+
+        self.c = psycopg.connect(DATABASE_URL, autocommit=True, row_factory=rows, connect_timeout=10)
+
+    def execute(self, sql, params=()):
+        q, want_id = _pg_sql(sql, bool(params))
+        return _PgCursor(self.c.execute(q, params or None), want_id)
+
+    def executescript(self, script):
+        self.c.execute(script)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    @property
+    def closed(self) -> bool:
+        return self.c.closed
+
+
+def _conn():
+    if PG:
+        return _PgConn()
     c = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)  # wait for a concurrent writer, don't fail
     c.execute("PRAGMA synchronous=NORMAL")  # with WAL: no fsync on every commit, still crash-safe
     c.row_factory = sqlite3.Row  # rows work by name and by index
@@ -162,20 +253,43 @@ def _conn() -> sqlite3.Connection:
 # One long-lived connection instead of connect-per-call: opening a SQLite file costs ~2 ms (measured), which was
 # most of the time of every button press. The lock keeps statements of different threads from interleaving.
 _lock = threading.RLock()
-_shared: sqlite3.Connection | None = None
+_shared = None
 
 
 @contextmanager
 def _db():
     global _shared
     with _lock:
-        if _shared is None:
+        if _shared is None or (PG and _shared.closed):  # PostgreSQL restarted: connect again
             _shared = _conn()
         try:
             yield _shared
-        except Exception:
+        except Exception as e:
             _shared.rollback()
+            if PG and type(e).__module__.startswith("psycopg") and "Operational" in type(e).__name__:
+                _shared = None  # broken connection: the next call reconnects
             raise
+
+
+# time columns: TIMESTAMP (UTC) on PostgreSQL
+_TIME_COLS = {"first_seen", "last_seen", "sent_at", "created_at", "updated_at", "answered_at", "answer_sent_at", "reviewed_at",
+              "submitted_at", "registered_at", "consent_at", "concept_at", "approved_at", "done_at"}
+
+
+def _pg_ddl(ddl: str) -> str:
+    """The SQLite schema written for PostgreSQL: 64-bit ids (Telegram ids), identity keys, timestamps, no FK checks
+    (as on SQLite, where they were never enforced)."""
+    out = []
+    for line in ddl.splitlines():
+        line = line.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY")
+        line = re.sub(r"\s+REFERENCES \w+\(\w+\)", "", line)
+        line = re.sub(r"\bINTEGER\b", "BIGINT", line).replace(" REAL", " DOUBLE PRECISION")
+        line = line.replace("DEFAULT (datetime('now'))", "DEFAULT (now() AT TIME ZONE 'utc')")
+        m = re.match(r"(\s*)(\w+)(\s+)TEXT\b", line)
+        if m and m.group(2) in _TIME_COLS:
+            line = line.replace(m.group(0), f"{m.group(1)}{m.group(2)}{m.group(3)}TIMESTAMP", 1)
+        out.append(line)
+    return "\n".join(out)
 
 
 REG_COLUMNS = {
@@ -218,6 +332,9 @@ def _drop_page_objects(c) -> None:
 
 
 def init() -> None:
+    if PG:
+        _init_pg()
+        return
     with _db() as c:
         c.execute("PRAGMA journal_mode=WAL")  # readers don't block the writer
         _drop_page_objects(c)
@@ -232,6 +349,17 @@ def init() -> None:
         c.executescript(INDEXES)
         c.commit()
     _rekey_file_cache()
+
+
+def _init_pg() -> None:
+    with _db() as c:
+        c.executescript(_pg_ddl(SCHEMA))
+        for table, columns in (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
+                               ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
+                               ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"})):
+            for col, typ in columns.items():
+                c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {_pg_ddl('    ' + col + ' ' + typ).strip()}")
+        c.executescript(INDEXES)
 
 
 def _rekey_file_cache() -> None:
@@ -362,7 +490,7 @@ def feedback_count_since(user_id: int, hours: int) -> int:
                          (user_id, f"-{hours} hours")).fetchone()[0]
 
 
-def unsent_answers(limit: int = 20) -> list[sqlite3.Row]:
+def unsent_answers(limit: int = 20) -> list:
     with _db() as c:
         return c.execute("SELECT id, user_id, text, answer FROM feedback WHERE answer IS NOT NULL AND answer_sent_at IS NULL "
                          "ORDER BY answered_at LIMIT ?", (limit,)).fetchall()
@@ -378,13 +506,13 @@ def staff_by_user(user_id: int) -> dict | None:
     """The active staff member linked to this Telegram account, with the district name."""
     with _db() as c:
         row = c.execute("SELECT s.*, d.name AS district FROM staff s JOIN districts d ON d.id = s.district_id "
-                        "WHERE s.user_id=? AND s.is_active=1", (user_id,)).fetchone()
+                        "WHERE s.user_id=? AND s.is_active = TRUE", (user_id,)).fetchone()
     return dict(row) if row else None
 
 
 def staff_by_phone(phone: str) -> dict | None:
     with _db() as c:
-        row = c.execute("SELECT * FROM staff WHERE phone=? AND is_active=1", (phone,)).fetchone()
+        row = c.execute("SELECT * FROM staff WHERE phone=? AND is_active = TRUE", (phone,)).fetchone()
     return dict(row) if row else None
 
 
@@ -399,8 +527,9 @@ def link_staff(staff_id: int, user_id: int) -> None:
 def staff_counts(district_id: int) -> dict:
     with _db() as c:
         r = c.execute(
-            "SELECT SUM(o.status='removed') AS removed, SUM(o.status='installed') AS installed "
-            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active=1", (district_id,)
+            "SELECT SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed, "
+            "SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed "
+            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active = TRUE", (district_id,)
         ).fetchone()
         planned = c.execute("SELECT COALESCE(SUM(planned_objects), 0) FROM streets WHERE district_id=?", (district_id,)).fetchone()[0]
         pending = c.execute(
@@ -410,7 +539,7 @@ def staff_counts(district_id: int) -> dict:
     return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
 
 
-def unsent_outbox(limit: int = 20) -> list[sqlite3.Row]:
+def unsent_outbox(limit: int = 20) -> list:
     with _db() as c:
         return c.execute("SELECT id, user_id, text FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", (limit,)).fetchall()
 
@@ -431,7 +560,8 @@ def get_cached(path: str, size: int, mtime: int) -> str | None:
 
 def set_cached(path: str, size: int, mtime: int, file_id: str) -> None:
     with _db() as c:
-        c.execute("INSERT OR REPLACE INTO file_cache VALUES (?, ?, ?, ?)", (path, size, mtime, file_id))
+        c.execute("INSERT INTO file_cache (path, size, mtime, file_id) VALUES (?, ?, ?, ?) "
+                  "ON CONFLICT (path, size, mtime) DO UPDATE SET file_id = excluded.file_id", (path, size, mtime, file_id))
         c.commit()
 
 
@@ -447,11 +577,11 @@ def record_upload(size: int, seconds: float) -> None:
         return
     bps = 0.7 * get_upload_speed() + 0.3 * (size / seconds)
     with _db() as c:
-        c.execute("INSERT OR REPLACE INTO kv VALUES ('upload_bps', ?)", (bps,))
+        c.execute("INSERT INTO kv (key, value) VALUES ('upload_bps', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value", (bps,))
         c.commit()
 
 
-def fetch_all(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+def fetch_all(sql: str, params: tuple = ()) -> list:
     with _db() as c:
         return c.execute(sql, params).fetchall()
 

@@ -70,9 +70,10 @@ class StaffAppController extends Controller
         $staff = $this->staff($r);
         $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
             ->get(['id', 'name', 'planned_objects']);
-        $counts = DB::connection('bot')->table('objects')->where('is_active', 1)
+        $counts = DB::connection('bot')->table('objects')->where('is_active', true)
             ->whereIn('street_id', $streets->pluck('id'))
-            ->selectRaw("street_id, COUNT(*) AS added, SUM(status='removed') AS removed, SUM(status='installed') AS installed")
+            ->selectRaw("street_id, COUNT(*) AS added, SUM(CASE WHEN status='removed' THEN 1 ELSE 0 END) AS removed, "
+                ."SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installed")
             ->groupBy('street_id')->get()->keyBy('street_id');
         $review = DB::connection('bot')->table('inspections')->join('objects', 'objects.id', '=', 'inspections.object_id')
             ->where('inspections.review', Inspection::PENDING)->whereIn('objects.street_id', $streets->pluck('id'))

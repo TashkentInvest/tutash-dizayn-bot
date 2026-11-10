@@ -84,7 +84,7 @@ class BotStats
         // __PHP_Incomplete_Class and the dashboard fails with a 500 on every cache hit).
         $perDay = Cache::remember("bot.stats.perday.$column.$days", 60, function () use ($query, $column, $days, $tz, $from): array {
             $day = match ($query->getConnection()->getDriverName()) {
-                'pgsql' => "to_char($column AT TIME ZONE '$tz', 'YYYY-MM-DD')",
+                'pgsql' => "to_char(($column AT TIME ZONE 'UTC') AT TIME ZONE '$tz', 'YYYY-MM-DD')",  // stored as UTC, no zone
                 default => "strftime('%Y-%m-%d', $column, '".sprintf('%+d', $from->getOffset() / 3600)." hours')",
             };
             $counts = $query->where($column, '>=', $from->utc())

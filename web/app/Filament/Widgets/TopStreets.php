@@ -28,6 +28,7 @@ class TopStreets extends TableWidget
                     ->groupBy('district', 'street')
             )
             ->defaultSort('total', 'desc')
+            ->defaultKeySort(false) // grouped rows: PostgreSQL refuses an ORDER BY on a column that is not grouped
             ->paginated([10, 25])
             ->filters([
                 self::periodFilter(),

@@ -21,6 +21,8 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 LOCAL_API_URL = os.environ.get("LOCAL_API_URL", "").strip()
 DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "data"))
 DB_PATH = Path(os.environ.get("DB_PATH", ROOT / "bot.db"))
+# PostgreSQL (production): postgresql://user:password@host:5432/dbname. Empty: the SQLite file DB_PATH (local work, tests).
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 UPLOADS_DIR = Path(os.environ.get("UPLOADS_DIR", ROOT / "uploads"))
 MAX_FILE_MB = 2000 if LOCAL_API_URL else 50
 # Files above the limit are sent as a link served by the built-in web server (web.py).

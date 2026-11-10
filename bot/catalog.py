@@ -35,7 +35,7 @@ def _cached(key, compute):
 def districts() -> list[Entry]:
     return _cached("d", lambda: [
         Entry(r["id"], r["name"], r["phone"])
-        for r in db.fetch_all("SELECT id, name, phone FROM districts WHERE is_active = 1 ORDER BY sort_order, id")
+        for r in db.fetch_all("SELECT id, name, phone FROM districts WHERE is_active = TRUE ORDER BY sort_order, id")
     ])
 
 
@@ -59,7 +59,7 @@ def streets(d: Entry) -> list[Entry]:
     return _cached(("s", d.num), lambda: [
         Entry(r["id"], r["name"])
         for r in db.fetch_all(
-            "SELECT id, name FROM streets WHERE district_id = ? AND is_active = 1 ORDER BY sort_order, id", (d.num,)
+            "SELECT id, name FROM streets WHERE district_id = ? AND is_active = TRUE ORDER BY sort_order, id", (d.num,)
         )
     ])
 
