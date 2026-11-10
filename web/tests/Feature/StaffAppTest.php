@@ -359,4 +359,52 @@ class StaffAppTest extends TestCase
         $this->get('/admin')->assertOk()->assertSee('Bosh sahifa');
         $this->get(\App\Filament\Resources\Streets\StreetResource::getUrl('index'))->assertOk()->assertSee('Barcha fayllar / dublikatlar');
     }
+
+    public function test_downloads_ranking_report_is_ordered_by_district_and_street(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $db->table('downloads')->delete();
+        $names = $db->table('districts')->orderBy('sort_order')->pluck('name')->all();
+        $last = end($names);  // the last district in the list gets the most downloads: it must come first
+        $now = now()->utc()->format('Y-m-d H:i:s');
+        $add = fn ($d, $s, $f, $n, $u = 600000) => collect(range(1, $n))->each(fn ($i) => $db->table('downloads')
+            ->insert(['user_id' => $u + $i, 'district' => $d, 'street' => $s, 'file_name' => $f, 'sent_at' => $now]));
+        $add($last, 'B ko‘cha', 'b.pdf', 5);
+        $add($last, 'A ko‘cha', 'a.pdf', 2);
+        $add($names[0], '=HYPERLINK("x")', 'c.pdf', 1);
+        $add(\App\Filament\Widgets\TopDistricts::DESIGN_CODE, 'Ўзбекча', 'dk.pdf', 3);
+
+        $path = $this->tmp.'/rep.xlsx';
+        \App\Services\DownloadsReport::write($path, null, 'Butun davr');
+        $reader = new \OpenSpout\Reader\XLSX\Reader();
+        $reader->open($path);
+        $sheets = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $sheets[$sheet->getName()][] = $row->toArray();
+            }
+        }
+        $reader->close();
+
+        $this->assertSame(['Tumanlar', 'Ko‘chalar', 'Fayllar', 'Boshqa fayllar'], array_keys($sheets));
+        $body = fn ($rows) => array_slice($rows, array_search('№', array_column($rows, 0), true) + 1);  // rows under the header
+        $districtRows = array_slice($body($sheets['Tumanlar']), 0, count($names));
+        $this->assertCount(count($names), $districtRows);  // every district, also those with no downloads
+        $this->assertSame([1, $last, 7], [$districtRows[0][0], $districtRows[0][1], $districtRows[0][2]]);
+        $this->assertSame(['', 'Jami', 8], array_slice(end($sheets['Tumanlar']), 0, 3));
+        // streets: the leading district first, its streets by downloads
+        $streetRows = array_values(array_filter($sheets['Ko‘chalar'], fn ($r) => ($r[1] ?? null) === $last && ($r[2] ?? null) !== 'Tuman jami'));
+        $this->assertSame(['B ko‘cha', 'A ko‘cha'], array_column($streetRows, 2));
+        $this->assertContains('=HYPERLINK("x")', array_merge(...$sheets['Ko‘chalar']));  // stays text
+        $this->assertSame('dk.pdf', $body($sheets['Boshqa fayllar'])[0][3]);
+        $this->assertNotContains('dk.pdf', array_column($sheets['Fayllar'], 3));
+
+        Livewire::test(\App\Filament\Resources\Downloads\Pages\ListDownloads::class)
+            ->callAction('rankingReport', ['period' => '7'])->assertFileDownloaded();
+        Livewire::test(\App\Filament\Widgets\TopDistricts::class)
+            ->callAction(TestAction::make('rankingReport')->table(), ['period' => 'all'])->assertFileDownloaded();
+    }
 }

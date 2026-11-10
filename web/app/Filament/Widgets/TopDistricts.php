@@ -34,6 +34,7 @@ class TopDistricts extends TableWidget
             ->defaultSort('total', 'desc')
             ->defaultKeySort(false) // grouped rows: PostgreSQL refuses an ORDER BY on a column that is not grouped
             ->paginated(false)
+            ->headerActions([\App\Services\DownloadsReport::action()])
             ->filters([self::periodFilter()])
             ->columns([
                 TextColumn::make('rank')->label('№')->rowIndex(),

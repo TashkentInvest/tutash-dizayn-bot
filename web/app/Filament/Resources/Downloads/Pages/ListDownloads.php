@@ -16,8 +16,9 @@ class ListDownloads extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            \App\Services\DownloadsReport::action(),
             Action::make('export')
-                ->label('Excelga yuklab olish (.xlsx)')
+                ->label('Barcha yozuvlar (.xlsx)')
                 ->icon('heroicon-o-table-cells')
                 ->color('success')
                 ->tooltip('Jadvaldagi hozirgi filtr va qidiruv bo‘yicha')
