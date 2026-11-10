@@ -17,6 +17,8 @@ class StaffActivity extends TableWidget
 {
     protected static ?int $sort = 4;
 
+    protected int|string|array $columnSpan = ['md' => 1, 'lg' => 1, '2xl' => 2];
+
     protected static ?string $heading = 'Xodimlar: bugungi ish';
 
     protected ?string $pollingInterval = '120s';

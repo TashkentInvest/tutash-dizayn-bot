@@ -66,15 +66,17 @@ class InspectionResource extends Resource
             ->defaultSort('submitted_at', 'desc')
             ->columns([
                 TextColumn::make('submitted_at')->label('Yuborilgan')->dateTime('d.m.Y H:i')->sortable(),
-                TextColumn::make('staff.full_name')->label('Xodim'),
+                TextColumn::make('staff.full_name')->label('Xodim')->searchable(),
                 TextColumn::make('object.street.district.name')->label('Tuman'),
                 TextColumn::make('object_label')->label('Obyekt')->wrap()
                     ->state(fn (Inspection $i) => $i->object?->street?->name.' · '.$i->object?->label())
+                    ->searchable(query: fn (Builder $query, string $search) => $query->whereHas('object',
+                        fn ($o) => $o->whereLike('shop_name', "%$search%")->orWhereLike('stir', "%$search%")->orWhereLike('owner_name', "%$search%")))
                     ->url(fn (Inspection $i) => $i->object ? DesignObjectResource::getUrl('view', ['record' => $i->object]) : null),
                 TextColumn::make('kind')->label('Nima qilindi')->badge()
                     ->formatStateUsing(fn ($state) => Inspection::KINDS[$state] ?? $state)
                     ->color(fn ($state) => $state === 'installed' ? 'success' : 'warning'),
-                TextColumn::make('comment')->label('Izoh')->limit(60)->wrap()->color('danger')->weight('bold'),
+                TextColumn::make('comment')->label('Izoh')->limit(60)->wrap(),
                 TextColumn::make('distance_m')->label('Xodim ↔ obyekt')->placeholder('—')->formatStateUsing(fn ($state) => (int) $state.' m')
                     ->tooltip('Xodim turgan joy bilan u xaritada belgilagan obyekt joyi orasidagi masofa. Tasdiqlansa, belgilangan joy obyekt joyi bo‘ladi.'),
                 TextColumn::make('review')->label('Holat')->badge()

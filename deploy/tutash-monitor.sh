@@ -8,6 +8,9 @@ systemctl is-active --quiet tutash-bot || problems+=("bot service is DOWN")
 [ "$(df -P / | awk 'NR==2{print $5+0}')" -lt 85 ] || problems+=("disk is over 85% full")
 code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' https://YOUR-DOMAIN/admin/login || true)
 [ "$code" = "200" ] || problems+=("dashboard answered HTTP $code")
+# the bot's PostgreSQL (the login page above does not touch it): a hung database freezes the bot without stopping it
+pg_isready -q -t 5 || problems+=("PostgreSQL is not accepting connections")
+systemctl is-failed --quiet tutash-backup && problems+=("last nightly backup FAILED (journalctl -u tutash-backup)")
 if [ ${#problems[@]} -gt 0 ]; then
   curl -s -m 10 "https://api.telegram.org/bot${ALERT_BOT_TOKEN}/sendMessage" \
     --data-urlencode "chat_id=${ALERT_CHAT_ID}" \

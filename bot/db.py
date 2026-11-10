@@ -8,11 +8,13 @@ import re
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 
 from .config import DATABASE_URL, DB_PATH
 
 PG = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+if DATABASE_URL and not PG:  # never fall back to the old SQLite file silently: the dashboard reads PostgreSQL
+    raise SystemExit("DATABASE_URL must start with postgresql:// (got another form); unset it to use SQLite")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -245,6 +247,9 @@ class _PgConn:
 
     def commit(self):
         pass
+
+    def transaction(self):
+        return self.c.transaction()  # autocommit is off inside: several statements land together or not at all
 
     def rollback(self):
         pass
@@ -542,8 +547,9 @@ def staff_by_phone(phone: str) -> dict | None:
 def link_staff(staff_id: int, user_id: int) -> None:
     """One Telegram account per staff member: a new confirmation moves the link (a changed phone / account)."""
     with _db() as c:
-        c.execute("UPDATE staff SET user_id=NULL WHERE user_id=? AND id<>?", (user_id, staff_id))
-        c.execute("UPDATE staff SET user_id=? WHERE id=?", (user_id, staff_id))
+        with c.transaction() if PG else nullcontext():  # SQLite: one implicit transaction until commit()
+            c.execute("UPDATE staff SET user_id=NULL WHERE user_id=? AND id<>?", (user_id, staff_id))
+            c.execute("UPDATE staff SET user_id=? WHERE id=?", (user_id, staff_id))
         c.commit()
 
 

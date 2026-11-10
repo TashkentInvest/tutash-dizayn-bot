@@ -11,14 +11,19 @@ mkdir -p "$B/$D"
 chmod 700 "$B"
 
 # The bot's database: PostgreSQL when DATABASE_URL is set in the bot's .env (a consistent dump while the bot runs),
-# otherwise the SQLite file. Restore: pg_restore -d tutash --clean db.dump
-DBURL=$(grep -m1 '^DATABASE_URL=' "$APP/.env" | cut -d= -f2- || true)
+# otherwise the SQLite file. Restore: pg_restore -d tutash --clean bot-db.dump
+# A failed database dump must not cost the night's file backups: remember it, carry on, fail at the end (-> alert).
+failed=0
+# strip quotes and a Windows line end, as the bot's config loader does
+DBURL=$(grep -m1 '^DATABASE_URL=' "$APP/.env" | cut -d= -f2- | tr -d '\r' | sed "s/^[\"']//; s/[\"']$//" || true)
 if [ -n "$DBURL" ]; then
-  pg_dump -Fc "$DBURL" > "$B/$D/bot-db.dump"
+  # written to .tmp and renamed only when complete: never an empty or half dump that looks like a backup
+  if pg_dump -Fc "$DBURL" > "$B/$D/bot-db.dump.tmp"; then mv "$B/$D/bot-db.dump.tmp" "$B/$D/bot-db.dump"
+  else rm -f "$B/$D/bot-db.dump.tmp"; echo "pg_dump failed" >&2; failed=1; fi
 else
-  sqlite3 "$APP/bot.db" ".backup '$B/$D/bot.db'"
+  sqlite3 "$APP/bot.db" ".backup '$B/$D/bot.db'" || { echo "sqlite backup failed" >&2; failed=1; }
 fi
-sqlite3 "$APP/web/database/database.sqlite" ".backup '$B/$D/laravel.sqlite'"
+sqlite3 "$APP/web/database/database.sqlite" ".backup '$B/$D/laravel.sqlite'" || { echo "laravel db backup failed" >&2; failed=1; }
 
 install -m 600 "$APP/.env" "$B/$D/bot.env"
 install -m 600 "$APP/web/.env" "$B/$D/web.env"
@@ -33,5 +38,6 @@ find "$B" -maxdepth 1 -type d -name '20*' -mtime +14 -exec rm -rf {} +
 # off-box copy (uncomment once rclone is configured)
 # rclone sync "$B" backup:tutash-backup --transfers 4
 
-# fail (-> alert) when the disk is nearly full
+# fail (-> alert) when the disk is nearly full or a database dump failed above
 df -P / | awk 'NR==2 && $5+0 > 85 { exit 1 }'
+exit $failed

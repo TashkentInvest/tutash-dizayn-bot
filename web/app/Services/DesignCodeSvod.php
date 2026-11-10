@@ -21,9 +21,9 @@ class DesignCodeSvod
      */
     public static function byDistrict(CarbonInterface $day): array
     {
-        $rows = District::query()->orderBy('sort_order')->get(['id', 'name'])->map(function (District $d) use ($day) {
-            return ['id' => $d->id, 'name' => $d->name] + self::counts('s.district_id = ?', [$d->id], $day);
-        })->all();
+        $c = self::counts('s.district_id', '1 = 1', [], $day);
+        $rows = District::query()->orderBy('sort_order')->get(['id', 'name'])
+            ->map(fn (District $d) => ['id' => $d->id, 'name' => $d->name] + self::row($c, $d->id))->all();
 
         return ['rows' => $rows, 'total' => self::sum($rows, 'Toshkent shahar jami')];
     }
@@ -37,33 +37,51 @@ class DesignCodeSvod
             ->where(fn ($q) => $q->where('planned_objects', '>', 0)
                 ->orWhereIn('id', DB::connection('bot')->table('objects')->where('is_active', true)->select('street_id')))
             ->orderBy('sort_order')->orderBy('name')->get(['id', 'name']);
-        $rows = $streets->map(fn ($s) => ['id' => $s->id, 'name' => $s->name] + self::counts('s.id = ?', [$s->id], $day))->all();
+        $c = self::counts('s.id', 's.district_id = ?', [$districtId], $day);
+        $rows = $streets->map(fn ($s) => ['id' => $s->id, 'name' => $s->name] + self::row($c, $s->id))->all();
 
         return ['rows' => $rows, 'total' => self::sum($rows, 'Tuman jami')];
     }
 
-    private static function counts(string $where, array $bind, CarbonInterface $day): array
+    /**
+     * Three grouped queries for the whole table (it used to be three per row).
+     *
+     * @return array{0: array<int, int>, 1: array<int, object>, 2: array<int, object>}
+     */
+    private static function counts(string $group, string $where, array $bind, CarbonInterface $day): array
     {
         $db = DB::connection('bot');
-        $total = (int) $db->selectOne("SELECT COALESCE(SUM(s.planned_objects), 0) AS n FROM streets s WHERE $where", $bind)->n;
-        $o = $db->selectOne(
-            "SELECT SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed,
+        $total = collect($db->select("SELECT $group AS g, COALESCE(SUM(s.planned_objects), 0) AS n FROM streets s WHERE $where GROUP BY $group", $bind))
+            ->mapWithKeys(fn ($r) => [(int) $r->g => (int) $r->n])->all();
+        $o = collect($db->select(
+            "SELECT $group AS g, SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed,
                     SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed
-             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where", $bind);
+             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where GROUP BY $group", $bind))
+            ->keyBy(fn ($r) => (int) $r->g)->all();
         $from = $day->copy()->startOfDay()->utc()->format('Y-m-d H:i:s');
         $to = $day->copy()->endOfDay()->utc()->format('Y-m-d H:i:s');
-        $i = $db->selectOne(
-            "SELECT SUM(CASE WHEN i.review='pending' THEN 1 ELSE 0 END) AS review,
+        $i = collect($db->select(
+            "SELECT $group AS g, SUM(CASE WHEN i.review='pending' THEN 1 ELSE 0 END) AS review,
                     SUM(CASE WHEN i.review='approved' AND i.kind='removed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_removed,
                     SUM(CASE WHEN i.review='approved' AND i.kind='installed' AND i.submitted_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS day_installed
              FROM inspections i JOIN objects o ON o.id = i.object_id JOIN streets s ON s.id = o.street_id
-             WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where", [$from, $to, $from, $to, ...$bind]);
-        $removed = (int) $o->removed;
-        $installed = (int) $o->installed;
+             WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where GROUP BY $group", [$from, $to, $from, $to, ...$bind]))
+            ->keyBy(fn ($r) => (int) $r->g)->all();
+
+        return [$total, $o, $i];
+    }
+
+    private static function row(array $c, int $id): array
+    {
+        [$totals, $objects, $evidence] = $c;
+        $total = $totals[$id] ?? 0;
+        $removed = (int) ($objects[$id]->removed ?? 0);
+        $installed = (int) ($objects[$id]->installed ?? 0);
+        $i = $evidence[$id] ?? null;
 
         return [
             'total' => $total, 'pending' => max($total - $removed - $installed, 0), 'removed' => $removed, 'installed' => $installed,
-            'review' => (int) $i->review, 'day_removed' => (int) $i->day_removed, 'day_installed' => (int) $i->day_installed,
+            'review' => (int) ($i->review ?? 0), 'day_removed' => (int) ($i->day_removed ?? 0), 'day_installed' => (int) ($i->day_installed ?? 0),
             'pct' => $total ? round($installed / $total * 100, 1) : 0.0,
         ];
     }

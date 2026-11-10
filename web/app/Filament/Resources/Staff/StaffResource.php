@@ -23,7 +23,6 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
@@ -91,7 +90,14 @@ class StaffResource extends Resource
                     ->tooltip(fn (Staff $s) => $s->user_id ? 'Telegram ID: '.$s->user_id : 'Hali botda /start bosib, raqamini tasdiqlamagan'),
                 TextColumn::make('sent_count')->label('Yuborgan dalillar'),
                 TextColumn::make('approved_count')->label('Tasdiqlangan'),
-                ToggleColumn::make('is_active')->label('Faol'),
+                // one click used to switch a person off mid-task: now it asks first and says what happens
+                IconColumn::make('is_active')->label('Faol')->boolean()
+                    ->action(Action::make('toggleActive')->requiresConfirmation()
+                        ->modalHeading(fn (Staff $s) => $s->is_active ? 'Xodimni nofaol qilish' : 'Xodimni faol qilish')
+                        ->modalDescription(fn (Staff $s) => $s->is_active
+                            ? 'Xodim Mini App’dan foydalana olmaydi; boshlangan, yuborilmagan dalili ham to‘xtaydi.'
+                            : 'Xodim yana Mini App’da ishlay oladi.')
+                        ->action(fn (Staff $s) => $s->update(['is_active' => ! $s->is_active]))),
             ])
             ->filters([SelectFilter::make('district_id')->label('Tuman')->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))])
             ->recordActions([

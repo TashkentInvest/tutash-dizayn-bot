@@ -16,7 +16,8 @@
   * { box-sizing: border-box; }
   body { margin: 0; font: 15px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 14px; border-bottom: 1px solid var(--card); display: flex; gap: 10px; align-items: center; }
-  header button { border: 0; background: none; color: var(--link); font-size: 15px; padding: 4px 0; }
+  header button { border: 0; background: none; color: var(--link); font-size: 17px; padding: 8px 10px 8px 0; min-height: 40px; }
+  body.in-tg #back { display: none !important; }  /* Telegram's own Back button is used instead */
   header h1 { font-size: 16px; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   main { padding: 12px 14px 90px; }
   .muted { color: var(--hint); font-size: 13px; }
@@ -34,7 +35,7 @@
   .obj img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #ddd; }
   .obj div { padding: 6px 8px; font-size: 13px; }
   .chips { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 10px; }
-  .chip { border: 1px solid var(--hint); border-radius: 14px; padding: 4px 10px; font-size: 13px; white-space: nowrap; background: none; color: var(--text); }
+  .chip { border: 1px solid var(--hint); border-radius: 18px; padding: 8px 12px; min-height: 36px; font-size: 13px; white-space: nowrap; background: none; color: var(--text); }
   .chip.on { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
   .page { width: 100%; border-radius: 10px; display: block; }
   label { display: block; font-size: 13px; color: var(--hint); margin: 8px 0 3px; }
@@ -46,6 +47,7 @@
   .row > * { min-width: 0; overflow-wrap: anywhere; }
   .btn.danger { background: var(--red); color: #fff; }
   .btn:disabled { opacity: .55; }
+  .btn.link { background: none; color: var(--link); padding: 8px; font-weight: 500; }
   .err { color: var(--red); margin: 8px 0; white-space: pre-wrap; }
   .ok { color: var(--green); margin: 8px 0; }
   .steps { display: flex; gap: 4px; margin-bottom: 12px; }
@@ -86,7 +88,7 @@
       camStart: '📷 Kamerani yoqish', shot: '📸 Rasmga olish', retake: 'Qayta olish', send: 'Yuborish', camErr: 'Kamera ochilmadi. Telegram’ga kameraga ruxsat bering.',
       photoHint: 'Obyektni (peshtaxta va fasad) to‘liq ko‘rinadigan qilib rasmga oling.',
       videoHint: '3–15 soniyalik video: obyekt va atrofi. Yozish 15 soniyada o‘zi to‘xtaydi.', recStart: '⏺ Yozishni boshlash', recStop: '⏹ To‘xtatish',
-      recShort: 'Video kamida 3 soniya bo‘lsin.', uploading: 'Yuborilmoqda…', commentHint: 'Nima qilindi? Masalan: “Eski peshtaxta olib tashlandi, yangisi buyurtma qilingan”.',
+      recShort: 'Video kamida 3 soniya bo‘lsin.', recNo: 'Bu qurilmada video yozib bo‘lmaydi. Telegram va telefon tizimini yangilang.', cancel: 'Bekor qilish', slow: 'Yuborish juda uzoq davom etdi. Internetni tekshirib, qayta yuboring.', uploading: 'Yuborilmoqda…', commentHint: 'Nima qilindi? Masalan: “Eski peshtaxta olib tashlandi, yangisi buyurtma qilingan”.',
       comment: 'Izoh', submit: 'Tekshiruvga yuborish', done: 'Yuborildi! Admin tasdiqlagach, holat o‘zgaradi.', toObject: 'Obyektga qaytish',
       otherDraft: 'Sizda boshqa obyekt bo‘yicha tugallanmagan tekshiruv bor ({x}). Uni o‘chirib, yangisini boshlaysizmi?', discard: 'Ha, o‘chirib yangisini boshlash',
       openOther: 'Yo‘q, o‘sha obyektni ochish', kindRemoved: 'Yechildi', kindInstalled: 'Qo‘yildi', netErr: 'Internet bilan muammo. Qayta urinib ko‘ring.',
@@ -105,7 +107,7 @@
       camStart: '📷 Включить камеру', shot: '📸 Сфотографировать', retake: 'Переснять', send: 'Отправить', camErr: 'Камера не открылась. Разрешите Telegram доступ к камере.',
       photoHint: 'Сфотографируйте объект так, чтобы вывеска и фасад были видны полностью.',
       videoHint: 'Видео 3–15 секунд: объект и окрестности. Запись остановится сама через 15 секунд.', recStart: '⏺ Начать запись', recStop: '⏹ Остановить',
-      recShort: 'Видео должно быть не короче 3 секунд.', uploading: 'Отправка…', commentHint: 'Что сделано? Например: «Старая вывеска снята, новая заказана».',
+      recShort: 'Видео должно быть не короче 3 секунд.', recNo: 'На этом устройстве нельзя записать видео. Обновите Telegram и систему телефона.', cancel: 'Отменить', slow: 'Отправка заняла слишком долго. Проверьте интернет и отправьте снова.', uploading: 'Отправка…', commentHint: 'Что сделано? Например: «Старая вывеска снята, новая заказана».',
       comment: 'Комментарий', submit: 'Отправить на проверку', done: 'Отправлено! Статус изменится после подтверждения администратором.', toObject: 'Вернуться к объекту',
       otherDraft: 'У вас есть незавершённая проверка по другому объекту ({x}). Удалить её и начать новую?', discard: 'Да, удалить и начать новую',
       openOther: 'Нет, открыть тот объект', kindRemoved: 'Снято', kindInstalled: 'Установлено', netErr: 'Проблема с интернетом. Попробуйте ещё раз.',
@@ -122,14 +124,18 @@
   // nav changes with every screen change: a response that arrives after the user left its screen draws nothing
   var nav = 0, camReq = 0, lastPush = 0;
   function stopCamera() { camReq++; if (stream) { stream.getTracks().forEach(function (tr) { tr.stop(); }); stream = null; } }
+  var xhr = null;  // the running upload; leaving its screen cancels it
+  function guardClose(on) { if (tg && tg.enableClosingConfirmation) try { on ? tg.enableClosingConfirmation() : tg.disableClosingConfirmation(); } catch (e) {} }
+  function abortUpload() { if (xhr) { var x = xhr; xhr = null; x.abort(); } guardClose(false); }
   function show(screen) {
     var now = Date.now();
     if (now - lastPush < 400) return;  // a double tap opens the screen once
-    lastPush = now; nav++;
+    lastPush = now; nav++; abortUpload();
     stopCamera(); stack.push(screen); backBtn.hidden = stack.length < 2; screen();
   }
-  function back() { nav++; stopCamera(); stack.pop(); var s = stack[stack.length - 1]; backBtn.hidden = stack.length < 2; if (s) s(); }
+  function back() { nav++; abortUpload(); stopCamera(); stack.pop(); var s = stack[stack.length - 1]; backBtn.hidden = stack.length < 2; if (s) s(); }
   backBtn.onclick = back;
+  if (tg && tg.initData) document.body.classList.add('in-tg');
   if (tg && tg.BackButton) { tg.BackButton.onClick(function () { if (stack.length > 1) back(); else tg.close(); }); }
   function syncBack() { if (tg && tg.BackButton) { if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide(); } }
 
@@ -157,6 +163,7 @@
     Promise.resolve().then(fn).catch(function (e) { showErr(e); }).then(function () { btn.disabled = false; });
   }
   function showErr(e) {
+    if (e && e.aborted) return;
     var el = document.getElementById('err');
     var msg = (e && (e.error || (e.errors && Object.values(e.errors)[0][0]))) || (e && e.message) || t('netErr');
     if (el) el.textContent = msg; else alert(msg);
@@ -349,7 +356,20 @@
     h(bar + '<h3>' + t('st3') + '</h3><p class="muted">' + t('pointHint', draft.max_distance) + '</p>' +
       (draft.object_point ? '<p class="muted">' + t('pointKnown') + '</p>' : '') +
       '<div id="map"></div><div id="err" class="err"></div><button class="btn" id="go">' + t('pointBtn') + '</button>');
-    if (!window.L || !draft.me) { showErr({ error: t('mapErr') }); return; }
+    if (!window.L || !draft.me) {
+      showErr({ error: t('mapErr') });
+      var retry = document.getElementById('go'); retry.textContent = t('retry');
+      retry.onclick = function () {
+        if (window.L) return stepPoint(bar, draft, next);
+        busy(retry, function () {
+          return new Promise(function (ok, bad) {  // fetch Leaflet again (the first load failed)
+            var sc = document.createElement('script'); sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            sc.onload = ok; sc.onerror = function () { bad({ error: t('mapErr') }); }; document.head.appendChild(sc);
+          }).then(function () { stepPoint(bar, draft, next); });
+        });
+      };
+      return;
+    }
     var me = draft.me, start = draft.object_point || me;
     var map = L.map('map', { zoomControl: true, attributionControl: true }).setView(start, 18);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -378,9 +398,45 @@
       .catch(function () { throw { error: t('camErr') }; });
   }
 
-  function upload(path, field, blob, filename) {
+  // big videos on a slow network: show the percentage, give up after 3 minutes, can be cancelled (the server is idempotent)
+  function upload(path, field, blob, filename, btn) {
     var fd = new FormData(); fd.append(field, blob, filename);
-    return api(path, { body: fd });
+    var my = nav, label = btn ? btn.textContent : '';
+    abortUpload();
+    var cancel = null;
+    if (btn) {
+      cancel = document.createElement('button'); cancel.className = 'btn link'; cancel.textContent = t('cancel');
+      btn.parentNode.insertBefore(cancel, btn.nextSibling);
+    }
+    guardClose(true);
+    return new Promise(function (resolve, reject) {
+      var x = xhr = new XMLHttpRequest();
+      x.open('POST', '/tg/api' + path);
+      x.setRequestHeader('X-Telegram-Init-Data', tg ? tg.initData : '');
+      x.setRequestHeader('Accept', 'application/json');
+      x.timeout = 180000;
+      x.upload.onprogress = function (e) { if (btn && e.lengthComputable) btn.textContent = label + ' ' + Math.floor(e.loaded * 100 / e.total) + '%'; };
+      x.onload = function () {
+        var d = {}; try { d = JSON.parse(x.responseText); } catch (e) {}
+        if (x.status < 200 || x.status >= 300) { d.status = x.status; if (!d.error) d.error = d.message || ('Xato ' + x.status); return reject(d); }
+        resolve(d);
+      };
+      x.onerror = function () { reject({ error: t('netErr') }); };
+      x.ontimeout = function () { reject({ error: t('slow') }); };
+      x.onabort = function () { reject({ error: '', aborted: true }); };
+      if (cancel) cancel.onclick = function () { if (xhr === x) { xhr = null; x.abort(); } };
+      x.send(fd);
+    }).then(function (d) {
+      if (xhr) xhr = null;
+      guardClose(false); if (cancel) cancel.remove();
+      if (my !== nav) return new Promise(function () {});  // the user moved on
+      return d;
+    }, function (e) {
+      if (xhr) xhr = null;
+      guardClose(false); if (cancel) cancel.remove();
+      if (my !== nav) return new Promise(function () {});
+      throw e;
+    });
   }
 
   function stepPhoto(bar, draft, next) {
@@ -399,7 +455,7 @@
     };
     again.onclick = live;
     send.onclick = function () {
-      busy(send, function () { send.textContent = t('uploading'); return upload('/inspections/' + draft.id + '/photo', 'photo', blob, 'photo.jpg').then(function (d) { stopCamera(); next(d); })
+      busy(send, function () { send.textContent = t('uploading'); return upload('/inspections/' + draft.id + '/photo', 'photo', blob, 'photo.jpg', send).then(function (d) { stopCamera(); next(d); })
         .catch(function (e) { send.textContent = t('send'); throw e; }); });
     };
     cam.click();
@@ -428,16 +484,17 @@
         return stop();
       }
       document.getElementById('err').textContent = '';
+      if (!window.MediaRecorder) return showErr({ error: t('recNo') });
       type = pickType(); chunks = [];
-      try { recorder = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 2500000 } : undefined); } catch (e) { return showErr({ error: t('camErr') }); }
+      try { recorder = new MediaRecorder(stream, type ? { mimeType: type, videoBitsPerSecond: 2500000 } : undefined); } catch (e) { return showErr({ error: t('recNo') }); }
       recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
       recorder.onstop = function () {
-        clearInterval(tick);
+        clearInterval(tick); guardClose(false);
         blob = new Blob(chunks, { type: (type || 'video/webm').split(';')[0] });
         v.srcObject = null; v.src = URL.createObjectURL(blob); v.controls = true; v.muted = true;
         rec.hidden = true; send.hidden = again.hidden = false;
       };
-      recorder.start(500); started = Date.now(); rec.textContent = t('recStop');
+      recorder.start(500); started = Date.now(); guardClose(true); rec.textContent = t('recStop');
       tick = setInterval(function () {
         var s = Math.floor((Date.now() - started) / 1000);
         timer.innerHTML = '<span class="rec">● ' + s + ' / 15 s</span>';
@@ -449,7 +506,7 @@
       busy(send, function () {
         send.textContent = t('uploading');
         var ext = blob.type.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
-        return upload('/inspections/' + draft.id + '/video', 'video', blob, 'video.' + ext).then(function (d) { stopCamera(); next(d); })
+        return upload('/inspections/' + draft.id + '/video', 'video', blob, 'video.' + ext, send).then(function (d) { stopCamera(); next(d); })
           .catch(function (e) { send.textContent = t('send'); throw e; });
       });
     };

@@ -15,6 +15,8 @@ class TopStreets extends TableWidget
 
     protected static ?int $sort = 7;
 
+    protected int|string|array $columnSpan = ['md' => 1, 'lg' => 1, '2xl' => 2];
+
     protected static ?string $heading = 'Eng ko‘p yuklab olingan ko‘chalar';
 
     public function table(Table $table): Table

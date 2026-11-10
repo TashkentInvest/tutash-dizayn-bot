@@ -14,7 +14,7 @@ class DesignCodeProgressChart extends ChartWidget
 
     protected ?string $heading = 'Dizayn-kod: tumanlar kesimida';
 
-    protected ?string $maxHeight = '280px';
+    protected ?string $maxHeight = '360px';
 
     protected function getType(): string
     {
@@ -41,7 +41,7 @@ class DesignCodeProgressChart extends ChartWidget
         return [
             'indexAxis' => 'y',
             'plugins' => ['legend' => ['position' => 'bottom', 'labels' => ['boxWidth' => 10, 'usePointStyle' => true]]],
-            'scales' => ['x' => ['stacked' => true, 'beginAtZero' => true, 'ticks' => ['precision' => 0]], 'y' => ['stacked' => true]],
+            'scales' => ['x' => ['stacked' => true, 'beginAtZero' => true, 'ticks' => ['precision' => 0]], 'y' => ['stacked' => true, 'ticks' => ['autoSkip' => false]]],
         ];
     }
 }

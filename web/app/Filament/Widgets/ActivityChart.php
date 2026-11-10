@@ -13,9 +13,11 @@ class ActivityChart extends ChartWidget
 
     protected static ?int $sort = 2;
 
+    protected int|string|array $columnSpan = ['md' => 1, 'lg' => 1, '2xl' => 2];
+
     protected ?string $heading = 'Kunlik faollik';
 
-    protected ?string $maxHeight = '280px';
+    protected ?string $maxHeight = '360px';
 
     public ?string $filter = '30';
 

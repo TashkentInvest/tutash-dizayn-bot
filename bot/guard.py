@@ -35,13 +35,15 @@ class Guard(BaseMiddleware):
         self.mute_seconds, self.max_inflight = mute_seconds, max_inflight
         self._state: dict[int, list] = {}  # user id -> [tokens, last refill, strikes, strike window start, muted until]
         self._inflight = 0
+        self._swept = 0.0
 
     async def __call__(self, handler, event, data):
         user = data.get("event_from_user")
         if user is None:
             return await handler(event, data)
         now = time.monotonic()
-        if len(self._state) > 20000:  # bounded memory: forget users who have been quiet for a while
+        if len(self._state) > 20000 and now - self._swept > 30:  # bounded memory; at most every 30 s (it is O(n))
+            self._swept = now
             self._state = {k: v for k, v in self._state.items() if now - v[1] < 300 or v[4] > now}
         st = self._state.setdefault(user.id, [float(self.burst), now, 0, now, 0.0])
 
