@@ -446,4 +446,30 @@ class StaffAppTest extends TestCase
         $this->assertSame(1, $db->table('outbox')->where('user_id', 555001)->count());
         Livewire::test(\App\Filament\Resources\ReportRecipients\Pages\ManageReportRecipients::class)->assertSee('Rahbar Test')->assertSee('rahbar');
     }
+
+    public function test_admin_links_a_staff_member_to_a_bot_account_by_hand(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $db->table('users')->insert(['user_id' => 888001, 'first_name' => 'Q', 'full_name' => 'Qo‘lda Bog‘lanadi', 'phone' => '+998901110022']);
+        $s = Staff::create(['full_name' => 'Yangi Xodim', 'phone' => '+998901110022', 'district_id' => $this->district, 'is_active' => true]);
+        $db->table('outbox')->delete();
+
+        Livewire::test(ManageStaff::class)
+            ->assertTableActionVisible('link', $s)
+            ->assertTableActionHidden('link', $this->staff)  // already linked
+            ->callTableAction('link', $s, ['user_id' => 888001])->assertHasNoTableActionErrors();
+
+        $this->assertSame(888001, $s->fresh()->user_id);
+        $this->assertStringContainsString('xodimi sifatida biriktirildingiz', $db->table('outbox')->where('user_id', 888001)->value('text'));
+
+        // the same account moved to another staff member leaves the first one unlinked
+        $db->table('users')->insert(['user_id' => 888002, 'first_name' => 'B']);
+        $other = Staff::create(['full_name' => 'Boshqa', 'phone' => '+998901110033', 'district_id' => $this->district, 'is_active' => true]);
+        Livewire::test(ManageStaff::class)->callTableAction('link', $other, ['user_id' => 888001]);
+        $this->assertNull($s->fresh()->user_id);
+        $this->assertSame(888001, $other->fresh()->user_id);
+    }
 }

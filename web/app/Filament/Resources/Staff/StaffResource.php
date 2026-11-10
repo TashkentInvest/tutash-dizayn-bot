@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Staff;
 
 use App\Filament\NavGroups;
 use App\Filament\Resources\Staff\Pages\ManageStaff;
+use App\Models\BotUser;
 use App\Models\District;
 use App\Models\Inspection;
 use App\Models\Staff;
@@ -14,6 +15,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -25,6 +27,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 /** District staff: who checks the businesses of which district. They sign in to the bot with this phone. */
 class StaffResource extends Resource
@@ -87,7 +90,7 @@ class StaffResource extends Resource
                 TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable()->copyable(),
                 TextColumn::make('district.name')->label('Tuman')->sortable(),
                 IconColumn::make('linked')->label('Botda tasdiqlangan')->boolean()->state(fn (Staff $s) => $s->user_id !== null)
-                    ->tooltip(fn (Staff $s) => $s->user_id ? 'Telegram ID: '.$s->user_id : 'Hali botda /start bosib, raqamini tasdiqlamagan'),
+                    ->tooltip(fn (Staff $s) => $s->user_id ? 'Telegram ID: '.$s->user_id : 'Hali bog‘lanmagan: xodim botda raqamini tasdiqlasin yoki “Botga bog‘lash” tugmasi bilan admin bog‘lasin'),
                 TextColumn::make('sent_count')->label('Yuborgan dalillar'),
                 TextColumn::make('approved_count')->label('Tasdiqlangan'),
                 // one click used to switch a person off mid-task: now it asks first and says what happens
@@ -101,6 +104,31 @@ class StaffResource extends Resource
             ])
             ->filters([SelectFilter::make('district_id')->label('Tuman')->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))])
             ->recordActions([
+                // an admin links the staff member to a bot account by hand (the person must have pressed /start in the bot)
+                Action::make('link')->label('Botga bog‘lash')->icon('heroicon-o-link')->color('success')
+                    ->visible(fn (Staff $s) => $s->user_id === null)
+                    ->modalHeading(fn (Staff $s) => $s->full_name.' — botga bog‘lash')
+                    ->modalDescription('Odatda xodim botda raqamini “Raqamni yuborish” tugmasi bilan o‘zi tasdiqlaydi. Bu yerda admin qo‘lda bog‘laydi: '
+                        .'xodim avval botda /start bosgan bo‘lishi kerak. Bog‘langach, botda xodim menyusi va Mini App ochiladi.')
+                    ->modalSubmitActionLabel('Bog‘lash')
+                    ->schema([
+                        Select::make('user_id')->label('Botdagi akkaunti')->required()->searchable()
+                            ->helperText('Ism, telefon yoki @username bo‘yicha qidiring. Shu raqamli akkaunt bo‘lsa, ro‘yxatda birinchi turadi.')
+                            ->options(fn (Staff $record) => self::botAccounts($record, null))
+                            ->getSearchResultsUsing(fn (Staff $record, string $search) => self::botAccounts($record, $search))
+                            ->getOptionLabelUsing(fn ($value) => ($u = BotUser::find($value)) ? self::account($u) : (string) $value),
+                    ])
+                    ->action(function (Staff $s, array $data) {
+                        $uid = (int) $data['user_id'];
+                        DB::connection('bot')->transaction(function () use ($s, $uid) {
+                            // one Telegram account per staff member: it moves from anyone who had it
+                            Staff::query()->where('user_id', $uid)->whereKeyNot($s->getKey())->update(['user_id' => null]);
+                            $s->forceFill(['user_id' => $uid])->save();
+                            DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
+                                'text' => '✅ Siz '.($s->district?->name ?? 'tuman').' xodimi sifatida biriktirildingiz. Xodim menyusini ochish uchun /start ni bosing.']);
+                        });
+                        Notification::make()->success()->title('Bog‘landi')->body('Xodimga botda xabar yuboriladi.')->send();
+                    }),
                 EditAction::make(),
                 Action::make('unlink')->label('Telegram bog‘lanishini uzish')->icon('heroicon-o-link-slash')->color('gray')
                     ->visible(fn (Staff $s) => $s->user_id !== null)->requiresConfirmation()
@@ -109,6 +137,28 @@ class StaffResource extends Resource
                 DeleteAction::make()->visible(fn (Staff $s) => ! $s->inspections()->exists())
                     ->modalDescription('Dalil yubormagan xodimgina o‘chiriladi. Ishlagan xodimni “Faol” belgisini o‘chirib qo‘ying.'),
             ]);
+    }
+
+    /** Bot accounts to link: the one with this staff member's phone first, then the latest; or a search. */
+    private static function botAccounts(Staff $staff, ?string $search): array
+    {
+        $q = BotUser::query()->whereNotIn('user_id', Staff::query()->whereNotNull('user_id')->select('user_id'));
+        if ($search !== null && trim($search) !== '') {
+            $digits = preg_replace('/\D/', '', $search);
+            $q->where(fn ($w) => $w->whereLike('full_name', "%$search%")->orWhereLike('first_name', "%$search%")
+                ->orWhereLike('username', '%'.ltrim($search, '@').'%')
+                ->when(strlen($digits) >= 4, fn ($w) => $w->orWhereLike('phone', "%$digits%")));
+        } else {
+            $q->orderByRaw('CASE WHEN phone = ? THEN 0 ELSE 1 END', [$staff->phone])->orderByDesc('last_seen');
+        }
+
+        return $q->limit(30)->get()->mapWithKeys(fn (BotUser $u) => [$u->user_id => self::account($u, $u->phone === $staff->phone)])->all();
+    }
+
+    private static function account(BotUser $u, bool $samePhone = false): string
+    {
+        return trim(($samePhone ? '★ ' : '').($u->full_name ?: $u->first_name ?: 'ID '.$u->user_id)
+            .($u->phone ? ' · '.Phone::pretty($u->phone) : '').($u->username ? ' · @'.$u->username : ''));
     }
 
     public static function getPages(): array
