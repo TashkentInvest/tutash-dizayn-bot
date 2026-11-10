@@ -1,0 +1,6 @@
+[Unit]
+Description=Tutash health check (alerts the admin in Telegram)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tutash-monitor

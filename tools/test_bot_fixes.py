@@ -246,6 +246,28 @@ async def consent_flow():
 asyncio.run(consent_flow())
 
 
+async def repeated_presses():
+    """A file button pressed again while sending / right after: a short notice, never the error message (bug of Nov 10)."""
+    from pathlib import Path
+    from types import SimpleNamespace as N
+    import importlib
+    from bot import main as M
+    M = importlib.reload(M)  # the flows above replaced _start_send with a recorder
+    got = []
+
+    async def ans(text=None, **k):
+        got.append(text)
+    c = N(from_user=N(id=4242), answer=ans)
+    M._busy.add(4242)
+    await M._start_send(c, None, None, [(Path("x.pdf"), "x.pdf")])
+    M._busy.discard(4242)
+    M._recent[(4242, ("x.pdf",))] = time.monotonic()
+    await M._start_send(c, None, None, [(Path("x.pdf"), "x.pdf")])
+    check("repeated file press: busy / just-sent notice, no crash", len(got) == 2 and all(got))
+
+asyncio.run(repeated_presses())
+
+
 os.environ["WEB_PORT"] = "8799"; web.WEB_PORT = 8799
 asyncio.run(http())
 shutil.rmtree(tmp, ignore_errors=True)

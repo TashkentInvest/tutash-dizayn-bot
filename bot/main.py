@@ -117,6 +117,9 @@ async def stale_query(event: ErrorEvent) -> bool:
     return True
 
 
+_error_told: dict[int, float] = {}
+
+
 async def on_error(event: ErrorEvent) -> bool:
     """Last resort: log with traceback and never leave the user in silence."""
     logging.error("unhandled error", exc_info=event.exception)
@@ -128,7 +131,11 @@ async def on_error(event: ErrorEvent) -> bool:
         except Exception:
             pass
     msg = update.message or (cq.message if cq else None)
-    if msg:
+    now = time.monotonic()
+    if msg and now - _error_told.get(msg.chat.id, 0) > 30:  # one notice per user, not one per failed press
+        _error_told[msg.chat.id] = now
+        if len(_error_told) > 5000:
+            _error_told.clear()
         try:
             await msg.answer(t(i18n.cached_lang(msg.chat.id), "error"))
         except Exception:
@@ -376,9 +383,9 @@ async def _start_send(c: CallbackQuery, d, s, named) -> None:
         pass
     # The sending runs as its own task: an upload can take minutes, and holding the handler that long would keep one of
     # Guard's MAX_INFLIGHT slots per waiting user, so a burst of uncached requests made the whole bot answer "busy".
-    t = asyncio.create_task(_send_street(c, d, s, named, uid))
-    _tasks.add(t)
-    t.add_done_callback(_tasks.discard)
+    task = asyncio.create_task(_send_street(c, d, s, named, uid))  # not "t": that is the text function used above
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
 
 async def _send_street(c: CallbackQuery, d, s, named, uid: int):
@@ -411,7 +418,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
                 try:
                     await _send_file(c.message, f, st, f"{dl} — {sl}", name)
                     sent_ok = True
-                except Exception as e:  # upload failed/stalled: tell the user and fall back to a link
+                except Exception:  # upload failed/stalled: tell the user and fall back to a link
                     logging.exception("send failed: %s", f)
                     await c.message.answer(t(L, "failed", sl))
             if not sent_ok:
@@ -422,7 +429,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
                     parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
             db.log_download(uid, d.name, s.name, name)
-    except Exception as e:
+    except Exception:
         logging.exception("street handler failed")
         _recent.pop((uid, tuple(str(f) for f in files)), None)  # let the user try again at once
         await c.message.answer(t(L, "failed", sl))
