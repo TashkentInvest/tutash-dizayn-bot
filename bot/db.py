@@ -462,7 +462,7 @@ def touch_user(u, started: bool = False) -> None:
                ON CONFLICT(user_id) DO UPDATE SET
                  username=excluded.username, first_name=excluded.first_name,
                  last_name=excluded.last_name, language_code=excluded.language_code,
-                 last_seen=datetime('now'), start_count=start_count + ?""",
+                 last_seen=datetime('now'), start_count=users.start_count + ?""",
             (u.id, u.username, u.first_name, u.last_name, u.language_code, int(started), int(started)),
         )
         c.commit()
