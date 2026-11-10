@@ -25,6 +25,32 @@ class Staff extends Model
         return ['district_id' => 'integer', 'user_id' => 'integer', 'is_active' => 'boolean', 'priority_streets' => 'array', 'created_at' => 'datetime'];
     }
 
+    protected static function booted(): void
+    {
+        // added (or phone corrected) while the person already uses the bot: tell them how to confirm
+        static::saved(function (Staff $s) {
+            if ($s->user_id !== null || ! $s->is_active || ! ($s->wasRecentlyCreated || $s->wasChanged('phone'))) {
+                return;
+            }
+            $uid = BotUser::query()->where('phone', $s->phone)->value('user_id');
+            if ($uid) {
+                $s->getConnection()->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
+                    'text' => '👷 Siz '.($s->district?->name ?? 'tuman').' xodimlari ro‘yxatiga qo‘shildingiz. Tasdiqlash uchun /start ni bosing, '
+                        .'telefon so‘ralganda “📱 Raqamni yuborish” tugmasini bosing.']);
+            }
+        });
+    }
+
+    /** Where this person is in the bot: linked / in the bot but not confirmed / never opened the bot. */
+    public function botState(): string
+    {
+        if ($this->user_id !== null) {
+            return 'linked';
+        }
+
+        return BotUser::query()->where('phone', $this->phone)->exists() ? 'waiting' : 'absent';
+    }
+
     public function district(): BelongsTo
     {
         return $this->belongsTo(District::class, 'district_id');

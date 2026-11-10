@@ -472,4 +472,24 @@ class StaffAppTest extends TestCase
         $this->assertNull($s->fresh()->user_id);
         $this->assertSame(888001, $other->fresh()->user_id);
     }
+
+    public function test_staff_bot_state_and_a_notice_when_added_while_already_in_the_bot(): void
+    {
+        $db = DB::connection('bot');
+        $db->table('outbox')->delete();
+        $db->table('users')->insert(['user_id' => 889001, 'first_name' => 'W', 'phone' => '+998901112233']);
+        $s = Staff::create(['full_name' => 'Kutayotgan', 'phone' => '+998901112233', 'district_id' => $this->district, 'is_active' => true]);
+        $this->assertSame('waiting', $s->botState());
+        $this->assertStringContainsString('Raqamni yuborish', (string) $db->table('outbox')->where('user_id', 889001)->value('text'));
+
+        $absent = Staff::create(['full_name' => 'Kirmagan', 'phone' => '+998901119999', 'district_id' => $this->district, 'is_active' => true]);
+        $this->assertSame('absent', $absent->botState());
+        $this->assertSame('linked', $this->staff->botState());
+        $this->assertSame(1, $db->table('outbox')->count(), 'nobody to tell for a number that is not in the bot');
+
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        Livewire::test(ManageStaff::class)->assertSee('Botda bor, tasdiqlamagan')->assertSee('Botga kirmagan')->assertSee('Tasdiqlangan');
+    }
 }

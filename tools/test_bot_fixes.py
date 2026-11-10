@@ -222,18 +222,33 @@ async def consent_flow():
     check("own contact links the staff member and opens the staff menu", db.staff_by_user(424242) and db.staff_by_user(424242)["id"] == sid
           and t("uz", "staff_linked") in texts() and staff_msg is not None)
     btn = staff_msg.reply_markup.inline_keyboard[0][0] if staff_msg else None
+    datas = [b.callback_data for row in (staff_msg.reply_markup.inline_keyboard if staff_msg else []) for b in row]
+    check("staff menu: design code and request buttons too", "pick:design" in datas and "pick:feedback" in datas)
     check("staff menu: button to the Mini App", btn is not None and (btn.web_app or btn.url) and "/tg/app" in ((btn.web_app.url if btn.web_app else btn.url) or ""))
     forged = {**contact, "update_id": n[0] + 1}
     forged["message"] = {**contact["message"], "message_id": n[0] + 1, "from": {"id": 515151, "is_bot": False, "first_name": "X"},
                          "chat": {"id": 515151, "type": "private"}}
     n[0] += 1; await dp.feed_update(bot, Update.model_validate(forged))
     check("someone else's contact links nothing", db.staff_by_user(515151) is None)
+    sent.clear(); await press("pick:feedback", 424242); await press("pick:menu", 424242)
+    check("'back' from a request returns staff to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()))
     # a new person typing a staff number by hand is asked for the contact button, not registered as a citizen
     w = 636363
     await say("/start", w); await press("lang:uz", w); await press("consent", w); await say("Yozuvchi Xodim Test", w)
     sent.clear(); await say("+998 90 111 00 01", w)
     check("typed staff number -> contact button asked, phone not taken", t("uz", "staff_confirm") in texts()
           and not (db.get_user(w) or {}).get("phone") and reg.step(w) == "phone")
+    n[0] += 1
+    other = {"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": w, "type": "private"},
+             "from": {"id": w, "is_bot": False, "first_name": "N"}, "contact": {"phone_number": "998935550000", "first_name": "N", "user_id": w}}}
+    sent.clear(); await dp.feed_update(bot, Update.model_validate(other))
+    check("a new person's own number not on the staff list is taken as a citizen's", reg.step(w) == "choice")
+    db.update_user(w, phone="+998901110001")  # e.g. typed before the fix: on the staff list, not confirmed
+    sent.clear(); await say("/start", w); await press("lang:uz", w)
+    check("asked to confirm the staff number", t("uz", "staff_confirm") in texts())
+    other["message"] = {**other["message"], "message_id": n[0] + 1}; other["update_id"] = n[0] + 1; n[0] += 1
+    sent.clear(); await dp.feed_update(bot, Update.model_validate(other))
+    check("confirmed with a number not on the list -> told so, menu again", t("uz", "staff_not_found") in texts() and t("uz", "choice") in texts())
     sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
     check("next /start: straight to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()) and t("uz", "choice") not in texts())
 

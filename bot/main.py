@@ -180,7 +180,14 @@ async def main_menu(c: CallbackQuery):
         what = L
     if what == "menu":  # "back" from the level choice
         _fb_wait.pop(uid, None)
-        await _edit(c, t(L, "choice"), choice_kb(L))
+        if staff := db.staff_by_user(uid):  # staff came from their own menu
+            text, kb = registration.staff_menu(staff, L)
+            try:
+                await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except TelegramBadRequest:
+                pass
+        else:
+            await _edit(c, t(L, "choice"), choice_kb(L))
     elif what == "feedback":
         await _edit(c, t(L, "fb_level"), level_kb(L))
     elif c.data.startswith("fb:") and what in FB_LEVELS:

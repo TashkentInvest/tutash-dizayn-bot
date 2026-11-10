@@ -43,9 +43,9 @@ def _now() -> str:
 
 
 def has_contact(user_id: int) -> bool:
-    """Name and phone given: enough for the main menu (the design code and requests need nothing more)."""
+    """Name and phone given (or a linked staff member): enough for the main menu (design code and requests need nothing more)."""
     u = db.get_user(user_id) or {}
-    return bool(u.get("full_name") and u.get("phone"))
+    return bool(u.get("full_name") and u.get("phone")) or db.staff_by_user(user_id) is not None
 
 
 def has_access(user_id: int) -> bool:
@@ -136,7 +136,12 @@ def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
     # Telegram opens Mini Apps over https only; a plain link keeps a local http setup usable for testing
     open_btn = (InlineKeyboardButton(text=t(L, "btn_objects"), web_app=WebAppInfo(url=f"{WEBAPP_URL}?lang={L}"))
                 if WEBAPP_URL.startswith("https://") else InlineKeyboardButton(text=t(L, "btn_objects"), url=WEBAPP_URL))
-    kb = InlineKeyboardMarkup(inline_keyboard=[[open_btn], [InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")]])
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [open_btn],
+        [InlineKeyboardButton(text=t(L, "btn_design"), callback_data="pick:design"),
+         InlineKeyboardButton(text=t(L, "btn_feedback"), callback_data="pick:feedback")],
+        [InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")],
+    ])
     return text, kb
 
 
@@ -182,6 +187,8 @@ async def register(m: Message):
         if s == "done":  # the heal in step() just completed a registration that had lost its last write
             return await finish(m)
         if s in ("lang", "consent", "choice"):  # these steps are answered with buttons, not text
+            if s == "choice" and m.contact and m.contact.user_id == uid:  # the staff confirmation answered with another number
+                await m.answer(t(L, "staff_not_found"), reply_markup=ReplyKeyboardRemove())
             return await prompt(m.bot, m.chat.id, uid)
         if s == "name":
             name = " ".join((m.text or "").split())
@@ -243,4 +250,7 @@ async def fallback(m: Message):
     again instead of silence."""
     if not m.from_user:
         return
+    if m.contact and m.contact.user_id == m.from_user.id and not db.staff_by_user(m.from_user.id):
+        # answered the staff confirmation with a number that is not on the list (StaffContact took the ones that are)
+        await m.answer(t(i18n.lang(m.from_user.id), "staff_not_found"), reply_markup=ReplyKeyboardRemove())
     await send_choice(m.bot, m.chat.id, None, m.from_user.id)

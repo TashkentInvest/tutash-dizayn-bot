@@ -139,16 +139,22 @@ TEXTS: dict[str, tuple[str, str]] = {
 
     # district staff
     "staff_menu": (
-        "👷 Tuman xodimi: <b>{}</b>\n{}\n\nObyektlar: <b>{}</b>\n🔧 Yechildi (jarayonda): <b>{}</b>\n"
-        "✅ Dizayn-kod bo‘yicha qo‘yildi: <b>{}</b>\n⏳ Tekshiruvda: <b>{}</b>\n\nObyektlar bilan ishlash uchun pastdagi tugmani bosing.",
-        "👷 Сотрудник района: <b>{}</b>\n{}\n\nОбъектов: <b>{}</b>\n🔧 Снято (в процессе): <b>{}</b>\n"
-        "✅ Установлено по дизайн-коду: <b>{}</b>\n⏳ На проверке: <b>{}</b>\n\nДля работы с объектами нажмите кнопку ниже.",
+        "👷 Tuman xodimi: <b>{}</b>\n{}\n\nJami obyekt: <b>{}</b>\n🔧 Yechildi: <b>{}</b>\n"
+        "✅ Qo‘yildi: <b>{}</b>\n⏳ Jarayonda (tasdiq kutmoqda): <b>{}</b>\n\nObyektlar bilan ishlash uchun pastdagi tugmani bosing.",
+        "👷 Сотрудник района: <b>{}</b>\n{}\n\nВсего объектов: <b>{}</b>\n🔧 Снято: <b>{}</b>\n"
+        "✅ Установлено: <b>{}</b>\n⏳ В процессе (ждёт проверки): <b>{}</b>\n\nДля работы с объектами нажмите кнопку ниже.",
     ),
     "btn_objects": ("📋 Obyektlarni ochish", "📋 Открыть объекты"),
     "btn_refresh": ("🔄 Yangilash", "🔄 Обновить"),
     "staff_confirm": (
         "Siz tuman xodimlari ro‘yxatidasiz. Tasdiqlash uchun pastdagi tugma orqali raqamingizni yuboring.",
         "Вы есть в списке сотрудников района. Для подтверждения отправьте свой номер кнопкой ниже.",
+    ),
+    "staff_not_found": (
+        "Bu raqam tuman xodimlari ro‘yxatida yo‘q. Xodim bo‘lsangiz, administratorga Telegram raqamingizni ayting — "
+        "u sizni dashboard’da bog‘lab qo‘yadi. Hozircha umumiy menyu:",
+        "Этого номера нет в списке сотрудников района. Если вы сотрудник, сообщите администратору свой номер в Telegram — "
+        "он привяжет вас в панели. Пока — общее меню:",
     ),
     "staff_linked": ("✅ Xodim sifatida tasdiqlandingiz.", "✅ Вы подтверждены как сотрудник."),
 

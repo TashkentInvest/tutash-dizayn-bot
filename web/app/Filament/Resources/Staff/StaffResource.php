@@ -89,8 +89,15 @@ class StaffResource extends Resource
                 TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->description(fn (Staff $s) => $s->streets_note),
                 TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable()->copyable(),
                 TextColumn::make('district.name')->label('Tuman')->sortable(),
-                IconColumn::make('linked')->label('Botda tasdiqlangan')->boolean()->state(fn (Staff $s) => $s->user_id !== null)
-                    ->tooltip(fn (Staff $s) => $s->user_id ? 'Telegram ID: '.$s->user_id : 'Hali bog‘lanmagan: xodim botda raqamini tasdiqlasin yoki “Botga bog‘lash” tugmasi bilan admin bog‘lasin'),
+                TextColumn::make('bot_state')->label('Botda')->badge()
+                    ->state(fn (Staff $s) => $s->botState())
+                    ->formatStateUsing(fn (string $state) => ['linked' => 'Tasdiqlangan', 'waiting' => 'Botda bor, tasdiqlamagan', 'absent' => 'Botga kirmagan'][$state])
+                    ->color(fn (string $state) => ['linked' => 'success', 'waiting' => 'warning', 'absent' => 'gray'][$state])
+                    ->tooltip(fn (Staff $s) => match ($s->botState()) {
+                        'linked' => 'Telegram ID: '.$s->user_id,
+                        'waiting' => 'Shu raqam bilan botga kirgan. /start bosib, raqamni “Raqamni yuborish” tugmasi bilan yuborsin — yoki “Botga bog‘lash”.',
+                        default => 'Bu raqam bilan botga hali hech kim kirmagan: @DizaynKodBot da /start bossin.',
+                    }),
                 TextColumn::make('sent_count')->label('Yuborgan dalillar'),
                 TextColumn::make('approved_count')->label('Tasdiqlangan'),
                 // one click used to switch a person off mid-task: now it asks first and says what happens
