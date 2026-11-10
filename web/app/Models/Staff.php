@@ -35,6 +35,12 @@ class Staff extends Model
         return $this->hasMany(Inspection::class, 'staff_id');
     }
 
+    /** businesses this staff member entered in the Mini App */
+    public function createdObjects(): HasMany
+    {
+        return $this->hasMany(DesignObject::class, 'created_by');
+    }
+
     public function botUser(): BelongsTo
     {
         return $this->belongsTo(BotUser::class, 'user_id', 'user_id');

@@ -48,6 +48,9 @@ class FileResource extends Resource
 
     private const SAME_STREET = '(select count(*) from street_files f4 where f4.street_id = street_files.street_id)';
 
+    // reached from the streets page header (fewer menu items)
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function canCreate(): bool
     {
         return false;

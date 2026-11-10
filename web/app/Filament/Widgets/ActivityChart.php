@@ -6,15 +6,16 @@ use App\Services\BotStats;
 use Carbon\Carbon;
 use Filament\Widgets\ChartWidget;
 
+/** Daily activity of citizens and district staff on one time axis. */
 class ActivityChart extends ChartWidget
 {
-    protected ?string $pollingInterval = '60s';
+    protected ?string $pollingInterval = '120s';
 
-    protected static ?int $sort = 3;
+    protected static ?int $sort = 2;
 
     protected ?string $heading = 'Kunlik faollik';
 
-    protected int|string|array $columnSpan = 'full';
+    protected ?string $maxHeight = '280px';
 
     public ?string $filter = '30';
 
@@ -32,14 +33,29 @@ class ActivityChart extends ChartWidget
     {
         $days = (int) $this->filter;
         $downloads = BotStats::downloadsPerDay($days);
-        $registrations = BotStats::registrationsPerDay($days);
+        $line = fn (string $label, $series, string $color, bool $fill = false) => [
+            'label' => $label, 'data' => $series->values()->all(), 'borderColor' => $color, 'backgroundColor' => $color.'26',
+            'fill' => $fill, 'tension' => 0.3, 'pointRadius' => 0, 'borderWidth' => 2,
+        ];
 
         return [
             'datasets' => [
-                ['label' => 'Yuklab olishlar', 'data' => $downloads->values()->all(), 'borderColor' => '#f59e0b', 'backgroundColor' => '#f59e0b33', 'fill' => true],
-                ['label' => 'Ro‘yxatdan o‘tganlar', 'data' => $registrations->values()->all(), 'borderColor' => '#3b82f6'],
+                $line('Yuklab olishlar', $downloads, '#f59e0b', true),
+                $line('Yangi foydalanuvchilar', BotStats::newUsersPerDay($days), '#3b82f6'),
+                $line('Murojaatlar', BotStats::feedbackPerDay($days), '#ef4444'),
+                $line('Kiritilgan tadbirkorlar', BotStats::objectsPerDay($days), '#10b981'),
+                $line('Xodim dalillari', BotStats::inspectionsPerDay($days), '#8b5cf6'),
             ],
             'labels' => $downloads->keys()->map(fn ($d) => Carbon::parse($d)->format('d.m'))->all(),
+        ];
+    }
+
+    protected function getOptions(): array
+    {
+        return [
+            'plugins' => ['legend' => ['position' => 'bottom', 'labels' => ['boxWidth' => 10, 'usePointStyle' => true]]],
+            'interaction' => ['mode' => 'index', 'intersect' => false],
+            'scales' => ['y' => ['beginAtZero' => true, 'ticks' => ['precision' => 0]]],
         ];
     }
 }

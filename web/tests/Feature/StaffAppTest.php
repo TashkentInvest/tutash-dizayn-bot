@@ -336,4 +336,27 @@ class StaffAppTest extends TestCase
         $this->assertSame(1, $street['installed']);
         $this->assertSame(0, collect(Svod::byDistrict($day->copy()->subDay())['rows'])->firstWhere('id', $this->district)['day_installed']);
     }
+
+    public function test_dashboard_widgets_render_with_todays_work(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email], 'cache.default' => 'array']);
+        $this->actingAs($admin);
+        $this->sendEvidence('removed');
+        DB::connection('bot')->table('feedback')->insert(['user_id' => 555001, 'level' => 'high', 'text' => 'Ko‘chada yoritish yo‘q']);
+
+        $w = \App\Services\BotStats::work();
+        $this->assertSame([1, 1, 1, 3], [$w['staff_linked'], $w['review'], $w['evidence_today'], $w['planned']]);
+        $this->assertGreaterThanOrEqual(1, $w['feedback_open']);
+
+        Livewire::test(\App\Filament\Widgets\StatsOverview::class)->assertSee('Dalillar tasdiq kutmoqda')->assertSee('1 / 1');
+        Livewire::test(\App\Filament\Widgets\ActivityChart::class)->assertOk();
+        Livewire::test(\App\Filament\Widgets\DesignCodeProgressChart::class)->assertOk();
+        Livewire::test(\App\Filament\Widgets\StaffActivity::class)->assertCanSeeTableRecords([$this->staff])->assertSee('Test Xodim');
+        Livewire::test(\App\Filament\Widgets\PendingWork::class)->assertSee('Ko‘chada yoritish yo‘q')->assertSee('Market 24');
+        Livewire::test(\App\Filament\Widgets\TopDistricts::class)->assertOk();
+        Livewire::test(\App\Filament\Widgets\TopStreets::class)->assertOk();
+        $this->get('/admin')->assertOk()->assertSee('Bosh sahifa');
+        $this->get(\App\Filament\Resources\Streets\StreetResource::getUrl('index'))->assertOk()->assertSee('Barcha fayllar / dublikatlar');
+    }
 }

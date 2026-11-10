@@ -13,11 +13,9 @@ class TopStreets extends TableWidget
 {
     use FiltersByPeriod;
 
-    protected static ?int $sort = 4;
+    protected static ?int $sort = 7;
 
     protected static ?string $heading = 'Eng ko‘p yuklab olingan ko‘chalar';
-
-    protected int|string|array $columnSpan = 'full';
 
     public function table(Table $table): Table
     {
@@ -29,7 +27,7 @@ class TopStreets extends TableWidget
             )
             ->defaultSort('total', 'desc')
             ->defaultKeySort(false) // grouped rows: PostgreSQL refuses an ORDER BY on a column that is not grouped
-            ->paginated([10, 25])
+            ->paginated([8, 25])->defaultPaginationPageOption(8)
             ->filters([
                 self::periodFilter(),
                 SelectFilter::make('district')->label('Tuman')

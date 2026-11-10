@@ -18,11 +18,9 @@ class TopDistricts extends TableWidget
 
     public const DESIGN_CODE = 'Дизайн-код';
 
-    protected static ?int $sort = 2;
+    protected static ?int $sort = 6;
 
-    protected static ?string $heading = 'Tumanlar reytingi: qaysi tuman fayllari ko‘p yuklab olinmoqda';
-
-    protected int|string|array $columnSpan = 'full';
+    protected static ?string $heading = 'Tumanlar reytingi (yuklab olishlar)';
 
     public function table(Table $table): Table
     {
