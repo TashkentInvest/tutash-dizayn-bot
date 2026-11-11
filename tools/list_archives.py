@@ -1,4 +1,4 @@
-import subprocess, glob, json, sys, os
+import subprocess, glob, json, sys
 sys.stdout.reconfigure(encoding="utf-8")
 Z = r"C:\Program Files\7-Zip\7z.exe"
 out = {}

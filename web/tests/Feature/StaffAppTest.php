@@ -52,7 +52,7 @@ class StaffAppTest extends TestCase
         $this->tmp = storage_path('framework/testing/staff-'.uniqid());
         File::makeDirectory($this->tmp.'/data', 0777, true);
         File::makeDirectory($this->tmp.'/uploads', 0777, true);
-        copy(base_path('../bot.db'), $this->tmp.'/bot.db');
+        copy(base_path('../tests/fixtures/bot.sqlite'), $this->tmp.'/bot.db');
         config([
             'database.connections.bot.database' => $this->tmp.'/bot.db',
             'filesystems.disks.bot_data.root' => $this->tmp.'/data',

@@ -1,9 +1,9 @@
 import sys, asyncio
 sys.path.insert(0, r"D:\Projects\Tutash_bot")
 sys.stdout.reconfigure(encoding="utf-8")
-from bot import catalog, db
+from bot import catalog
 from bot.config import BOT_TOKEN
-from bot.main import districts_kb, streets_kb
+from bot.main import streets_kb
 from aiogram import Bot
 ds = catalog.districts()
 print(len(ds), [d.name for d in ds][:3])

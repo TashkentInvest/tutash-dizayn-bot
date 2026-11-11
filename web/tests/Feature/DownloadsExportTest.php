@@ -26,7 +26,7 @@ class DownloadsExportTest extends TestCase
         parent::setUp();
         $this->tmp = storage_path('framework/testing/export-'.uniqid());
         File::makeDirectory($this->tmp, 0777, true);
-        copy(base_path('../bot.db'), $this->tmp.'/bot.db');
+        copy(base_path('../tests/fixtures/bot.sqlite'), $this->tmp.'/bot.db');
         config(['database.connections.bot.database' => $this->tmp.'/bot.db']);
         DB::purge('bot');
 

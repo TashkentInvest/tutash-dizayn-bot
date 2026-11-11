@@ -71,7 +71,7 @@ $check('approve: object installed + outbox row', InspectionReview::approve($i, '
 $check('svod counts the approval', DesignCodeSvod::byDistrict(DesignCodeSvod::reportDay())['total']['day_installed'] >= 1);
 // the Mini App's own write lock (not a copy of its SQL): every staff write goes through it
 $locked = new ReflectionMethod(App\Http\Controllers\StaffAppController::class, 'locked');
-$r = $locked->invoke(app(App\Http\Controllers\StaffAppController::class), fn () => response()->json(['ok' => true]));
+$r = $locked->invoke(app(App\Http\Controllers\StaffAppController::class), 'staff:smoke', fn () => response()->json(['ok' => true]));
 $check('Mini App write lock', $r->getData(true)['ok'] === true);
 $check('kv lock statement', true);
 $check('feedback list', Feedback::query()->with('user')->latest('created_at')->limit(5)->get() !== null);

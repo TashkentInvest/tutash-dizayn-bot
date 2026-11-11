@@ -7,8 +7,8 @@
 <script src="https://telegram.org/js/telegram-web-app.js?57"></script>
 <script src="/tg/location.js?v={{ $version }}"></script>
 {{-- the map step (the object's place): Leaflet + OpenStreetMap tiles --}}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<script src="/vendor/leaflet/leaflet.js"></script>
 <style>
   :root { --bg: var(--tg-theme-bg-color, #fff); --text: var(--tg-theme-text-color, #111); --hint: var(--tg-theme-hint-color, #888);
     --link: var(--tg-theme-link-color, #2481cc); --btn: var(--tg-theme-button-color, #2481cc); --btn-text: var(--tg-theme-button-text-color, #fff);
@@ -427,7 +427,7 @@
         if (window.L) return stepPoint(bar, draft, next);
         busy(retry, function () {
           return new Promise(function (ok, bad) {  // fetch Leaflet again (the first load failed)
-            var sc = document.createElement('script'); sc.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+            var sc = document.createElement('script'); sc.src = '/vendor/leaflet/leaflet.js';
             sc.onload = ok; sc.onerror = function () { bad({ error: t('mapErr') }); }; document.head.appendChild(sc);
           }).then(function () { stepPoint(bar, draft, next); });
         });

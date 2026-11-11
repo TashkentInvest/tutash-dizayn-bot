@@ -233,7 +233,8 @@ class StaffAppController extends Controller
             return $resp;
         }
 
-        return $this->locked(function () use ($r, $street, $data, $at) {
+        // per street: two staff adding the same business at once still get one
+        return $this->locked('street:'.$street->id, function () use ($r, $street, $data, $at) {
             // pressed twice / sent again: the same name on the same street is the same business
             $same = DesignObject::query()->active()->where('street_id', $street->id)
                 ->whereRaw('LOWER(TRIM(shop_name)) = ?', [mb_strtolower(trim($data['shop_name']))])->first();
@@ -311,7 +312,7 @@ class StaffAppController extends Controller
         $data = $r->validate(['kind' => ['required', 'in:removed,installed'], 'discard_other' => ['sometimes', 'boolean']]);
         $staff = $this->staff($r);
 
-        return $this->locked(function () use ($r, $object, $staff, $data) {
+        return $this->locked('staff:'.$staff->id, function () use ($r, $object, $staff, $data) {
             if ($object->inspections()->where('review', Inspection::PENDING)->exists()) {
                 return $this->fail($r, 'in_review', 409);
             }
@@ -457,7 +458,7 @@ class StaffAppController extends Controller
             return $this->fail($r, 'not_yours', 403);
         }
 
-        return $this->locked(function () use ($inspection) {
+        return $this->locked('staff:'.$inspection->staff_id, function () use ($inspection) {
             $i = Inspection::query()->find($inspection->id);
             if ($i && $i->isDraft()) {
                 $this->discardDraft($i);
@@ -494,7 +495,7 @@ class StaffAppController extends Controller
             return $this->fail($r, 'not_yours', 403);
         }
 
-        return $this->locked(function () use ($r, $inspection, $step, $do, $okKey) {
+        return $this->locked('staff:'.$inspection->staff_id, function () use ($r, $inspection, $step, $do, $okKey) {
             $i = Inspection::query()->findOrFail($inspection->id);
             $at = array_search($i->step, Inspection::STEPS, true);
             $want = array_search($step, Inspection::STEPS, true);
@@ -512,11 +513,22 @@ class StaffAppController extends Controller
         });
     }
 
-    /** SQLite has no row locks: a first write takes the database write lock, so two presses run one after the other. */
-    private function locked(callable $fn): JsonResponse
+    /**
+     * Runs $fn in a transaction that holds a lock named $key: one staff member's double presses (or two staff adding a
+     * business to one street) run one after the other, while different staff never wait for each other.
+     * PostgreSQL: a transaction-level advisory lock. SQLite (tests, local) has no such lock: the first write takes the
+     * whole database, which serialises too.
+     */
+    private function locked(string $key, callable $fn): JsonResponse
     {
-        return DB::connection('bot')->transaction(function () use ($fn) {
-            DB::connection('bot')->statement("INSERT INTO kv (key, value) VALUES ('__lock', 0) ON CONFLICT(key) DO UPDATE SET value = kv.value + 1");
+        $db = DB::connection('bot');
+
+        return $db->transaction(function () use ($db, $key, $fn) {
+            if ($db->getDriverName() === 'pgsql') {
+                $db->select('SELECT pg_advisory_xact_lock(hashtext(?))', ['tg:'.$key]);
+            } else {
+                $db->statement("INSERT INTO kv (key, value) VALUES ('__lock', 0) ON CONFLICT(key) DO UPDATE SET value = kv.value + 1");
+            }
 
             return $fn();
         }, 3);

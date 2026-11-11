@@ -1,5 +1,5 @@
 <x-filament-panels::page>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
     <style>
         .omap-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; }
         .omap-bar select { border: 1px solid rgba(127, 127, 127, .4); border-radius: 8px; padding: 6px 10px; background: transparent; color: inherit; }
@@ -38,7 +38,7 @@
 
     <div wire:ignore><div id="omap"></div></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/vendor/leaflet/leaflet.js"></script>
     <script>
         (function () {
             var data = @json($mapData);

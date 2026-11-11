@@ -39,7 +39,7 @@ class CatalogCrudTest extends TestCase
 
         $this->tmp = storage_path('framework/testing/catalog-'.uniqid());
         File::makeDirectory($this->tmp.'/data', 0777, true);
-        copy(base_path('../bot.db'), $this->tmp.'/bot.db');
+        copy(base_path('../tests/fixtures/bot.sqlite'), $this->tmp.'/bot.db');
 
         config(['database.connections.bot.database' => $this->tmp.'/bot.db']);
         DB::purge('bot');
@@ -183,7 +183,10 @@ class CatalogCrudTest extends TestCase
         $this->get('/admin/districts')->assertForbidden();
         $file = StreetFile::firstOrFail();
         $this->get(route('bot-file', $file))->assertForbidden();
-        $this->get(route('bot-photo', 1))->assertForbidden();
+        // a photo that exists (the sample database has no people): forbidden, not "not found"
+        $photo = \Illuminate\Support\Facades\DB::connection('bot')->table('user_photos')
+            ->insertGetId(['user_id' => 900001, 'file_id' => 'f', 'file_unique_id' => 'u', 'path' => '900001/1.jpg']);
+        $this->get(route('bot-photo', $photo))->assertForbidden();
 
         $this->actingAs($this->admin);
         $this->get('/admin')->assertOk();

@@ -4,7 +4,14 @@ from types import SimpleNamespace as NS
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 tmp = tempfile.mkdtemp()
-shutil.copy(os.path.join(ROOT, "bot.db"), os.path.join(tmp, "bot.db"))
+# a sample catalog, no people (tools/make_test_db.py); the street files are made in a temporary data folder
+shutil.copy(os.path.join(ROOT, "tests", "fixtures", "bot.sqlite"), os.path.join(tmp, "bot.db"))
+os.environ["DATA_DIR"] = os.path.join(tmp, "data")
+import sqlite3 as _sq
+for (_path,) in _sq.connect(os.path.join(tmp, "bot.db")).execute("SELECT path FROM street_files"):
+    _f = os.path.join(tmp, "data", *_path.split("/"))
+    os.makedirs(os.path.dirname(_f), exist_ok=True)
+    open(_f, "wb").write(b"%PDF-1.4 test file\n")
 os.environ.update(DB_PATH=os.path.join(tmp, "bot.db"), UPLOADS_DIR=os.path.join(tmp, "uploads"), LINK_SECRET="test-secret", LINK_TTL_HOURS="1", REQUIRE_APPROVAL="1")
 sys.path.insert(0, ROOT)
 sys.stdout.reconfigure(encoding="utf-8")
