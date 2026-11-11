@@ -71,8 +71,12 @@
                             '<br>' + statusName[o.status] + (o.exact ? '' : ' · <i>qo‘shilgan joyi</i>') + '<br><a href="' + esc(o.url) + '">Obyektni ochish →</a>')
                         .addTo(points);
                 });
-                var all = L.featureGroup([streets, points]);
-                if (all.getLayers().length && all.getBounds().isValid()) map.fitBounds(all.getBounds(), { padding: [30, 30], maxZoom: 16 });
+                // an empty group has no bounds and would spoil the union: add only the groups that have something
+                var b = null;
+                [streets, points].forEach(function (g) {
+                    if (g.getLayers().length) { var gb = g.getBounds(); if (gb.isValid()) b = b ? b.extend(gb) : L.latLngBounds(gb.getSouthWest(), gb.getNorthEast()); }
+                });
+                if (b) map.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
             }
             document.getElementById('omap-district').addEventListener('change', function (e) { draw(+e.target.value || 0); });
             draw(0);
