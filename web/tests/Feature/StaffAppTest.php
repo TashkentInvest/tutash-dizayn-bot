@@ -568,7 +568,7 @@ class StaffAppTest extends TestCase
 
         $html = $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->assertOk()
             ->assertSee('Dizayn-kod xaritasi')->assertSee('Butun shahar')->getContent();
-        $this->assertStringContainsString('[[41.31,69.27],[41.32,69.28]]', $html);   // the street's line
+        $this->assertStringContainsString('[[41.31,69.27],[41.32,69.28]]', $html);   // the street's start and end
         $this->assertStringContainsString('"at":[41.315,69.275]', $html);            // the object's point
         $this->assertStringContainsString('Market 24', $html);
     }
