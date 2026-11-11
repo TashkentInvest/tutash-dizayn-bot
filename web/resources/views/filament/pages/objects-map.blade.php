@@ -62,8 +62,13 @@
                     // start and end as small dots, so a short street is still visible from far away
                     s.line.forEach(function (p) { L.circleMarker(p, { radius: 3, color: streetColor(s), weight: 2, fillOpacity: 1 }).addTo(streets); });
                     line.bindTooltip(esc(s.name), { sticky: true });
+                    // the coordinates exactly as the official list gives them; a click flies to that end of the street
+                    var at = function (p, label) {
+                        return '<br>' + label + ': <a href="#" data-fly="' + p[0] + ',' + p[1] + '"><code>' + p[0].toFixed(6) + ', ' + p[1].toFixed(6) + '</code></a>';
+                    };
                     line.bindPopup('<b>' + esc(s.name) + '</b><br>' + esc(s.district) + '<br>Jami obyekt: <b>' + s.total + '</b> · Yechildi: ' + s.removed +
-                        ' · Qo‘yildi: ' + s.installed + '<br>Bajarilish: <b>' + String(s.pct).replace('.', ',') + '%</b>');
+                        ' · Qo‘yildi: ' + s.installed + '<br>Bajarilish: <b>' + String(s.pct).replace('.', ',') + '%</b>' +
+                        at(s.line[0], 'Дан (boshlanishi)') + at(s.line[1], 'Гача (tugashi)'));
                 });
                 data.objects.filter(function (o) { return !district || o.district_id === district; }).forEach(function (o) {
                     L.circleMarker(o.at, { radius: 7, color: '#fff', weight: 2, fillColor: pointColor[o.status] || '#64748b', fillOpacity: 1 })
@@ -78,6 +83,14 @@
                 });
                 if (b) map.fitBounds(b, { padding: [30, 30], maxZoom: 16 });
             }
+            map.getContainer().addEventListener('click', function (e) {
+                var a = e.target.closest && e.target.closest('[data-fly]');
+                if (!a) return;
+                e.preventDefault();
+                var p = a.dataset.fly.split(',').map(Number);
+                map.flyTo(p, 17);
+                L.circleMarker(p, { radius: 9, color: '#dc2626', weight: 3, fillOpacity: 0 }).addTo(streets);  // where the coordinate is
+            });
             document.getElementById('omap-district').addEventListener('change', function (e) { draw(+e.target.value || 0); });
             draw(0);
             setTimeout(function () { map.invalidateSize(); }, 300);
