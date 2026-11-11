@@ -153,6 +153,11 @@ async def consent_flow():
     await press("pick:design")
     check("menu is closed before name and phone", sends == [] and reg.step(uid) == "name")
     sent.clear(); await say("Тестов Тест Тестович"); await say("+998 90 123 45 67")
+    check("a typed phone number is refused: the contact button is asked for", t("uz", "phone_button") in texts() and reg.step(uid) == "phone")
+    n[0] += 1
+    await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "message": {"message_id": n[0], "date": 0,
+        "chat": {"id": uid, "type": "private"}, "from": {"id": uid, "is_bot": False, "first_name": "N"},
+        "contact": {"phone_number": "998901234567", "first_name": "N", "user_id": uid}}}))
     check("after the phone the bot asks for the section (in Uzbek)", reg.step(uid) == "choice" and t("uz", "choice") in texts())
     sent.clear(); await say("bir matn")
     check("text at the choice step repeats the choice", t("uz", "choice") in texts())
@@ -236,7 +241,7 @@ async def consent_flow():
     w = 636363
     await say("/start", w); await press("lang:uz", w); await press("consent", w); await say("Yozuvchi Xodim Test", w)
     sent.clear(); await say("+998 90 111 00 01", w)
-    check("typed staff number -> contact button asked, phone not taken", t("uz", "staff_confirm") in texts()
+    check("typed staff number -> contact button asked, phone not taken", t("uz", "phone_button") in texts()
           and not (db.get_user(w) or {}).get("phone") and reg.step(w) == "phone")
     n[0] += 1
     other = {"update_id": n[0], "message": {"message_id": n[0], "date": 0, "chat": {"id": w, "type": "private"},

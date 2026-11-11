@@ -33,13 +33,17 @@ TEXTS: dict[str, tuple[str, str]] = {
         "Пожалуйста, введите Ф.И.О. полностью (не менее 2 слов), например: Каримов Алишер Равшанович",
     ),
     "phone": (
-        "2/4. Telefon raqamingizni kiriting: +998 (--) --- -- --\nYoki pastdagi tugma orqali yuboring.",
-        "2/4. Введите номер телефона: +998 (--) --- -- --\nИли отправьте его кнопкой ниже.",
+        "2/4. Telefon raqamingizni pastdagi «📱 Raqamni yuborish» tugmasi orqali yuboring.",
+        "2/4. Отправьте свой номер телефона кнопкой «📱 Отправить номер» ниже.",
     ),
-    "phone_bad": ("Raqam noto‘g‘ri. Namuna: +998 (90) 123 45 67", "Неверный номер. Пример: +998 (90) 123 45 67"),
+    "phone_bad": ("Faqat O‘zbekiston raqami (+998) qabul qilinadi.", "Принимается только номер Узбекистана (+998)."),
+    "phone_button": (
+        "Raqamni qo‘lda yozib bo‘lmaydi. Pastdagi «📱 Raqamni yuborish» tugmasini bosing.",
+        "Номер нельзя ввести вручную. Нажмите кнопку «📱 Отправить номер» ниже.",
+    ),
     "contact_not_own": (
-        "Bu sizning kontaktingiz emas. O‘z raqamingizni tugma orqali yuboring yoki qo‘lda kiriting.",
-        "Это не ваш контакт. Отправьте свой номер кнопкой или введите вручную.",
+        "Bu sizning kontaktingiz emas. Pastdagi tugma orqali o‘z raqamingizni yuboring.",
+        "Это не ваш контакт. Отправьте свой номер кнопкой ниже.",
     ),
     "btn_contact": ("📱 Raqamni yuborish", "📱 Отправить номер"),
     "thanks": ("Rahmat!", "Спасибо!"),

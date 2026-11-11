@@ -196,17 +196,15 @@ async def register(m: Message):
                 return await m.answer(t(L, "name_bad"))
             db.update_user(uid, full_name=name)
         elif s == "phone":
-            if m.contact and m.contact.user_id != uid:
-                return await m.answer(t(L, "contact_not_own"))
-            raw = m.contact.phone_number if m.contact else (m.text or "")
-            phone = normalize_phone(raw)
+            # only the person's own number, sent with Telegram's contact button: a typed number proves nothing
+            contact_kb = _kb([[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]])
+            if not m.contact:
+                return await m.answer(t(L, "phone_button"), reply_markup=contact_kb)
+            if m.contact.user_id != uid or m.forward_origin:
+                return await m.answer(t(L, "contact_not_own"), reply_markup=contact_kb)
+            phone = normalize_phone(m.contact.phone_number or "")
             if not phone:
-                return await m.answer(t(L, "phone_bad"))
-            if not m.contact and db.staff_by_phone(phone):
-                # a district staff number typed by hand: only Telegram's contact button proves it is theirs (and links them)
-                kb = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]],
-                                         resize_keyboard=True, one_time_keyboard=True)
-                return await m.answer(t(L, "staff_confirm"), reply_markup=kb)
+                return await m.answer(t(L, "phone_bad"), reply_markup=ReplyKeyboardRemove())
             db.update_user(uid, phone=phone)
             await m.answer(t(L, "thanks"), reply_markup=ReplyKeyboardRemove())  # the choice comes with inline buttons
         elif s == "location":
