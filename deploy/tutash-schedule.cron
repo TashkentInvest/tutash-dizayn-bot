@@ -1,0 +1,3 @@
+# Laravel scheduler (routes/console.php): the hourly / 18:00 reports. Install: cp deploy/tutash-schedule.cron /etc/cron.d/tutash-schedule
+# Runs as www-data: the report pictures are written where the dashboard writes them (the bot reads them through the group).
+* * * * * www-data cd /srv/tutash/web && php artisan schedule:run >> /dev/null 2>&1

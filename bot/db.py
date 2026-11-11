@@ -152,6 +152,15 @@ CREATE INDEX IF NOT EXISTS idx_inspections_object ON inspections(object_id);
 CREATE INDEX IF NOT EXISTS idx_inspections_review ON inspections(review);
 CREATE INDEX IF NOT EXISTS idx_inspections_staff ON inspections(staff_id);
 -- Messages the dashboard wants delivered (review results to staff); the bot sends them.
+-- a staff member's working day in the Mini App (the attendance report): first and last request of the day (Tashkent date)
+CREATE TABLE IF NOT EXISTS staff_days (
+    staff_id INTEGER NOT NULL,
+    day      TEXT NOT NULL,
+    first_at TEXT NOT NULL,
+    last_at  TEXT NOT NULL,
+    hits     INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (staff_id, day)
+);
 -- who gets the design-code report pictures the dashboard sends (people who started the bot)
 CREATE TABLE IF NOT EXISTS report_recipients (
     user_id    INTEGER PRIMARY KEY,
@@ -368,6 +377,9 @@ def _added_columns():
                          "end_lat": "REAL", "end_lon": "REAL"}),
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
             ("outbox", {"photo": "TEXT"}),  # a picture (path under UPLOADS_DIR) sent with the text as its caption
+            # which scheduled reports a recipient gets (Sozlamalar): the svod pictures and the attendance at 18:00, hourly status
+            ("report_recipients", {"daily_report": "BOOLEAN NOT NULL DEFAULT TRUE", "attendance_report": "BOOLEAN NOT NULL DEFAULT TRUE",
+                                   "hourly_report": "BOOLEAN NOT NULL DEFAULT FALSE"}),
             # where the staff member stood when adding the business, and the address found there (Mini App "find my place")
             ("objects", {"address": "TEXT", "found_lat": "REAL", "found_lon": "REAL"}))  # a picture (path under UPLOADS_DIR) sent with the text as its caption
 

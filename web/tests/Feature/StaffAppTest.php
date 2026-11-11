@@ -572,4 +572,41 @@ class StaffAppTest extends TestCase
         $this->assertStringContainsString('"at":[41.315,69.275]', $html);            // the object's point
         $this->assertStringContainsString('Market 24', $html);
     }
+
+    public function test_scheduled_reports_go_to_who_wants_them_with_attendance(): void
+    {
+        $db = DB::connection('bot');
+        $db->table('outbox')->delete();
+        // the staff member opens the Mini App: today's working day is written
+        $this->getJson('/tg/api/me', $this->headers())->assertOk();
+        $today = now(config('app.display_timezone'))->toDateString();
+        $this->assertSame(1, $db->table('staff_days')->where('staff_id', $this->staff->id)->where('day', $today)->count());
+        $this->sendEvidence('removed');
+
+        $db->table('users')->insertOrIgnore([['user_id' => 777101, 'first_name' => 'A'], ['user_id' => 777102, 'first_name' => 'B']]);
+        \App\Models\ReportRecipient::create(['user_id' => 777101, 'hourly_report' => true, 'daily_report' => false, 'attendance_report' => true]);
+        \App\Models\ReportRecipient::create(['user_id' => 777102, 'hourly_report' => false, 'daily_report' => true, 'attendance_report' => false]);
+        $other = Staff::create(['full_name' => 'Ishlamagan', 'phone' => '+998901110099', 'district_id' => $this->otherDistrict, 'is_active' => true]);
+
+        $this->assertSame(1, \App\Services\ScheduledReports::send('hourly'));
+        $this->assertStringContainsString('Ishlayotgan xodimlar: 1 / 2', $db->table('outbox')->where('user_id', 777101)->value('text'));
+
+        // 18:00 at the end of the current report day (after 18:00 today that is tomorrow's 18:00)
+        $at = Svod::reportDay()->copy()->setTime(18, 0);
+        \App\Services\ScheduledReports::send('attendance', $at);
+        $text = $db->table('outbox')->where('user_id', 777101)->orderByDesc('id')->value('text');
+        $this->assertStringContainsString('Ishlagan: 1 / 2', $text);
+        $this->assertStringContainsString('✅ Test Xodim', $text);
+        $this->assertStringContainsString('dalil: 1', $text);
+        $this->assertStringContainsString('❌ Ishlamagan', $text);
+        $this->assertSame(0, $db->table('outbox')->where('user_id', 777102)->count(), 'not who asked for hourly / attendance');
+
+        \App\Services\ScheduledReports::send('daily', $at);
+        $this->assertSame(2, $db->table('outbox')->where('user_id', 777102)->whereNotNull('photo')->count());   // svod + bajarilish
+        $this->assertSame(0, $db->table('outbox')->where('user_id', 777101)->whereNotNull('photo')->count());
+
+        $this->artisan('reports:send', ['type' => 'hourly'])->assertSuccessful();
+        $this->artisan('reports:send', ['type' => 'nope'])->assertFailed();
+        $other->delete();
+    }
 }

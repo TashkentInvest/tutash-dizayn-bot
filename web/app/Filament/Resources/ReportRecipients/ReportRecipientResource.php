@@ -12,6 +12,8 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Tables\Columns\ToggleColumn;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -28,13 +30,13 @@ class ReportRecipientResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPaperAirplane;
 
-    protected static string|\UnitEnum|null $navigationGroup = NavGroups::STAFF;
+    protected static string|\UnitEnum|null $navigationGroup = NavGroups::SETTINGS;
 
     protected static ?string $modelLabel = 'hisobot oluvchi';
 
     protected static ?string $pluralModelLabel = 'Hisobot oluvchilar';
 
-    protected static ?string $navigationLabel = 'Hisobot oluvchilar';
+    protected static ?string $navigationLabel = 'Hisobotlar: kimga, qachon';
 
     protected static ?string $slug = 'hisobot-oluvchilar';
 
@@ -54,6 +56,11 @@ class ReportRecipientResource extends Resource
                 ->getOptionLabelUsing(fn ($value) => ($u = BotUser::find($value)) ? self::who($u) : (string) $value)
                 ->disabledOn('edit'),
             TextInput::make('label')->label('Lavozimi / izoh')->placeholder('masalan: rahbar, admin, tuman hokimligi')->maxLength(80),
+            \Filament\Schemas\Components\Fieldset::make('Qaysi hisobotlarni oladi')->columns(1)->schema([
+                Toggle::make('hourly_report')->label('Soatlik holat — har soat, 09:00–17:00')->default(false),
+                Toggle::make('daily_report')->label('Kunlik svod — 18:00 da ikki rasm (svod va bajarilish)')->default(true),
+                Toggle::make('attendance_report')->label('Kunlik davomat — 18:00 da xodimlar qachon va qancha ishlagani')->default(true),
+            ]),
         ]);
     }
 
@@ -73,6 +80,9 @@ class ReportRecipientResource extends Resource
                 TextColumn::make('name')->label('F.I.Sh.')->state(fn (ReportRecipient $r) => $r->botUser?->full_name ?: $r->botUser?->first_name ?: '—'),
                 TextColumn::make('phone')->label('Telefon')->state(fn (ReportRecipient $r) => $r->botUser?->phone ? Phone::pretty($r->botUser->phone) : '—'),
                 TextColumn::make('label')->label('Lavozimi')->placeholder('—'),
+                ToggleColumn::make('hourly_report')->label('Soatlik'),
+                ToggleColumn::make('daily_report')->label('Kunlik svod'),
+                ToggleColumn::make('attendance_report')->label('Davomat'),
                 TextColumn::make('created_at')->label('Qo‘shilgan')->dateTime('d.m.Y H:i')->timezone(config('app.display_timezone')),
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()]);

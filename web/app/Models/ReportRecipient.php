@@ -22,7 +22,8 @@ class ReportRecipient extends Model
 
     protected function casts(): array
     {
-        return ['user_id' => 'integer', 'created_at' => 'datetime'];
+        return ['user_id' => 'integer', 'created_at' => 'datetime',
+            'daily_report' => 'boolean', 'attendance_report' => 'boolean', 'hourly_report' => 'boolean'];
     }
 
     public function botUser(): BelongsTo

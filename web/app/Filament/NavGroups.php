@@ -14,5 +14,7 @@ final class NavGroups
 
     public const CATALOG = 'Katalog';
 
-    public const ORDER = [self::CITIZENS, self::STAFF, self::CATALOG];
+    public const SETTINGS = 'Sozlamalar';
+
+    public const ORDER = [self::CITIZENS, self::STAFF, self::CATALOG, self::SETTINGS];
 }

@@ -19,6 +19,19 @@ class TelegramWebApp
 
     public const NOT_STAFF = 'Siz tuman xodimi sifatida tasdiqlanmagansiz. Botda /start ni bosing.';
 
+    /** The attendance report: the first and the last time a staff member used the Mini App today (written at most once a minute). */
+    private static function markWorking(int $staffId): void
+    {
+        if (! \Illuminate\Support\Facades\Cache::add("staff-day:$staffId", 1, 60)) {
+            return;
+        }
+        $now = now()->utc()->format('Y-m-d H:i:s');
+        DB::connection('bot')->statement(
+            'INSERT INTO staff_days (staff_id, day, first_at, last_at, hits) VALUES (?, ?, ?, ?, 1)
+             ON CONFLICT (staff_id, day) DO UPDATE SET last_at = excluded.last_at, hits = staff_days.hits + 1',
+            [$staffId, now(config('app.display_timezone'))->toDateString(), $now, $now]);
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = self::verify((string) $request->header('X-Telegram-Init-Data', ''));
@@ -30,6 +43,7 @@ class TelegramWebApp
             return response()->json(['error' => self::NOT_STAFF], 403);
         }
         $request->attributes->set('staff', $staff);
+        self::markWorking($staff->id);
         $request->attributes->set('tg_user', $user);
         $request->attributes->set('lang', DB::connection('bot')->table('users')->where('user_id', $user['id'])->value('lang') ?: 'uz');
 
