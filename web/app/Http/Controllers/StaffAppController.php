@@ -396,12 +396,15 @@ class StaffAppController extends Controller
         $r->validate(['photo' => ['required', 'file', 'mimetypes:image/jpeg,image/png,image/webp', 'max:'.config('telegram.photo_max_kb')]],
             ['photo.*' => $this->msg($r, 'photo_bad')]);
 
-        return $this->step($r, $inspection, 'photo', function (Inspection $i) use ($r) {
-            $file = $r->file('photo');
-            if (self::isDark($file)) {
+        // the slow checks run before the write lock: one big upload must not hold up every other staff member
+        $file = $r->file('photo');
+        $dark = self::isDark($file);
+        $hash = hash_file('sha256', $file->getRealPath());
+
+        return $this->step($r, $inspection, 'photo', function (Inspection $i) use ($r, $file, $dark, $hash) {
+            if ($dark) {
                 return $this->fail($r, 'photo_dark');
             }
-            $hash = hash_file('sha256', $file->getRealPath());
             if (Inspection::query()->where('photo_hash', $hash)->where('id', '!=', $i->id)->exists()) {
                 return $this->fail($r, 'dup');
             }
@@ -416,12 +419,13 @@ class StaffAppController extends Controller
         $r->validate(['video' => ['required', 'file', 'mimetypes:video/webm,video/mp4,video/quicktime,video/x-matroska,application/octet-stream',
             'max:'.config('telegram.video_max_kb')]], ['video.*' => $this->msg($r, 'video_bad')]);
 
-        return $this->step($r, $inspection, 'video', function (Inspection $i) use ($r) {
-            $file = $r->file('video');
+        $file = $r->file('video');
+        $hash = hash_file('sha256', $file->getRealPath());  // before the write lock (a video is up to 60 MB)
+
+        return $this->step($r, $inspection, 'video', function (Inspection $i) use ($r, $file, $hash) {
             if ($file->getSize() < config('telegram.video_min_bytes')) {
                 return $this->fail($r, 'video_short');
             }
-            $hash = hash_file('sha256', $file->getRealPath());
             if (Inspection::query()->where('video_hash', $hash)->where('id', '!=', $i->id)->exists()) {
                 return $this->fail($r, 'dup');
             }
