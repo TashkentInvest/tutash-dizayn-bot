@@ -99,8 +99,10 @@ def main(xlsx: str, save: bool) -> None:
         if s:
             seen.setdefault(s["id"], []).append(name)
     twice = {sid: names for sid, names in seen.items() if len(names) > 1}
-    for d, s, name, n in result:
-        g = next((v for k, v in GEO.items() if k[1] == name), None)
+    # result has one entry per list row, in the same order: the row's own district picks its coordinates
+    # (the same street name is in several districts: KXAY, TXAY, Muqumiy, ...)
+    for row, (d, s, name, n) in zip(rows, result):
+        g = GEO.get((row[0], row[1]))
         mark = "" if not GEO else ("  📍" if g and g[0] and g[1] else "  !! koordinata yo‘q")
         print(f"{(d['name'] if d else '?'):<22} {name:<38} {n:>4}  ->  {s['name'] if s else '!! katalogda topilmadi'}{mark}")
     print(f"\nro‘yxat: {len(rows)} ko‘cha, {sum(r[2] for r in rows)} obyekt | topildi: {len(rows) - len(missing)} | topilmadi: {len(missing)}")
@@ -115,8 +117,8 @@ def main(xlsx: str, save: bool) -> None:
         if GEO:
             db.execute("UPDATE streets SET start_lat=NULL, start_lon=NULL, end_lat=NULL, end_lon=NULL")
             placed = 0
-            for d, s, name, n in result:
-                start, end = GEO.get((next(r[0] for r in rows if r[1] == name), name), (None, None))
+            for row, (d, s, name, n) in zip(rows, result):
+                start, end = GEO.get((row[0], row[1]), (None, None))
                 if start and end:
                     db.execute("UPDATE streets SET start_lat=?, start_lon=?, end_lat=?, end_lon=? WHERE id=?", (*start, *end, s["id"]))
                     placed += 1
