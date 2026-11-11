@@ -436,7 +436,7 @@
     }
     var me = draft.me, start = draft.object_point || me;
     var map = L.map('map', { zoomControl: true, attributionControl: true }).setView(start, 18);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 20, subdomains: 'abcd', referrerPolicy: 'strict-origin-when-cross-origin', attribution: '© OpenStreetMap © CARTO' }).addTo(map);
     L.circle(me, { radius: draft.max_distance, color: '#2481cc', weight: 1, fillOpacity: 0.06 }).addTo(map);
     L.circleMarker(me, { radius: 7, color: '#fff', weight: 2, fillColor: '#2481cc', fillOpacity: 1 }).addTo(map);
     var marker = L.marker(start, { draggable: true, autoPan: true }).addTo(map);
