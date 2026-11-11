@@ -206,8 +206,8 @@ class StaffAppController extends Controller
                 continue;
             }
             $common = count(array_filter($have, fn ($w) => (bool) array_filter($want, fn ($x) => Latin::same($w, $x))));
-            $sc = $common / max(count($have), count($want));
-            if ($common && $sc > $score) {
+            $sc = Latin::sameJoined($have, $want) ? 1.0 : $common / max(count($have), count($want));
+            if ($sc > 0 && $sc > $score) {
                 [$best, $score] = [$s, $sc];
             }
         }
