@@ -622,4 +622,24 @@ class StaffAppTest extends TestCase
         $this->assertStringStartsWith('≈ Махмуджанов Элёр', $options[889501]);
         $this->assertSame([889501], array_keys($m->invoke(null, $s, 'Элёр')));   // search by name
     }
+
+    public function test_invite_link_for_someone_not_found_in_the_bot(): void
+    {
+        config(['telegram.bot_username' => 'DizaynKodBot']);
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $s = Staff::create(['full_name' => 'Topilmagan', 'phone' => '+998901117777', 'district_id' => $this->district, 'is_active' => true]);
+
+        Livewire::test(ManageStaff::class)->assertTableActionVisible('invite', $s)->mountTableAction('invite', $s)->assertHasNoErrors();
+        $inv = $s->inviteLink();
+        $this->assertStringStartsWith('https://t.me/DizaynKodBot?start=s_', $inv['link']);
+        $html = view('filament.staff-invite', ['link' => $inv['link'], 'text' => 'Matn '.$inv['link'], 'expires' => '01.01.2030 10:00'])->render();
+        $this->assertStringContainsString('Matnni nusxalash', $html);
+        $token = $s->fresh()->invite_token;
+        $this->assertSame(24, strlen((string) $token));
+        $this->assertSame($token, $s->fresh()->inviteLink()['link'] === 'https://t.me/DizaynKodBot?start=s_'.$token ? $token : null, 'a valid one is reused');
+        $this->assertNotSame($token, ($fresh = $s->fresh())->inviteLink(true) ? $fresh->invite_token : null, 'renew makes a new one');
+        Livewire::test(ManageStaff::class)->assertTableActionHidden('invite', $this->staff);   // already linked
+    }
 }

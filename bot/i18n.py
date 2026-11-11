@@ -160,6 +160,10 @@ TEXTS: dict[str, tuple[str, str]] = {
         "Этого номера нет в списке сотрудников района. Если вы сотрудник, сообщите администратору свой номер в Telegram — "
         "он привяжет вас в панели. Пока — общее меню:",
     ),
+    "invite_bad": (
+        "Bu taklif havolasi eskirgan yoki ishlatilgan. Administratordan yangisini so‘rang.",
+        "Эта ссылка-приглашение устарела или уже использована. Попросите у администратора новую.",
+    ),
     "staff_linked": ("✅ Xodim sifatida tasdiqlandingiz.", "✅ Вы подтверждены как сотрудник."),
 
     # bot command menu and the one-time announcement after the two-language update (tools/broadcast.py)

@@ -138,6 +138,22 @@ class StaffResource extends Resource
                         });
                         Notification::make()->success()->title('Bog‘landi')->body('Xodimga botda xabar yuboriladi.')->send();
                     }),
+                // not in the bot under this number (or not found in the list above): a personal link to send them
+                Action::make('invite')->label('Taklif havolasi')->icon('heroicon-o-envelope')->color('info')
+                    ->visible(fn (Staff $s) => $s->user_id === null)
+                    ->modalHeading(fn (Staff $s) => $s->full_name.' — taklif havolasi')
+                    ->modalContent(function (Staff $s) {
+                        $inv = $s->inviteLink();
+                        $text = 'Assalomu alaykum! Siz '.($s->district?->name ?? 'tuman').' xodimi sifatida Dizayn-kod botiga qo‘shildingiz. '
+                            ."Quyidagi havolani oching va «Start» tugmasini bosing:\n".$inv['link'];
+
+                        return view('filament.staff-invite', ['link' => $inv['link'], 'text' => $text, 'expires' => $inv['expires']->format('d.m.Y H:i')]);
+                    })
+                    ->modalSubmitAction(false)->modalCancelActionLabel('Yopish')
+                    ->extraModalFooterActions(fn (Action $action) => [
+                        Action::make('renew')->label('Yangi havola (eskisi ishlamaydi)')->color('gray')->requiresConfirmation()
+                            ->action(fn (Staff $record) => $record->inviteLink(true)),
+                    ]),
                 EditAction::make(),
                 Action::make('unlink')->label('Telegram bog‘lanishini uzish')->icon('heroicon-o-link-slash')->color('gray')
                     ->visible(fn (Staff $s) => $s->user_id !== null)->requiresConfirmation()

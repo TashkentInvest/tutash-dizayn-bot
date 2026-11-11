@@ -244,6 +244,18 @@ async def consent_flow():
     check("someone else's contact links nothing", db.staff_by_user(515151) is None)
     sent.clear(); await press("pick:feedback", 424242); await press("pick:menu", 424242)
     check("'back' from a request returns staff to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()))
+    # a personal invite link from the dashboard links whoever opens it, whatever number they joined with; it works once
+    inv = db.execute("INSERT INTO staff (full_name, phone, district_id, invite_token, invite_expires) VALUES "
+                     "('Taklif Xodim', '+998901119911', (SELECT MIN(id) FROM districts), 'TOK123', '2999-01-01 00:00:00')")
+    sent.clear(); await say("/start s_TOK123", 737373)
+    check("invite link links the staff member and opens the staff menu", (db.staff_by_user(737373) or {}).get("id") == inv
+          and any("Tuman xodimi" in (x or "") for x in texts()))
+    sent.clear(); await say("/start s_TOK123", 747474)
+    check("an invite works once", db.staff_by_user(747474) is None and t("uz", "invite_bad") in texts())
+    db.execute("UPDATE staff SET invite_token='OLD1', invite_expires='2000-01-01 00:00:00' WHERE id=?", (inv,))
+    sent.clear(); await say("/start s_OLD1", 757575)
+    check("an expired invite links nobody", db.staff_by_user(757575) is None and t("uz", "invite_bad") in texts())
+
     # a new person typing a staff number by hand is asked for the contact button, not registered as a citizen
     w = 636363
     await say("/start", w); await press("lang:uz", w); await press("consent", w); await say("Yozuvchi Xodim Test", w)

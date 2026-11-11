@@ -147,6 +147,23 @@ async def on_error(event: ErrorEvent) -> bool:
 _has_contact = registration.has_contact
 
 
+@router.message(CommandStart(deep_link=True, magic=F.args.startswith("s_")))
+async def start_invite(m: Message, command):
+    """A staff member opened their personal invite link from the dashboard: linked at once, whatever number they use."""
+    uid = m.from_user.id
+    staff = db.staff_by_invite(command.args[2:])
+    if not staff:
+        await m.answer(t(i18n.lang(uid), "invite_bad"))
+        return await registration.send_lang_pick(m.bot, m.chat.id)
+    db.link_staff(staff["id"], uid)
+    db.use_invite(staff["id"])
+    if not (db.get_user(uid) or {}).get("lang"):
+        i18n.set_lang(uid, "uz")
+    L = i18n.lang(uid)
+    await m.answer(t(L, "staff_linked"), reply_markup=ReplyKeyboardRemove())
+    await registration.send_choice(m.bot, m.chat.id, L, uid)
+
+
 @router.message(CommandStart())
 async def start(m: Message):
     """Every /start begins with the language (it is also how a user switches it); the chosen one leads the whole flow."""

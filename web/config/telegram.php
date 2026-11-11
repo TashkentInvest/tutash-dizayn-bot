@@ -14,6 +14,8 @@ return [
     // a staff member must stand within this distance of the street (the line from its start to its end in the official
     // list) to add a business there or prove one that has no approved place yet: no entering from home
     'street_radius_m' => (int) env('TG_STREET_RADIUS_M', 300),
+    // the bot's @username for invite links (asked from Telegram when empty)
+    'bot_username' => env('TG_BOT_USERNAME', ''),
     'max_accuracy_m' => (int) env('TG_MAX_ACCURACY_M', 150),
 
     'video_min_bytes' => 40 * 1024,          // shorter/empty recordings are refused

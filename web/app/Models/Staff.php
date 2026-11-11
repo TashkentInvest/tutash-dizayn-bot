@@ -41,6 +41,40 @@ class Staff extends Model
         });
     }
 
+    /**
+     * The personal invite link: t.me/<bot>?start=s_<token>. Opening it links this staff member to whoever opens it,
+     * whatever number they joined with. Valid for 7 days, works once; a still valid one is reused.
+     *
+     * @return array{link: string, expires: \Carbon\CarbonInterface}
+     */
+    public function inviteLink(bool $renew = false): array
+    {
+        $valid = $this->invite_token && $this->invite_expires && $this->invite_expires > now()->utc()->format('Y-m-d H:i:s');
+        if ($renew || ! $valid) {
+            $this->forceFill([
+                'invite_token' => \Illuminate\Support\Str::random(24),
+                'invite_expires' => now()->utc()->addDays(7)->format('Y-m-d H:i:s'),
+            ])->saveQuietly();
+        }
+
+        return ['link' => 'https://t.me/'.self::botUsername().'?start=s_'.$this->invite_token,
+            'expires' => \Carbon\Carbon::parse($this->invite_expires, 'UTC')->setTimezone(config('app.display_timezone'))];
+    }
+
+    public static function botUsername(): string
+    {
+        if ($u = config('telegram.bot_username')) {
+            return ltrim($u, '@');
+        }
+
+        return \Illuminate\Support\Facades\Cache::rememberForever('tg-bot-username', function () {
+            $token = config('telegram.bot_token');
+            $me = $token ? \Illuminate\Support\Facades\Http::timeout(5)->get("https://api.telegram.org/bot$token/getMe")->json('result.username') : null;
+
+            return $me ?: 'DizaynKodBot';
+        });
+    }
+
     /** Where this person is in the bot: linked / in the bot but not confirmed / never opened the bot. */
     public function botState(): string
     {

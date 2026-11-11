@@ -8,6 +8,7 @@ import re
 import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
 from contextlib import contextmanager, nullcontext
 
 from .config import DATABASE_URL, DB_PATH
@@ -376,6 +377,8 @@ def _added_columns():
             ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0", "start_lat": "REAL", "start_lon": "REAL",
                          "end_lat": "REAL", "end_lon": "REAL"}),
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
+            # a personal invite link from the dashboard (t.me/<bot>?start=s_<token>): links a staff member whatever number they joined with
+            ("staff", {"invite_token": "TEXT", "invite_expires": "TEXT"}),
             ("outbox", {"photo": "TEXT"}),  # a picture (path under UPLOADS_DIR) sent with the text as its caption
             # which scheduled reports a recipient gets (Sozlamalar): the svod pictures and the attendance at 18:00, hourly status
             ("report_recipients", {"daily_report": "BOOLEAN NOT NULL DEFAULT TRUE", "attendance_report": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -568,6 +571,22 @@ def staff_by_phone(phone: str) -> dict | None:
     with _db() as c:
         row = c.execute("SELECT * FROM staff WHERE phone=? AND is_active = TRUE", (phone,)).fetchone()
     return dict(row) if row else None
+
+
+def staff_by_invite(token: str) -> dict | None:
+    """The active staff member an unexpired invite link belongs to."""
+    with _db() as c:
+        row = c.execute("SELECT s.*, d.name AS district FROM staff s JOIN districts d ON d.id = s.district_id "
+                        "WHERE s.invite_token = ? AND s.is_active = TRUE AND s.invite_expires > ?",
+                        (token, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))).fetchone()
+    return dict(row) if row else None
+
+
+def use_invite(staff_id: int) -> None:
+    """An invite works once."""
+    with _db() as c:
+        c.execute("UPDATE staff SET invite_token = NULL, invite_expires = NULL WHERE id = ?", (staff_id,))
+        c.commit()
 
 
 def link_staff(staff_id: int, user_id: int) -> None:
