@@ -191,8 +191,8 @@ class StaffAppTest extends TestCase
         // staff add a business; sending it again (double tap) does not add it twice
         $h = $this->headers();
         $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => ''], $h)->assertStatus(422);
-        $new = $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Gul do‘koni', 'stir' => '123456789', 'owner_phone' => '90 123 45 67'], $h)->assertOk();
-        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => ' gul DO‘KONI '], $h)->assertOk()->assertJsonPath('already', true);
+        $new = $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Gul do‘koni', 'stir' => '123456789', 'owner_phone' => '90 123 45 67', 'latitude' => 41.3111, 'longitude' => 69.2797], $h)->assertOk();
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => ' gul DO‘KONI ', 'latitude' => 41.3111, 'longitude' => 69.2797], $h)->assertOk()->assertJsonPath('already', true);
         $this->assertSame(2, DesignObject::query()->where('street_id', $this->street)->count());
         $this->assertSame('+998901234567', DesignObject::find($new->json('object.id'))->owner_phone);
         $this->assertSame($this->staff->id, DesignObject::find($new->json('object.id'))->created_by);
@@ -526,5 +526,34 @@ class StaffAppTest extends TestCase
         $this->assertNull($d3['address']);
         $this->assertNotEmpty($d3['objects']);
         $this->assertSame($far->street_id, $this->street);
+    }
+
+    public function test_staff_must_stand_on_the_street_to_add_or_prove_a_business(): void
+    {
+        $db = DB::connection('bot');
+        // the street runs ~1.1 km north-south along longitude 69.2797
+        $db->table('streets')->where('id', $this->street)->update(['start_lat' => 41.3100, 'start_lon' => 69.2797, 'end_lat' => 41.3200, 'end_lon' => 69.2797]);
+        \Illuminate\Support\Facades\Http::fake(fn () => \Illuminate\Support\Facades\Http::response(['address' => ['road' => 'Boshqa ko‘cha']]));
+        $h = $this->headers();
+        $url = "/tg/api/streets/{$this->street}/objects";
+
+        $this->postJson($url, ['shop_name' => 'Uydan'], $h)->assertStatus(422);  // no place at all
+        $home = $this->postJson($url, ['shop_name' => 'Uydan', 'latitude' => 41.3150, 'longitude' => 69.2900], $h)->assertStatus(422);  // ~860 m east
+        $this->assertStringContainsString('m uzoqdasiz', $home->json('error'));
+        $this->assertSame(0, DesignObject::query()->where('shop_name', 'Uydan')->count());
+
+        $ok = $this->postJson($url, ['shop_name' => 'Joyida', 'latitude' => 41.3150, 'longitude' => 69.2810], $h)->assertOk();  // ~110 m
+        $id = $ok->json('object.id');
+
+        // proving it later: near where it was added, not from home
+        $draft = $this->postJson("/tg/api/objects/$id/inspections", ['kind' => 'removed'], $h)->json('draft.id');
+        $db->table('inspections')->where('id', $draft)->update(['step' => 'location']);
+        $this->postJson("/tg/api/inspections/$draft/location", ['latitude' => 41.3150, 'longitude' => 69.2900, 'accuracy' => 10], $h)->assertStatus(422);
+        $this->postJson("/tg/api/inspections/$draft/location", ['latitude' => 41.3151, 'longitude' => 69.2811, 'accuracy' => 10], $h)->assertOk();
+
+        // "find my place" picks the street by its line
+        $d = $this->postJson('/tg/api/nearby', ['latitude' => 41.3150, 'longitude' => 69.2805], $h)->assertOk()->json();
+        $this->assertSame($this->street, $d['street']['id']);
+        $this->assertSame($this->street, $d['streets'][0]['id']);
     }
 }

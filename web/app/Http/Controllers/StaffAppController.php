@@ -33,6 +33,8 @@ class StaffAppController extends Controller
         'wrong_step' => ['Avvalgi qadamni bajaring.', 'Сначала выполните предыдущий шаг.'],
         'accuracy' => ['Joylashuv aniq emas (±{n} m). Ochiq joyga chiqib, qayta urinib ko‘ring.', 'Местоположение неточное (±{n} м). Выйдите на открытое место и попробуйте снова.'],
         'too_far' => ['Siz obyektdan {n} m uzoqdasiz. Obyekt yoniga boring.', 'Вы в {n} м от объекта. Подойдите к объекту.'],
+        'off_street' => ['Siz bu ko‘chadan {n} m uzoqdasiz. Obyekt joyida turib kiriting (ruxsat: {r} m).', 'Вы в {n} м от этой улицы. Вносите, стоя у объекта (допустимо: {r} м).'],
+        'need_place' => ['Joylashuvingiz kerak: obyekt oldida turib qayta urinib ko‘ring.', 'Нужно ваше местоположение: попробуйте снова, стоя у объекта.'],
         'point_far' => ['Tanlangan nuqta siz turgan joydan {n} m uzoqda. Obyektni to‘g‘ri belgilang.', 'Выбранная точка в {n} м от вас. Отметьте объект точно.'],
         'photo_bad' => ['Rasm qabul qilinmadi. Qayta oling.', 'Фото не принято. Сделайте снова.'],
         'photo_dark' => ['Rasm juda qorong‘i. Qayta oling.', 'Фото слишком тёмное. Сделайте снова.'],
@@ -139,7 +141,8 @@ class StaffAppController extends Controller
         $lon = (float) $data['longitude'];
         $staff = $this->staff($r);
         $geo = Geocoder::reverse($lat, $lon);
-        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']);
+        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
+            ->get(['id', 'name', 'start_lat', 'start_lon', 'end_lat', 'end_lon']);
 
         $objects = DesignObject::query()->active()->with(['pendingInspection', 'street:id,name'])
             ->whereIn('street_id', $streets->pluck('id'))
@@ -151,8 +154,14 @@ class StaffAppController extends Controller
             })
             ->filter(fn ($o) => $o->distance <= self::NEARBY_M)->sortBy('distance')->take(30);
 
-        // the street: by the name the map gives this place, else the street of the nearest business
-        $street = self::matchStreet($streets, $geo['road']) ?? $objects->first()?->street;
+        // the street: the nearest line of the official list within the radius, else the name the map gives this place,
+        // else the street of the nearest business
+        $radius = (int) config('telegram.street_radius_m');
+        $near = $streets->map(fn ($s) => [$s, $s->distanceTo($lat, $lon)])->filter(fn ($x) => $x[1] !== null)->sortBy(fn ($x) => $x[1])->values();
+        $street = ($near->first() && $near->first()[1] <= $radius ? $near->first()[0] : null)
+            ?? self::matchStreet($streets, $geo['road']) ?? $objects->first()?->street;
+        $order = $near->mapWithKeys(fn ($x, $i) => [$x[0]->id => $i])->all();
+        $streets = $streets->sortBy(fn ($s) => $order[$s->id] ?? PHP_INT_MAX)->values();  // the closest streets first in the picker
 
         return response()->json([
             'address' => $geo['address'],
@@ -161,6 +170,24 @@ class StaffAppController extends Controller
             'objects' => $objects->map(fn (DesignObject $o) => $this->brief($o) + ['street' => $o->street?->name, 'distance' => (int) round($o->distance)])->values(),
             'radius' => self::NEARBY_M,
         ]);
+    }
+
+    /**
+     * Is the staff member on this street? Within the radius of its line, or on a road the map names like it (a bent street
+     * is not a straight line) and still near it. Returns null when yes, else the error to send.
+     */
+    private function offStreet(Request $r, Street $street, float $lat, float $lon): ?JsonResponse
+    {
+        $d = $street->distanceTo($lat, $lon);
+        $radius = (int) config('telegram.street_radius_m');
+        if ($d === null || $d <= $radius) {
+            return null;  // no line in the list for this street: nothing to check against
+        }
+        if ($d <= 3000 && self::matchStreet(collect([$street]), Geocoder::reverse($lat, $lon)['road'])) {
+            return null;
+        }
+
+        return $this->fail($r, 'off_street', 422, ['n' => (int) round($d), 'r' => $radius]);
     }
 
     private const NEARBY_M = 300;
@@ -195,17 +222,24 @@ class StaffAppController extends Controller
             return $this->fail($r, 'not_yours', 403);
         }
         $data = $this->validateDetails($r, true);
+        $at = $r->validate([
+            'latitude' => ['required', 'numeric', 'between:37,46'], 'longitude' => ['required', 'numeric', 'between:55,74.5'],
+            'accuracy' => ['nullable', 'numeric', 'min:0'],
+        ], ['latitude.required' => $this->msg($r, 'need_place'), 'longitude.required' => $this->msg($r, 'need_place')]);
+        if ((float) ($at['accuracy'] ?? 0) > config('telegram.max_accuracy_m')) {
+            return $this->fail($r, 'accuracy', 422, ['n' => (int) round((float) $at['accuracy'])]);
+        }
+        if ($resp = $this->offStreet($r, $street, (float) $at['latitude'], (float) $at['longitude'])) {
+            return $resp;
+        }
 
-        return $this->locked(function () use ($r, $street, $data) {
+        return $this->locked(function () use ($r, $street, $data, $at) {
             // pressed twice / sent again: the same name on the same street is the same business
             $same = DesignObject::query()->active()->where('street_id', $street->id)
                 ->whereRaw('LOWER(TRIM(shop_name)) = ?', [mb_strtolower(trim($data['shop_name']))])->first();
             if ($same) {
                 return response()->json(['ok' => true, 'already' => true, 'object' => $this->brief($same)]);
             }
-            $at = $r->validate([
-                'latitude' => ['nullable', 'numeric', 'between:37,46'], 'longitude' => ['nullable', 'numeric', 'between:55,74.5'],
-            ]);
             $o = DesignObject::create(['street_id' => $street->id, 'created_by' => $this->staff($r)->id,
                 'found_lat' => $at['latitude'] ?? null, 'found_lon' => $at['longitude'] ?? null] + $data);
 
@@ -319,11 +353,16 @@ class StaffAppController extends Controller
                 return $this->fail($r, 'accuracy', 422, ['n' => (int) round($acc)]);
             }
             $o = $i->object;
-            if ($o->latitude !== null) {  // the object's approved place is known: the staff member must be there
-                $far = self::distance($o->latitude, $o->longitude, (float) $data['latitude'], (float) $data['longitude']);
+            // the staff member must be at the object: its approved place, else where it was added, else on its street
+            $lat = $o->latitude ?? $o->found_lat;
+            $lon = $o->longitude ?? $o->found_lon;
+            if ($lat !== null) {
+                $far = self::distance((float) $lat, (float) $lon, (float) $data['latitude'], (float) $data['longitude']);
                 if ($far > config('telegram.max_distance_m')) {
                     return $this->fail($r, 'too_far', 422, ['n' => (int) round($far)]);
                 }
+            } elseif ($o->street && ($resp = $this->offStreet($r, $o->street, (float) $data['latitude'], (float) $data['longitude']))) {
+                return $resp;
             }
             $i->forceFill(['latitude' => $data['latitude'], 'longitude' => $data['longitude'], 'accuracy' => $acc ?: null,
                 'step' => 'point'])->save();

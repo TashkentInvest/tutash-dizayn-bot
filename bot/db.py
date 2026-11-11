@@ -363,7 +363,9 @@ def _drop_page_objects(c) -> None:
 def _added_columns():
     """Columns added after a table was first created: (table, {column: type}). Existing databases get them at start."""
     return (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
-            ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
+            # the street's start and end ("dan" / "gacha" of the official list): staff must stand near this line to work on it
+            ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0", "start_lat": "REAL", "start_lon": "REAL",
+                         "end_lat": "REAL", "end_lon": "REAL"}),
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
             ("outbox", {"photo": "TEXT"}),  # a picture (path under UPLOADS_DIR) sent with the text as its caption
             # where the staff member stood when adding the business, and the address found there (Mini App "find my place")

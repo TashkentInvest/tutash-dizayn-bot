@@ -213,7 +213,7 @@
     locator.locate().then(function (p) {
       if (my !== nav) return;
       return api('/nearby', { body: { latitude: p.latitude, longitude: p.longitude } }).then(function (d) {
-        lastPlace = { lat: p.latitude, lon: p.longitude, address: d.address, street: d.street };
+        lastPlace = { lat: p.latitude, lon: p.longitude, accuracy: p.accuracy, address: d.address, street: d.street, at: Date.now() };
         var opts = '<option value="">' + t('pickStreet') + '</option>' + d.streets.map(function (s) {
           return '<option value="' + s.id + '"' + (d.street && d.street.id === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
         }).join('');
@@ -294,11 +294,19 @@
     go.onclick = function () {
       busy(go, function () {
         var body = {}; ['shop_name', 'address', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
-        if (place) { body.latitude = place.lat; body.longitude = place.lon; }
-        return api('/streets/' + s.id + '/objects', { body: body }).then(function (d) {
+        // where the staff member stands is required (no adding from home): reuse a fresh "find my place", else locate now
+        var fresh = place && Date.now() - place.at < 120000;
+        go.textContent = fresh ? go.textContent : t('locWait');
+        return (fresh ? Promise.resolve({ latitude: place.lat, longitude: place.lon, accuracy: place.accuracy }) : locator.locate()).catch(function (e) {
+          go.textContent = t('create');
+          throw e && e.code === 'denied' ? { error: t('locDenied') } : (e && (e.code === 'timeout' || e.code === 'unavailable') ? { error: t('locNone') } : e);
+        }).then(function (p) {
+          body.latitude = p.latitude; body.longitude = p.longitude; body.accuracy = p.accuracy;
+          return api('/streets/' + s.id + '/objects', { body: body });
+        }).then(function (d) {
           var fl = d.already ? t('exists') : null;
           nav++; stack.pop(); stack.push(function () { object(d.object.id); }); object(d.object.id, fl);
-        });
+        }).catch(function (e) { go.textContent = t('create'); throw e; });
       });
     };
   }

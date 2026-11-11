@@ -42,4 +42,27 @@ class Street extends Model
     {
         return $this->hasMany(DesignObject::class, 'street_id');
     }
+
+    public function hasLine(): bool
+    {
+        return $this->start_lat !== null && $this->end_lat !== null;
+    }
+
+    /** Metres from a point to the street's line (start -> end of the official list); null when the list gives no place. */
+    public function distanceTo(float $lat, float $lon): ?float
+    {
+        if (! $this->hasLine()) {
+            return null;
+        }
+        // a flat projection around the point is exact enough over a few kilometres
+        $k = 111320.0;
+        $kx = $k * cos(deg2rad($lat));
+        [$ax, $ay] = [((float) $this->start_lon - $lon) * $kx, ((float) $this->start_lat - $lat) * $k];
+        [$bx, $by] = [((float) $this->end_lon - $lon) * $kx, ((float) $this->end_lat - $lat) * $k];
+        [$dx, $dy] = [$bx - $ax, $by - $ay];
+        $len2 = $dx * $dx + $dy * $dy;
+        $t = $len2 > 0 ? max(0.0, min(1.0, -($ax * $dx + $ay * $dy) / $len2)) : 0.0;
+
+        return hypot($ax + $t * $dx, $ay + $t * $dy);
+    }
 }
