@@ -14,6 +14,17 @@ class StatsCacheTest extends TestCase
      * The test environment caches in memory (no serialization), production caches in the database (serialized).
      * A cached Collection used to come back as __PHP_Incomplete_Class on the second request, which broke the dashboard.
      */
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // the sample database (no people), never the real one
+        $db = storage_path('framework/testing/stats-bot-'.uniqid().'.sqlite');
+        File::ensureDirectoryExists(dirname($db));
+        copy(base_path('../tests/fixtures/bot.sqlite'), $db);
+        config(['database.connections.bot.database' => $db]);
+        \Illuminate\Support\Facades\DB::purge('bot');
+    }
+
     public function test_stats_work_on_a_cache_hit_with_a_serializing_store(): void
     {
         $dir = storage_path('framework/testing/stats-cache-'.uniqid());
