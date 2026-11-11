@@ -42,7 +42,7 @@ jobs:
           node-version: "22"
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate
-      - name: code style (Laravel Pint, changed lines are not enforced yet: report only)
+      - name: "code style (Laravel Pint): report only for now"
         run: vendor/bin/pint --test || true
       - run: php artisan test
       - run: node tests/js/location.test.cjs
