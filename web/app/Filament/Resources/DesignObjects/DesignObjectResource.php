@@ -56,6 +56,7 @@ class DesignObjectResource extends Resource
                 ->options(fn () => Street::query()->with('district')->orderBy('district_id')->orderBy('name')->get()
                     ->mapWithKeys(fn ($s) => [$s->id => $s->district?->name.' · '.$s->name])),
             TextInput::make('shop_name')->label('Do‘kon / firma nomi')->required()->maxLength(150),
+            TextInput::make('address')->label('Manzil')->maxLength(200),
             TextInput::make('owner_name')->label('Tadbirkor F.I.Sh.')->maxLength(150),
             TextInput::make('owner_phone')->label('Tadbirkor telefoni')->tel()->maxLength(30)
                 ->dehydrateStateUsing(fn ($state) => filled($state) ? (Phone::normalize($state) ?? $state) : null),
@@ -78,6 +79,7 @@ class DesignObjectResource extends Resource
                     ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
                     ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray'),
                 TextEntry::make('shop_name')->label('Do‘kon / firma')->placeholder('—'),
+                TextEntry::make('address')->label('Manzil')->placeholder('—'),
                 TextEntry::make('owner_name')->label('Tadbirkor')->placeholder('—'),
                 TextEntry::make('owner_phone')->label('Telefon')->placeholder('—')->formatStateUsing(fn ($state) => Phone::pretty($state)),
                 TextEntry::make('stir')->label('STIR')->placeholder('—')->copyable(),
@@ -104,7 +106,7 @@ class DesignObjectResource extends Resource
                 TextColumn::make('street.name')->label('Ko‘cha')->wrap(),
                 TextColumn::make('id')->label('№')->sortable(),
                 TextColumn::make('shop_name')->label('Do‘kon / firma')->placeholder('—')->searchable()
-                    ->description(fn (DesignObject $o) => trim(($o->owner_name ?? '').' '.($o->stir ? 'STIR '.$o->stir : '')) ?: null),
+                    ->description(fn (DesignObject $o) => trim(implode(' · ', array_filter([$o->address, $o->owner_name, $o->stir ? 'STIR '.$o->stir : null]))) ?: null),
                 TextColumn::make('status')->label('Holat')->badge()
                     ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
                     ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray')

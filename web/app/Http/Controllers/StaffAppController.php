@@ -7,6 +7,8 @@ use App\Models\Inspection;
 use App\Models\Staff;
 use App\Models\Street;
 use App\Models\StreetFile;
+use App\Services\Geocoder;
+use App\Support\Latin;
 use App\Support\Phone;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -123,6 +125,69 @@ class StaffAppController extends Controller
         ]);
     }
 
+    /**
+     * "Find my place": the address where the staff member stands, the street of their district it is on (matched by name),
+     * and the businesses already entered nearby, nearest first. The staff member picks one of them, or adds a new one here.
+     */
+    public function nearby(Request $r): JsonResponse
+    {
+        $data = $r->validate([
+            'latitude' => ['required', 'numeric', 'between:37,46'],
+            'longitude' => ['required', 'numeric', 'between:55,74.5'],
+        ]);
+        $lat = (float) $data['latitude'];
+        $lon = (float) $data['longitude'];
+        $staff = $this->staff($r);
+        $geo = Geocoder::reverse($lat, $lon);
+        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')->get(['id', 'name']);
+
+        $objects = DesignObject::query()->active()->with(['pendingInspection', 'street:id,name'])
+            ->whereIn('street_id', $streets->pluck('id'))
+            ->where(fn ($q) => $q->whereNotNull('latitude')->orWhereNotNull('found_lat'))->get()
+            ->map(function (DesignObject $o) use ($lat, $lon) {
+                $o->setAttribute('distance', self::distance($o->latitude ?? $o->found_lat, $o->longitude ?? $o->found_lon, $lat, $lon));
+
+                return $o;
+            })
+            ->filter(fn ($o) => $o->distance <= self::NEARBY_M)->sortBy('distance')->take(30);
+
+        // the street: by the name the map gives this place, else the street of the nearest business
+        $street = self::matchStreet($streets, $geo['road']) ?? $objects->first()?->street;
+
+        return response()->json([
+            'address' => $geo['address'],
+            'street' => $street ? ['id' => $street->id, 'name' => $street->name] : null,
+            'streets' => $streets->map(fn ($s) => ['id' => $s->id, 'name' => $s->name])->values(),
+            'objects' => $objects->map(fn (DesignObject $o) => $this->brief($o) + ['street' => $o->street?->name, 'distance' => (int) round($o->distance)])->values(),
+            'radius' => self::NEARBY_M,
+        ]);
+    }
+
+    private const NEARBY_M = 300;
+
+    private static function matchStreet($streets, ?string $road)
+    {
+        $want = $road ? Latin::words($road) : [];
+        if (! $want) {
+            return null;
+        }
+        $best = null;
+        $score = 0.0;
+        foreach ($streets as $s) {
+            $have = Latin::words($s->name);
+            if (! $have) {
+                continue;
+            }
+            $common = count(array_filter($have, fn ($w) => (bool) array_filter($want, fn ($x) => Latin::same($w, $x))));
+            $sc = $common / max(count($have), count($want));
+            if ($common && $sc > $score) {
+                [$best, $score] = [$s, $sc];
+            }
+        }
+
+        return $score >= 0.5 ? $best : null;
+    }
+
     /** A business the staff member found on the street (shop / firm name required). */
     public function create(Request $r, Street $street): JsonResponse
     {
@@ -138,7 +203,11 @@ class StaffAppController extends Controller
             if ($same) {
                 return response()->json(['ok' => true, 'already' => true, 'object' => $this->brief($same)]);
             }
-            $o = DesignObject::create(['street_id' => $street->id, 'created_by' => $this->staff($r)->id] + $data);
+            $at = $r->validate([
+                'latitude' => ['nullable', 'numeric', 'between:37,46'], 'longitude' => ['nullable', 'numeric', 'between:55,74.5'],
+            ]);
+            $o = DesignObject::create(['street_id' => $street->id, 'created_by' => $this->staff($r)->id,
+                'found_lat' => $at['latitude'] ?? null, 'found_lon' => $at['longitude'] ?? null] + $data);
 
             return response()->json(['ok' => true, 'object' => $this->brief($o->fresh())]);
         });
@@ -185,6 +254,7 @@ class StaffAppController extends Controller
             'owner_name' => ['nullable', 'string', 'max:150'],
             'owner_phone' => ['nullable', 'string', 'max:30'],
             'stir' => ['nullable', 'regex:/^\d{9}$|^\d{14}$/'],
+            'address' => ['nullable', 'string', 'max:200'],
         ], [
             'stir.regex' => $ru ? 'ИНН: 9 цифр (ПИНФЛ: 14).' : 'STIR: 9 ta raqam (JShShIR: 14).',
             'shop_name.required' => $ru ? 'Укажите название магазина / фирмы.' : 'Do‘kon yoki firma nomini kiriting.',
@@ -420,6 +490,7 @@ class StaffAppController extends Controller
     {
         return [
             'id' => $o->id, 'shop_name' => $o->shop_name, 'owner_name' => $o->owner_name, 'stir' => $o->stir, 'status' => $o->status,
+            'address' => $o->address,
             'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->where('review', Inspection::PENDING)->exists(),
         ];
     }

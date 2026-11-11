@@ -39,7 +39,7 @@
   .chip.on { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
   .page { width: 100%; border-radius: 10px; display: block; }
   label { display: block; font-size: 13px; color: var(--hint); margin: 8px 0 3px; }
-  input, textarea { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--hint); background: var(--bg); color: var(--text); }
+  input, textarea, select { width: 100%; font: inherit; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--hint); background: var(--bg); color: var(--text); }
   textarea { min-height: 90px; }
   .btn { display: block; width: 100%; border: 0; border-radius: 10px; padding: 13px; font: 600 15px inherit; background: var(--btn); color: var(--btn-text); margin-top: 10px; }
   .btn.alt { background: var(--card); color: var(--text); }
@@ -75,7 +75,7 @@
   var LANG = params.get('lang') === 'ru' ? 'ru' : 'uz';
   var T = {
     uz: { loading: 'Yuklanmoqda…', title: 'Obyektlar', total: 'Jami', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tekshiruvda',
-      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
+      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', findBtn: '📍 Joyimni aniqlash va obyektni topish', findHint: 'Obyekt oldida turib bosing: manzil va yaqin atrofdagi obyektlar chiqadi.', findWait: 'Joylashuv aniqlanmoqda…', here: 'Siz turgan joy', noAddress: 'Manzil topilmadi — o‘zingiz yozing.', streetLabel: 'Ko‘cha', pickStreet: '— ko‘chani tanlang —', nearbyTitle: 'Yaqin atrofdagi obyektlar ({n} m gacha)', nearbyNone: 'Yaqin atrofda kiritilgan obyekt yo‘q.', addHere: '➕ Shu joyda yangi obyekt qo‘shish', refind: '🔄 Qayta aniqlash', address: 'Manzil', m: 'm', editDetails: '✏️ Ma’lumotlarni tahrirlash', orBrowse: 'Yoki ko‘chani ro‘yxatdan tanlang:', chooseHint: 'Kerakli obyektni tanlang — rasm, video va joylashuv faqat unga yoziladi.', needStreet: 'Avval ko‘chani tanlang.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
@@ -94,7 +94,7 @@
       openOther: 'Yo‘q, o‘sha obyektni ochish', kindRemoved: 'Yechildi', kindInstalled: 'Qo‘yildi', netErr: 'Internet bilan muammo. Qayta urinib ko‘ring.',
       noTg: 'Bu oyna faqat Telegram ichida ishlaydi. Botdagi “Obyektlarni ochish” tugmasini bosing.' },
     ru: { loading: 'Загрузка…', title: 'Объекты', total: 'Всего', removed: 'Снято', installed: 'Установлено', review: 'На проверке',
-      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
+      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', findBtn: '📍 Определить место и найти объект', findHint: 'Нажмите, стоя у объекта: появится адрес и объекты рядом.', findWait: 'Определяем местоположение…', here: 'Вы находитесь', noAddress: 'Адрес не найден — впишите сами.', streetLabel: 'Улица', pickStreet: '— выберите улицу —', nearbyTitle: 'Объекты рядом (до {n} м)', nearbyNone: 'Рядом нет внесённых объектов.', addHere: '➕ Добавить новый объект здесь', refind: '🔄 Определить снова', address: 'Адрес', m: 'м', editDetails: '✏️ Изменить данные', orBrowse: 'Или выберите улицу из списка:', chooseHint: 'Выберите нужный объект — фото, видео и место запишутся только к нему.', needStreet: 'Сначала выберите улицу.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
@@ -186,7 +186,8 @@
         '<div><b>' + tot.total + '</b><span>' + t('total') + '</span></div><div><b class="s-removed">' + tot.removed + '</b><span>' + t('removed') + '</span></div>' +
         '<div><b class="s-installed">' + tot.installed + '</b><span>' + t('installed') + '</span></div><div><b class="s-review">' + tot.review + '</b><span>' + t('review') + '</span></div></div></div>';
       if (d.draft) html += '<button class="btn alt" id="draft">↩︎ ' + t('continueDraft') + '</button>';
-      html += '<p class="muted">' + t('streetsHint') + '</p>';
+      html += '<button class="btn" id="find">' + t('findBtn') + '</button><p class="muted">' + t('findHint') + '</p>';
+      html += '<p class="muted" style="margin-top:16px">' + t('orBrowse') + '</p>';
       d.streets.forEach(function (s) {
         html += '<div class="card street" data-id="' + s.id + '"><div class="row"><span class="name">' + esc(s.name) + '</span>' +
           (s.priority ? '<span class="pill">⭐ ' + t('priority') + '</span>' : '') + '</div><div>' +
@@ -199,7 +200,56 @@
       app.querySelectorAll('.street').forEach(function (el) { el.onclick = function () { var s = d.streets.find(function (x) { return x.id == el.dataset.id; }); show(function () { street(s); }); }; });
       var dr = document.getElementById('draft');
       if (dr) dr.onclick = function () { show(function () { object(d.draft.object_id); }); };
+      document.getElementById('find').onclick = function () { show(findHere); };
     }).catch(fatal);
+  }
+
+  // "Find my place": where the staff member stands -> the address, the street, the businesses nearby -> pick one or add one here
+  var lastPlace = null;
+  function findHere() {
+    titleEl.textContent = t('here'); syncBack();
+    h('<p class="muted center">' + t('findWait') + '</p><div id="err" class="err"></div><div id="extra"></div>');
+    var my = nav;
+    locator.locate().then(function (p) {
+      if (my !== nav) return;
+      return api('/nearby', { body: { latitude: p.latitude, longitude: p.longitude } }).then(function (d) {
+        lastPlace = { lat: p.latitude, lon: p.longitude, address: d.address, street: d.street };
+        var opts = '<option value="">' + t('pickStreet') + '</option>' + d.streets.map(function (s) {
+          return '<option value="' + s.id + '"' + (d.street && d.street.id === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+        }).join('');
+        var list = d.objects.map(function (o) {
+          return '<div class="card obj" data-id="' + o.id + '"><div class="row"><b>' + esc(o.shop_name) + '</b>' + statusPill(o) + '</div>' +
+            '<div class="muted">' + esc(o.address || o.street || '') + ' · ' + o.distance + ' ' + t('m') + '</div></div>';
+        }).join('');
+        h('<div class="card"><div class="muted">' + t('here') + '</div><div style="font-weight:600;margin:4px 0 8px">' + esc(d.address || t('noAddress')) + '</div>' +
+          '<label>' + t('streetLabel') + '</label><select id="st">' + opts + '</select></div>' +
+          '<button class="btn" id="addHere">' + t('addHere') + '</button><div id="err" class="err"></div>' +
+          '<p class="muted" style="margin-top:14px">' + t('nearbyTitle').replace('{n}', d.radius) + '</p>' +
+          (list ? '<p class="muted">' + t('chooseHint') + '</p>' + list : '<p class="muted">' + t('nearbyNone') + '</p>') +
+          '<button class="btn alt" id="again">' + t('refind') + '</button>');
+        app.querySelectorAll('.obj').forEach(function (el) { el.onclick = function () { show(function () { object(+el.dataset.id); }); }; });
+        document.getElementById('again').onclick = function () { stack[stack.length - 1] = findHere; nav++; findHere(); };
+        document.getElementById('addHere').onclick = function () {
+          var sel = document.getElementById('st'), id = +sel.value;
+          if (!id) { showErr({ error: t('needStreet') }); sel.focus(); return; }
+          var s = { id: id, name: sel.options[sel.selectedIndex].text };
+          show(function () { addObject(s, lastPlace); });
+        };
+      });
+    }).catch(function (e) {
+      if (my !== nav) return;
+      h('<div id="err" class="err"></div><div id="extra"></div><button class="btn" id="again">' + t('retry') + '</button>');
+      document.getElementById('again').onclick = function () { stack[stack.length - 1] = findHere; nav++; findHere(); };
+      if (e && e.code === 'denied') {
+        document.getElementById('err').textContent = t('locDenied');
+        if (locator.canOpenSettings()) {
+          document.getElementById('extra').innerHTML = '<button class="btn alt" id="settings">' + t('openSettings') + '</button>';
+          document.getElementById('settings').onclick = function () { locator.openSettings(); };
+        }
+        return;
+      }
+      showErr(e && (e.code === 'timeout' || e.code === 'unavailable') ? { error: t('locNone') } : e);
+    });
   }
 
   function street(s, filter) {
@@ -232,9 +282,10 @@
   }
 
   // a business the staff member found on the street
-  function addObject(s) {
+  function addObject(s, place) {
     titleEl.textContent = t('addTitle'); syncBack();
     h('<p class="muted">' + esc(s.name) + '. ' + t('addHint') + '</p><div class="card"><label>' + t('shop') + ' *</label><input id="shop_name" maxlength="150">' +
+      '<label>' + t('address') + '</label><input id="address" maxlength="200" value="' + esc(place && place.address || '') + '">' +
       '<label>' + t('owner') + '</label><input id="owner_name" maxlength="150">' +
       '<label>' + t('phone') + '</label><input id="owner_phone" inputmode="tel" maxlength="30">' +
       '<label>' + t('stir') + '</label><input id="stir" inputmode="numeric" maxlength="14"></div><div id="err" class="err"></div>' +
@@ -242,7 +293,8 @@
     var go = document.getElementById('go');
     go.onclick = function () {
       busy(go, function () {
-        var body = {}; ['shop_name', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
+        var body = {}; ['shop_name', 'address', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
+        if (place) { body.latitude = place.lat; body.longitude = place.lon; }
         return api('/streets/' + s.id + '/objects', { body: body }).then(function (d) {
           var fl = d.already ? t('exists') : null;
           nav++; stack.pop(); stack.push(function () { object(d.object.id); }); object(d.object.id, fl);
@@ -256,7 +308,9 @@
     h('<p class="muted center">' + t('loading') + '</p>');
     api('/objects/' + id).then(function (o) {
       titleEl.textContent = o.shop_name;
-      var html = '<div class="card"><div class="row"><span>' + esc(o.street || '') + '</span>' + statusPill(o) + '</div></div>' +
+      var html = '<div class="card"><div class="row"><b>' + esc(o.shop_name) + '</b>' + statusPill(o) + '</div>' +
+        '<div class="muted">' + esc([o.street, o.address].filter(Boolean).join(' · ')) + '</div>' +
+        (o.owner_name || o.stir ? '<div class="muted">' + esc(o.owner_name || '') + (o.stir ? ' · STIR ' + esc(o.stir) : '') + '</div>' : '') + '</div>' +
         (flash ? '<p class="ok">' + esc(flash) + '</p>' : '') + '<div id="err" class="err"></div>';
       if (o.draft) {
         html += '<button class="btn" id="cont">↩︎ ' + t('continueDraft') + ' (' + t(o.draft.kind === 'removed' ? 'kindRemoved' : 'kindInstalled') + ')</button>';
@@ -266,11 +320,13 @@
         if (o.status === 'pending') html += '<button class="btn" data-kind="removed">' + t('startRemoved') + '</button>';
         if (o.status !== 'installed') html += '<button class="btn" data-kind="installed">' + t('startInstalled') + '</button>';
       }
-      html += '<div class="card" style="margin-top:12px"><label>' + t('shop') + '</label><input id="shop_name" maxlength="150" value="' + esc(o.shop_name) + '">' +
+      html += '<details class="card" style="margin-top:12px"><summary style="font-weight:600;cursor:pointer">' + t('editDetails') + '</summary>' +
+        '<label>' + t('shop') + '</label><input id="shop_name" maxlength="150" value="' + esc(o.shop_name) + '">' +
+        '<label>' + t('address') + '</label><input id="address" maxlength="200" value="' + esc(o.address) + '">' +
         '<label>' + t('owner') + '</label><input id="owner_name" maxlength="150" value="' + esc(o.owner_name) + '">' +
         '<label>' + t('phone') + '</label><input id="owner_phone" inputmode="tel" maxlength="30" value="' + esc(o.owner_phone) + '">' +
         '<label>' + t('stir') + '</label><input id="stir" inputmode="numeric" maxlength="14" value="' + esc(o.stir) + '">' +
-        '<button class="btn alt" id="save">' + t('save') + '</button></div>';
+        '<button class="btn alt" id="save">' + t('save') + '</button></details>';
       if (o.history && o.history.length) {
         html += '<p class="muted">' + t('history') + '</p>' + o.history.map(function (x) {
           var r = x.review === 'approved' ? '<span class="s-installed">' + t('approved') + '</span>' : x.review === 'rejected' ? '<span style="color:var(--red)">' + t('rejected') + '</span>' : '<span class="s-review">' + t('review') + '</span>';
@@ -284,7 +340,7 @@
       var save = document.getElementById('save');
       save.onclick = function () {
         busy(save, function () {
-          var body = {}; ['shop_name', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
+          var body = {}; ['shop_name', 'address', 'owner_name', 'owner_phone', 'stir'].forEach(function (k) { body[k] = document.getElementById(k).value.trim(); });
           return api('/objects/' + o.id, { body: body }).then(function () { document.getElementById('err').innerHTML = '<span class="ok">' + t('saved') + '</span>'; });
         });
       };

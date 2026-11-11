@@ -365,7 +365,9 @@ def _added_columns():
     return (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
             ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0"}),
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
-            ("outbox", {"photo": "TEXT"}))  # a picture (path under UPLOADS_DIR) sent with the text as its caption
+            ("outbox", {"photo": "TEXT"}),  # a picture (path under UPLOADS_DIR) sent with the text as its caption
+            # where the staff member stood when adding the business, and the address found there (Mini App "find my place")
+            ("objects", {"address": "TEXT", "found_lat": "REAL", "found_lon": "REAL"}))  # a picture (path under UPLOADS_DIR) sent with the text as its caption
 
 
 def init() -> None:

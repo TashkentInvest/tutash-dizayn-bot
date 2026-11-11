@@ -20,6 +20,7 @@ Route::get('/file/{file}', [StaffAppController::class, 'file'])->middleware(['si
 
 Route::prefix('api')->middleware([TelegramWebApp::class, 'throttle:tg', SubstituteBindings::class])->group(function () {
     Route::get('/me', [StaffAppController::class, 'me']);
+    Route::post('/nearby', [StaffAppController::class, 'nearby']);
     Route::get('/streets/{street}/objects', [StaffAppController::class, 'objects']);
     Route::post('/streets/{street}/objects', [StaffAppController::class, 'create']);
     Route::get('/objects/{object}', [StaffAppController::class, 'show']);

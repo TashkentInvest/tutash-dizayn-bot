@@ -492,4 +492,39 @@ class StaffAppTest extends TestCase
         $this->actingAs($admin);
         Livewire::test(ManageStaff::class)->assertSee('Botda bor, tasdiqlamagan')->assertSee('Botga kirmagan')->assertSee('Tasdiqlangan');
     }
+
+    public function test_find_my_place_gives_the_address_the_street_and_nearby_objects(): void
+    {
+        $db = DB::connection('bot');
+        $name = (string) $db->table('streets')->where('id', $this->street)->value('name');
+        // the map names the street in Latin with a different spelling: still the same street
+        $down = false;
+        \Illuminate\Support\Facades\Http::fake(function () use (&$down, $name) { return $down ? \Illuminate\Support\Facades\Http::response('', 500)
+            : \Illuminate\Support\Facades\Http::response(['address' => ['road' => \App\Support\Latin::of($name), 'house_number' => '12', 'suburb' => 'Mahalla']]); });
+        $here = [41.3111, 69.2797];
+        $this->object->forceFill(['found_lat' => 41.3112, 'found_lon' => 69.2798])->save();  // ~14 m away
+        $far = DesignObject::create(['street_id' => $this->street, 'shop_name' => 'Uzoqdagi', 'found_lat' => 41.33, 'found_lon' => 69.30]);
+
+        $d = $this->postJson('/tg/api/nearby', ['latitude' => $here[0], 'longitude' => $here[1]], $this->headers())->assertOk()->json();
+        $this->assertSame(\App\Support\Latin::of($name).' 12, Mahalla', $d['address']);
+        $this->assertSame($this->street, $d['street']['id']);
+        $this->assertSame(['Market 24'], array_column($d['objects'], 'shop_name'));  // the far one is not "nearby"
+        $this->assertLessThan(30, $d['objects'][0]['distance']);
+
+        // a new business added here keeps the address and the point, and shows up nearby next time
+        $o = $this->postJson('/tg/api/streets/'.$this->street.'/objects', ['shop_name' => 'Yangi do‘kon', 'address' => $d['address'],
+            'latitude' => $here[0], 'longitude' => $here[1]], $this->headers())->assertOk()->json('object');
+        $this->assertSame($d['address'], $o['address']);
+        $d2 = $this->postJson('/tg/api/nearby', ['latitude' => $here[0], 'longitude' => $here[1]], $this->headers())->json();
+        $this->assertContains('Yangi do‘kon', array_column($d2['objects'], 'shop_name'));
+        $this->assertNotContains('Uzoqdagi', array_column($d2['objects'], 'shop_name'));
+
+        // the map service down: no address, still the nearby objects
+        \Illuminate\Support\Facades\Cache::flush();
+        $down = true;
+        $d3 = $this->postJson('/tg/api/nearby', ['latitude' => 41.3111001, 'longitude' => 69.2797001], $this->headers())->assertOk()->json();
+        $this->assertNull($d3['address']);
+        $this->assertNotEmpty($d3['objects']);
+        $this->assertSame($far->street_id, $this->street);
+    }
 }
