@@ -34,6 +34,12 @@ class TopDistricts extends TableWidget
             ->defaultSort('total', 'desc')
             ->defaultKeySort(false) // grouped rows: PostgreSQL refuses an ORDER BY on a column that is not grouped
             ->paginated(false)
+            // a click on a district shows its streets in the "most downloaded streets" table next to this one
+            ->recordAction('streets')
+            ->recordActions([
+                \Filament\Actions\Action::make('streets')->label('Ko‘chalari')->icon('heroicon-o-arrow-right')->color('gray')->link()
+                    ->action(fn ($record, $livewire) => $livewire->dispatch('district-picked', district: $record->district)),
+            ])
             ->headerActions([\App\Services\DownloadsReport::action()])
             ->filters([self::periodFilter()])
             ->columns([

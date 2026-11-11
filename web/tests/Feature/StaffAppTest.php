@@ -490,7 +490,7 @@ class StaffAppTest extends TestCase
         $admin = User::factory()->create();
         config(['app.admin_emails' => [$admin->email]]);
         $this->actingAs($admin);
-        Livewire::test(ManageStaff::class)->assertSee('Botda bor, tasdiqlamagan')->assertSee('Botga kirmagan')->assertSee('Tasdiqlangan');
+        Livewire::test(ManageStaff::class)->assertSee('Raqami botda bor, tasdiqlamagan')->assertSee('Bu raqam botda yo‘q')->assertSee('Tasdiqlangan');
     }
 
     public function test_find_my_place_gives_the_address_the_street_and_nearby_objects(): void

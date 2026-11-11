@@ -27,6 +27,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('Tutash Admin')
             ->id('admin')
             ->path('admin')
+            ->maxContentWidth(\Filament\Support\Enums\Width::Full)
             ->login()
             ->colors([
                 'primary' => Color::Amber,

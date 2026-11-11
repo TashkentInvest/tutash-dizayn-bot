@@ -8,6 +8,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget;
+use Livewire\Attributes\On;
 
 class TopStreets extends TableWidget
 {
@@ -17,11 +18,30 @@ class TopStreets extends TableWidget
 
     protected int|string|array $columnSpan = ['md' => 1, 'lg' => 1, '2xl' => 2];
 
-    protected static ?string $heading = 'Eng ko‘p yuklab olingan ko‘chalar';
+    /** A district picked in the district ranking: this table then shows that district's streets only. */
+    #[On('district-picked')]
+    public function pickDistrict(?string $district = null): void
+    {
+        $this->tableFilters['district'] = ['value' => $district];
+        $this->resetPage();
+    }
+
+    private function pickedDistrict(): ?string
+    {
+        return $this->tableFilters['district']['value'] ?? null;
+    }
 
     public function table(Table $table): Table
     {
         return $table
+            ->heading(fn () => ($d = $this->pickedDistrict())
+                ? $d.': ko‘chalar kesimida eng ko‘p yuklab olinganlar'
+                : 'Eng ko‘p yuklab olingan ko‘chalar')
+            ->headerActions([
+                \Filament\Actions\Action::make('allDistricts')->label('Barcha tumanlar')->icon('heroicon-o-x-mark')->color('gray')->size('sm')
+                    ->visible(fn () => $this->pickedDistrict() !== null)
+                    ->action(fn () => $this->pickDistrict(null)),
+            ])
             ->query(
                 Download::query()
                     ->selectRaw('MIN(id) as id, district, street, COUNT(*) as total, COUNT(DISTINCT user_id) as people')

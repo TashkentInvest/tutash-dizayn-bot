@@ -73,6 +73,21 @@ class DistrictStatsTest extends TestCase
         $w->assertSee('57% ulush')->assertSee('43% ulush')->assertDontSee(TopDistricts::DESIGN_CODE);
     }
 
+    public function test_a_picked_district_shows_its_streets_in_the_streets_table(): void
+    {
+        Livewire::test(TopDistricts::class)
+            ->callTableAction('streets', $w = Livewire::test(TopDistricts::class)->instance()->getTableRecords()->first())
+            ->assertDispatched('district-picked', district: 'Чилонзор тумани');
+
+        $t = Livewire::test(TopStreets::class)->dispatch('district-picked', district: 'Миробод тумани');
+        $rows = $t->instance()->getTableRecords();
+        $this->assertNotEmpty($rows);
+        $this->assertSame(['Миробод тумани'], $rows->pluck('district')->unique()->values()->all());
+        $t->assertSee('Миробод тумани: ko‘chalar kesimida');
+        $t->callTableAction('allDistricts')->assertSee('Eng ko‘p yuklab olingan ko‘chalar');
+        $this->assertGreaterThan(1, $t->instance()->getTableRecords()->pluck('district')->unique()->count());
+    }
+
     public function test_period_filter_keeps_only_recent_downloads(): void
     {
         $w = Livewire::test(TopDistricts::class)->filterTable('period', '7');

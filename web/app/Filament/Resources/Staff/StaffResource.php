@@ -84,19 +84,21 @@ class StaffResource extends Resource
                 'inspections as sent_count' => fn ($i) => $i->whereNotNull('review'),
                 'inspections as approved_count' => fn ($i) => $i->where('review', Inspection::APPROVED),
             ]))
-            ->defaultSort('district_id')
+            ->defaultSort(fn ($query) => $query->orderBy(District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'))->orderBy('full_name'))
             ->columns([
+                TextColumn::make('district.name')->label('Tuman')->sortable(query: fn ($query, string $direction) => $query->orderBy(
+                    District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'), $direction))->weight('medium'),
                 TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->description(fn (Staff $s) => $s->streets_note),
                 TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable()->copyable(),
-                TextColumn::make('district.name')->label('Tuman')->sortable(),
                 TextColumn::make('bot_state')->label('Botda')->badge()
                     ->state(fn (Staff $s) => $s->botState())
-                    ->formatStateUsing(fn (string $state) => ['linked' => 'Tasdiqlangan', 'waiting' => 'Botda bor, tasdiqlamagan', 'absent' => 'Botga kirmagan'][$state])
+                    ->formatStateUsing(fn (string $state) => ['linked' => 'Tasdiqlangan', 'waiting' => 'Raqami botda bor, tasdiqlamagan', 'absent' => 'Bu raqam botda yo‘q'][$state])
                     ->color(fn (string $state) => ['linked' => 'success', 'waiting' => 'warning', 'absent' => 'gray'][$state])
                     ->tooltip(fn (Staff $s) => match ($s->botState()) {
                         'linked' => 'Telegram ID: '.$s->user_id,
                         'waiting' => 'Shu raqam bilan botga kirgan. /start bosib, raqamni “Raqamni yuborish” tugmasi bilan yuborsin — yoki “Botga bog‘lash”.',
-                        default => 'Bu raqam bilan botga hali hech kim kirmagan: @DizaynKodBot da /start bossin.',
+                        default => 'Botda bu raqamni yuborgan odam yo‘q. Botga kirgan bo‘lsa ham raqam qadamida to‘xtagan yoki Telegram’i boshqa raqamda bo‘lishi mumkin: '
+                            .'/start bosib, “Raqamni yuborish” tugmasini bossin — yoki “Botga bog‘lash” bilan uni o‘zingiz bog‘lang.',
                     }),
                 TextColumn::make('sent_count')->label('Yuborgan dalillar'),
                 TextColumn::make('approved_count')->label('Tasdiqlangan'),
