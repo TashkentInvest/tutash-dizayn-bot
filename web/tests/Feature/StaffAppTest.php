@@ -556,4 +556,20 @@ class StaffAppTest extends TestCase
         $this->assertSame($this->street, $d['street']['id']);
         $this->assertSame($this->street, $d['streets'][0]['id']);
     }
+
+    public function test_map_page_draws_street_lines_and_object_points(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $db->table('streets')->where('id', $this->street)->update(['start_lat' => 41.31, 'start_lon' => 69.27, 'end_lat' => 41.32, 'end_lon' => 69.28]);
+        $this->object->forceFill(['found_lat' => 41.315, 'found_lon' => 69.275, 'address' => 'Test manzil 5'])->save();
+
+        $html = $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->assertOk()
+            ->assertSee('Dizayn-kod xaritasi')->assertSee('Butun shahar')->getContent();
+        $this->assertStringContainsString('[[41.31,69.27],[41.32,69.28]]', $html);   // the street's line
+        $this->assertStringContainsString('"at":[41.315,69.275]', $html);            // the object's point
+        $this->assertStringContainsString('Market 24', $html);
+    }
 }
