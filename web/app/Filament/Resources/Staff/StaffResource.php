@@ -122,7 +122,7 @@ class StaffResource extends Resource
                     ->modalSubmitActionLabel('Bog‘lash')
                     ->schema([
                         Select::make('user_id')->label('Botdagi akkaunti')->required()->searchable()
-                            ->helperText('Ism, telefon yoki @username bo‘yicha qidiring. Shu raqamli akkaunt bo‘lsa, ro‘yxatda birinchi turadi.')
+                            ->helperText('Ism, telefon yoki @username bo‘yicha qidiring. ★ — xodimning raqami bilan kirgan, ≈ — ismi o‘xshash (boshqa raqam bilan kirgan bo‘lishi mumkin).')
                             ->options(fn (Staff $record) => self::botAccounts($record, null))
                             ->getSearchResultsUsing(fn (Staff $record, string $search) => self::botAccounts($record, $search))
                             ->getOptionLabelUsing(fn ($value) => ($u = BotUser::find($value)) ? self::account($u) : (string) $value),
@@ -158,15 +158,20 @@ class StaffResource extends Resource
                 ->orWhereLike('username', '%'.ltrim($search, '@').'%')
                 ->when(strlen($digits) >= 4, fn ($w) => $w->orWhereLike('phone', "%$digits%")));
         } else {
-            $q->orderByRaw('CASE WHEN phone = ? THEN 0 ELSE 1 END', [$staff->phone])->orderByDesc('last_seen');
+            // the same number first, then people whose name contains the staff member's (many joined with another number)
+            $name = '%'.mb_strtolower(trim((string) $staff->full_name)).'%';
+            $q->orderByRaw(
+                "CASE WHEN phone = ? THEN 0 WHEN LOWER(COALESCE(full_name, '') || ' ' || COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) LIKE ? THEN 1 ELSE 2 END",
+                [$staff->phone, $name])->orderByDesc('last_seen');
         }
+        $similar = fn (BotUser $u) => str_contains(mb_strtolower($u->full_name.' '.$u->first_name.' '.$u->last_name), mb_strtolower(trim((string) $staff->full_name)));
 
-        return $q->limit(30)->get()->mapWithKeys(fn (BotUser $u) => [$u->user_id => self::account($u, $u->phone === $staff->phone)])->all();
+        return $q->limit(30)->get()->mapWithKeys(fn (BotUser $u) => [$u->user_id => self::account($u, $u->phone === $staff->phone, $similar($u))])->all();
     }
 
-    private static function account(BotUser $u, bool $samePhone = false): string
+    private static function account(BotUser $u, bool $samePhone = false, bool $sameName = false): string
     {
-        return trim(($samePhone ? '★ ' : '').($u->full_name ?: $u->first_name ?: 'ID '.$u->user_id)
+        return trim(($samePhone ? '★ ' : ($sameName ? '≈ ' : '')).($u->full_name ?: $u->first_name ?: 'ID '.$u->user_id)
             .($u->phone ? ' · '.Phone::pretty($u->phone) : '').($u->username ? ' · @'.$u->username : ''));
     }
 

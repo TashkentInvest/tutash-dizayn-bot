@@ -609,4 +609,17 @@ class StaffAppTest extends TestCase
         $this->artisan('reports:send', ['type' => 'nope'])->assertFailed();
         $other->delete();
     }
+
+    public function test_link_picker_marks_people_with_the_same_name_who_joined_with_another_number(): void
+    {
+        $db = DB::connection('bot');
+        $db->table('users')->insert(['user_id' => 889501, 'first_name' => 'Elyor', 'full_name' => 'Махмуджанов Элёр Азизович',
+            'phone' => '+998909990000', 'last_seen' => now()->utc()->format('Y-m-d H:i:s')]);
+        $s = Staff::create(['full_name' => 'Элёр', 'phone' => '+998931110000', 'district_id' => $this->district, 'is_active' => true]);
+        $m = new \ReflectionMethod(\App\Filament\Resources\Staff\StaffResource::class, 'botAccounts');
+        $options = $m->invoke(null, $s, null);
+        $this->assertArrayHasKey(889501, $options);
+        $this->assertStringStartsWith('≈ Махмуджанов Элёр', $options[889501]);
+        $this->assertSame([889501], array_keys($m->invoke(null, $s, 'Элёр')));   // search by name
+    }
 }
