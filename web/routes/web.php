@@ -34,12 +34,18 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-file/{file}', functio
     $isPdf = strtolower(pathinfo($file->file_name, PATHINFO_EXTENSION)) === 'pdf';
     $disposition = ($isPdf ? 'inline' : 'attachment').'; filename*=UTF-8\'\''.rawurlencode($file->file_name);
 
-    return response()->file($disk->path($file->path), [
+    $response = response()->file($disk->path($file->path), [
         'Content-Type' => $isPdf ? 'application/pdf' : 'application/octet-stream',
         'Content-Disposition' => $disposition,
         'X-Content-Type-Options' => 'nosniff',
         'Content-Security-Policy' => 'sandbox',
+        // ask the server every time (it answers 304 while the file is unchanged, so a big PDF is not sent again):
+        // "public" with no max-age let browsers reuse a copy for weeks, with the headers it had back then
+        'Cache-Control' => 'private, no-cache',
     ]);
+    $response->isNotModified(request());
+
+    return $response;
 })->name('bot-file');
 
 // Evidence a staff member sent from the Mini App: the live photo or the live video (stored under BOT_UPLOADS_PATH).

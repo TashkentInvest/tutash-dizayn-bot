@@ -205,6 +205,11 @@ class CatalogCrudTest extends TestCase
         $this->assertSame('nosniff', $r->headers->get('X-Content-Type-Options'));
         $this->assertSame('sandbox', $r->headers->get('Content-Security-Policy'));
         $this->assertSame('application/octet-stream', $r->headers->get('Content-Type'));
+
+        // asked again every time (no copy kept with old headers), but an unchanged file is not sent again
+        $this->assertStringContainsString('no-cache', $r->headers->get('Cache-Control'));
+        $this->assertStringContainsString('private', $r->headers->get('Cache-Control'));
+        $this->get(route('bot-file', $f), ['If-Modified-Since' => $r->headers->get('Last-Modified')])->assertStatus(304);
     }
 
     public function test_district_contact_phone_is_saved_normalised_and_bad_numbers_are_refused(): void
