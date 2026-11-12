@@ -4,9 +4,14 @@ set -euo pipefail
 APP=/srv/tutash
 KEY=/home/tutash/.ssh/id_ed25519_deploy
 cd "$APP"
-sudo -u tutash GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes" git fetch -q origin main
-echo "changes to deploy:"; sudo -u tutash git --no-pager log --oneline HEAD..origin/main || true
-sudo -u tutash git checkout -q -f -B main origin/main
+if [ -z "${TUTASH_UPDATE_FRESH:-}" ]; then
+  sudo -u tutash GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes" git fetch -q origin main
+  echo "changes to deploy:"; sudo -u tutash git --no-pager log --oneline HEAD..origin/main || true
+  sudo -u tutash git checkout -q -f -B main origin/main
+  # bash keeps reading the copy of this script it opened: run the version just checked out, so a deploy that changes the
+  # deploy steps uses the new steps at once (it once skipped the bot's migrations and the bot refused to start)
+  TUTASH_UPDATE_FRESH=1 exec bash "$APP/deploy/update.sh"
+fi
 sudo -u tutash "$APP/venv/bin/pip" install -q -r requirements.txt
 cd web
 sudo -u tutash composer install --no-dev -o --no-interaction -q
@@ -23,7 +28,11 @@ chgrp -R www-data "$APP/uploads" "$APP/data"; chmod -R g+rwX "$APP/uploads" "$AP
 find "$APP/uploads" "$APP/data" -type d ! -perm -g+s -exec chmod g+s {} +
 # the new bot (it refuses to start on an old schema, so the migrations above run first), then the new dashboard
 systemctl restart tutash-bot
-sleep 10   # longer than RestartSec: a crash loop would not look "active" by now
-systemctl is-active tutash-bot
+restarts=$(systemctl show -p NRestarts --value tutash-bot)
+sleep 15   # three times RestartSec: a crash loop has restarted by now
+# "active" alone is not enough: a bot that exits at once is restarted every 5 s and looks active most of the time
+if [ "$(systemctl show -p NRestarts --value tutash-bot)" != "$restarts" ] || ! systemctl is-active -q tutash-bot; then
+  echo "THE BOT DOES NOT STAY UP. Its last words:"; journalctl -u tutash-bot -n 15 --no-pager; exit 1
+fi
 systemctl reload php8.4-fpm
 echo "deployed: $(sudo -u tutash git -C $APP rev-parse --short HEAD)"
