@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Pages\DesignCodeSvod;
+use App\Filament\Pages\DistrictStaff;
 use App\Filament\Resources\DesignObjects\Pages\ListDesignObjects;
 use App\Filament\Resources\DesignObjects\Pages\ViewDesignObject;
 use App\Filament\Resources\Inspections\Pages\ListInspections;
@@ -346,19 +347,27 @@ class StaffAppTest extends TestCase
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
     }
 
-    public function test_staff_page_is_ordered_by_district_and_adds_to_the_open_district(): void
+    public function test_district_list_assigns_people_to_a_district(): void
     {
         $this->actingAs(User::factory()->create(['email' => 'admin@test.local']));
         config(['app.admin_emails' => ['admin@test.local']]);
+        $db = DB::connection('bot');
+        $street = (int) $db->table('streets')->where('district_id', $this->district)->value('id');
+        $this->staff->forceFill(['priority_streets' => [$street]])->save();
         $other = Staff::create(['full_name' => 'Boshqa Xodim', 'phone' => '+998901110009', 'district_id' => $this->otherDistrict, 'is_active' => true]);
-        $name = fn (int $id) => (string) DB::connection('bot')->table('districts')->where('id', $id)->value('name');
+        $district = \App\Models\District::findOrFail($this->district);
 
-        // "Hammasi": everyone, the district as the heading of its people; a district's tab: only its people
-        Livewire::test(ManageStaff::class)->assertCanSeeTableRecords([$this->staff, $other])->assertSee($name($this->district))
-            ->set('activeTab', 'd'.$this->otherDistrict)->assertCanSeeTableRecords([$other])->assertCanNotSeeTableRecords([$this->staff])
-            // adding on that tab: the district is filled in already
-            ->callAction('create', ['full_name' => 'Yangi Xodim', 'phone' => '+998901110010'])->assertHasNoActionErrors();
-        $this->assertSame($this->otherDistrict, (int) Staff::query()->where('full_name', 'Yangi Xodim')->value('district_id'));
+        // the page is the 12 districts with their people
+        Livewire::test(DistrictStaff::class)->assertCanSeeTableRecords([$district])->assertSee('Test Xodim')->assertSee('Boshqa Xodim')
+            // ticking the other district's person and unticking this district's one
+            ->callTableAction('assign', $district, ['staff' => [$other->id]])->assertHasNoTableActionErrors();
+
+        $this->assertSame($this->district, (int) $other->fresh()->district_id);  // moved here
+        $this->assertNull($this->staff->fresh()->district_id);                   // taken off: in no district, still in the system
+        $this->assertNull($this->staff->fresh()->priority_streets);              // the old district's streets went with it
+        $this->assertSame([], collect($this->getJson('/tg/api/me', $this->headers())->assertOk()->json('streets'))->all());  // sees nothing now
+
+        Livewire::test(DistrictStaff::class)->assertSee('Hech qaysi tumanga biriktirilmagan: Test Xodim');
     }
 
     public function test_svod_counts_objects_once_per_status_and_the_days_work(): void

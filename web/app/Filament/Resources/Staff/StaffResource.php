@@ -44,27 +44,19 @@ class StaffResource extends Resource
 
     protected static ?string $navigationLabel = 'Xodimlar';
 
-    protected static ?string $slug = 'xodimlar';
+    // the menu's "Xodimlar" is the district list (Pages\DistrictStaff); this full list (bot link, invite, streets) opens from there
+    protected static ?string $slug = 'xodimlar/royxat';
+
+    protected static bool $shouldRegisterNavigation = false;
 
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
     {
         return $schema->columns(2)->components([
-            TextInput::make('full_name')->label('F.I.Sh.')->required()->maxLength(150),
-            TextInput::make('phone')->label('Telefon')->tel()->required()->placeholder('+998 90 123 45 67')
-                ->helperText('Xodim botda shu raqamni “Raqamni yuborish” tugmasi bilan tasdiqlaydi.')
-                // checked on the normalized number, the way it is stored: "90 123 45 67" and "+998901234567" are the same
-                ->rules([fn (?Staff $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
-                    $phone = Phone::normalize($value);
-                    if ($phone === null) {
-                        $fail('Raqam noto‘g‘ri. Namuna: +998 90 123 45 67');
-                    } elseif (Staff::query()->where('phone', $phone)->when($record, fn ($q) => $q->whereKeyNot($record->getKey()))->exists()) {
-                        $fail('Bu raqam boshqa xodimga biriktirilgan.');
-                    }
-                }])
-                ->dehydrateStateUsing(fn ($state) => Phone::normalize($state)),
-            Select::make('district_id')->label('Tuman')->required()->live()
+            self::nameField(),
+            self::phoneField(),
+            Select::make('district_id')->label('Tuman')->live()->placeholder('Biriktirilmagan')
                 ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id')),
             Select::make('priority_streets')->label('Biriktirilgan ko‘chalar')->multiple()->searchable()
                 ->helperText('Xodim Mini App’da faqat shu ko‘chalarni ko‘radi va faqat ularda ishlaydi. Bo‘sh qoldirilsa, tumanning hamma ko‘chalari.')
@@ -77,6 +69,27 @@ class StaffResource extends Resource
         ]);
     }
 
+    public static function nameField(): TextInput
+    {
+        return TextInput::make('full_name')->label('F.I.Sh.')->required()->maxLength(150);
+    }
+
+    /** The phone, checked as it is stored: "90 123 45 67" and "+998901234567" are the same number. */
+    public static function phoneField(): TextInput
+    {
+        return TextInput::make('phone')->label('Telefon')->tel()->required()->placeholder('+998 90 123 45 67')
+            ->helperText('Xodim botda shu raqamni “Raqamni yuborish” tugmasi bilan tasdiqlaydi.')
+            ->rules([fn (?Staff $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+                $phone = Phone::normalize($value);
+                if ($phone === null) {
+                    $fail('Raqam noto‘g‘ri. Namuna: +998 90 123 45 67');
+                } elseif (Staff::query()->where('phone', $phone)->when($record instanceof Staff, fn ($q) => $q->whereKeyNot($record->getKey()))->exists()) {
+                    $fail('Bu raqam boshqa xodimga biriktirilgan.');
+                }
+            }])
+            ->dehydrateStateUsing(fn ($state) => Phone::normalize($state));
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -87,7 +100,7 @@ class StaffResource extends Resource
             ->defaultSort('full_name')
             // the district once, as the heading of its people (in the order of the district list), not on every row
             ->defaultGroup(Group::make('district_id')->label('Tuman')->titlePrefixedWithLabel(false)->collapsible()
-                ->getTitleFromRecordUsing(fn (Staff $s) => $s->district?->name ?? '—')
+                ->getTitleFromRecordUsing(fn (Staff $s) => $s->district?->name ?? 'Hech qaysi tumanga biriktirilmagan')
                 ->orderQueryUsing(fn ($query, string $direction) => $query->orderBy(
                     District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'), $direction)))
             ->groupingSettingsHidden()

@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS staff (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name        TEXT NOT NULL,
     phone            TEXT NOT NULL UNIQUE,      -- +998XXXXXXXXX; the person confirms it with the contact button
-    district_id      INTEGER NOT NULL REFERENCES districts(id),
+    district_id      INTEGER REFERENCES districts(id),  -- NULL: taken off every district (keeps bot link, evidence)
     streets_note     TEXT,                      -- the streets named when the person was assigned (free text)
     priority_streets TEXT,                      -- JSON array of street ids listed first in the Mini App
     user_id          INTEGER UNIQUE,            -- Telegram id, set once the phone was confirmed

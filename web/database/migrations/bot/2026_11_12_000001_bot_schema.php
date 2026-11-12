@@ -120,7 +120,7 @@ return new class extends Migration
             $t->bigIncrements('id');
             $t->text('full_name');
             $t->text('phone')->unique();
-            $t->bigInteger('district_id');
+            $t->bigInteger('district_id')->nullable();  // NULL: taken off every district
             $t->text('streets_note')->nullable();
             $t->text('priority_streets')->nullable();
             $t->bigInteger('user_id')->nullable()->unique();

@@ -32,6 +32,11 @@ class District extends Model
         return $this->hasMany(Street::class, 'district_id');
     }
 
+    public function staff(): HasMany
+    {
+        return $this->hasMany(Staff::class, 'district_id');
+    }
+
     public function files(): HasManyThrough
     {
         return $this->hasManyThrough(StreetFile::class, Street::class, 'district_id', 'street_id');

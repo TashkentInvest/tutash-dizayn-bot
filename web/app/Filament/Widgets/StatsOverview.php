@@ -8,7 +8,7 @@ use App\Filament\Resources\DesignObjects\DesignObjectResource;
 use App\Filament\Resources\Downloads\DownloadResource;
 use App\Filament\Resources\Feedback\FeedbackResource;
 use App\Filament\Resources\Inspections\InspectionResource;
-use App\Filament\Resources\Staff\StaffResource;
+use App\Filament\Pages\DistrictStaff;
 use App\Services\BotStats;
 use App\Services\DesignCodeSvod as Svod;
 use App\Support\Labels;
@@ -56,7 +56,7 @@ class StatsOverview extends StatsOverviewWidget
             Stat::make('Tuman xodimlari', "{$w['staff_linked']} / {$w['staff']}")
                 ->description("Botda tasdiqlangan · bugun faol {$w['staff_active_today']}")
                 ->descriptionIcon('heroicon-m-identification')->color($w['staff_linked'] < $w['staff'] ? 'warning' : 'success')
-                ->url(StaffResource::getUrl('index')),
+                ->url(DistrictStaff::getUrl()),
             Stat::make('Kiritilgan tadbirkorlar', number_format($w['objects'], 0, '', ' '))
                 ->description("Bugun +{$w['objects_today']} · ro‘yxatda {$w['planned']}")
                 ->descriptionIcon('heroicon-m-building-storefront')->chart($week(BotStats::objectsPerDay(7)))->color('primary')

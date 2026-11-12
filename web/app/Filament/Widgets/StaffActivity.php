@@ -2,7 +2,7 @@
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Resources\Staff\StaffResource;
+use App\Filament\Pages\DistrictStaff;
 use App\Models\Inspection;
 use App\Models\Staff;
 use Carbon\CarbonImmutable;
@@ -38,7 +38,7 @@ class StaffActivity extends TableWidget
             ->paginated(false)
             ->columns([
                 TextColumn::make('full_name')->label('Xodim')->description(fn (Staff $s) => $s->district?->name)
-                    ->url(fn () => StaffResource::getUrl('index')),
+                    ->url(fn () => DistrictStaff::getUrl()),
                 IconColumn::make('linked')->label('Botda')->boolean()->state(fn (Staff $s) => $s->user_id !== null),
                 TextColumn::make('objects_today')->label('Tadbirkor (bugun)')->sortable()->alignCenter()
                     ->color(fn ($state) => $state ? 'success' : 'gray'),
