@@ -25,7 +25,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
 
@@ -84,11 +84,16 @@ class StaffResource extends Resource
                 'inspections as sent_count' => fn ($i) => $i->whereNotNull('review'),
                 'inspections as approved_count' => fn ($i) => $i->where('review', Inspection::APPROVED),
             ]))
-            ->defaultSort(fn ($query) => $query->orderBy(District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'))->orderBy('full_name'))
+            ->defaultSort('full_name')
+            // the district once, as the heading of its people (in the order of the district list), not on every row
+            ->defaultGroup(Group::make('district_id')->label('Tuman')->titlePrefixedWithLabel(false)->collapsible()
+                ->getTitleFromRecordUsing(fn (Staff $s) => $s->district?->name ?? '—')
+                ->orderQueryUsing(fn ($query, string $direction) => $query->orderBy(
+                    District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'), $direction)))
+            ->groupingSettingsHidden()
             ->columns([
-                TextColumn::make('district.name')->label('Tuman')->sortable(query: fn ($query, string $direction) => $query->orderBy(
-                    District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'), $direction))->weight('medium'),
-                TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->description(fn (Staff $s) => $s->streets_note),
+                TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->weight('medium')
+                    ->description(fn (Staff $s) => self::streetNames($s) ?: $s->streets_note),
                 TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable()->copyable(),
                 TextColumn::make('bot_state')->label('Botda')->badge()
                     ->state(fn (Staff $s) => $s->botState())
@@ -111,7 +116,6 @@ class StaffResource extends Resource
                             : 'Xodim yana Mini App’da ishlay oladi.')
                         ->action(fn (Staff $s) => $s->update(['is_active' => ! $s->is_active]))),
             ])
-            ->filters([SelectFilter::make('district_id')->label('Tuman')->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))])
             ->recordActions([
                 // an admin links the staff member to a bot account by hand (the person must have pressed /start in the bot)
                 Action::make('link')->label('Botga bog‘lash')->icon('heroicon-o-link')->color('success')
@@ -162,6 +166,15 @@ class StaffResource extends Resource
                 DeleteAction::make()->visible(fn (Staff $s) => ! $s->inspections()->exists())
                     ->modalDescription('Dalil yubormagan xodimgina o‘chiriladi. Ishlagan xodimni “Faol” belgisini o‘chirib qo‘ying.'),
             ]);
+    }
+
+    /** The streets assigned to the person (what they see in the Mini App), in Latin. */
+    private static function streetNames(Staff $s): string
+    {
+        $ids = $s->streetIds();
+
+        return $ids === null ? '' : Street::query()->whereIn('id', $ids)->orderBy('sort_order')->orderBy('name')->pluck('name')
+            ->map(fn ($n) => \App\Support\Latin::of($n))->implode(', ');
     }
 
     /** Bot accounts to link: the one with this staff member's phone first, then the latest; or a search. */

@@ -346,6 +346,21 @@ class StaffAppTest extends TestCase
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
     }
 
+    public function test_staff_page_is_ordered_by_district_and_adds_to_the_open_district(): void
+    {
+        $this->actingAs(User::factory()->create(['email' => 'admin@test.local']));
+        config(['app.admin_emails' => ['admin@test.local']]);
+        $other = Staff::create(['full_name' => 'Boshqa Xodim', 'phone' => '+998901110009', 'district_id' => $this->otherDistrict, 'is_active' => true]);
+        $name = fn (int $id) => (string) DB::connection('bot')->table('districts')->where('id', $id)->value('name');
+
+        // "Hammasi": everyone, the district as the heading of its people; a district's tab: only its people
+        Livewire::test(ManageStaff::class)->assertCanSeeTableRecords([$this->staff, $other])->assertSee($name($this->district))
+            ->set('activeTab', 'd'.$this->otherDistrict)->assertCanSeeTableRecords([$other])->assertCanNotSeeTableRecords([$this->staff])
+            // adding on that tab: the district is filled in already
+            ->callAction('create', ['full_name' => 'Yangi Xodim', 'phone' => '+998901110010'])->assertHasNoActionErrors();
+        $this->assertSame($this->otherDistrict, (int) Staff::query()->where('full_name', 'Yangi Xodim')->value('district_id'));
+    }
+
     public function test_svod_counts_objects_once_per_status_and_the_days_work(): void
     {
         $id = $this->sendEvidence('installed');
