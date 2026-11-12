@@ -15,6 +15,10 @@ sudo -u tutash php artisan migrate --force -q
 sudo -u tutash php artisan filament:assets -q
 sudo -u tutash php artisan view:clear -q
 chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cache
+# the bot (group tutash) writes registration photos, the dashboard (www-data) shows them: the folders carry the www-data
+# group and pass it on to every new folder (setgid). Without it the photos of new users were "not found" in the dashboard.
+chgrp -R www-data "$APP/uploads" "$APP/data"; chmod -R g+rwX "$APP/uploads" "$APP/data"
+find "$APP/uploads" "$APP/data" -type d ! -perm -g+s -exec chmod g+s {} +
 # the bot owns the bot database schema (adds columns/indexes at start): restart it before the new dashboard goes live
 systemctl restart tutash-bot
 sleep 10   # longer than RestartSec: a crash loop would not look "active" by now
