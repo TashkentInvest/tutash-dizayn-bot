@@ -91,6 +91,7 @@ class StaffResource extends Resource
                 ->orderQueryUsing(fn ($query, string $direction) => $query->orderBy(
                     District::query()->select('sort_order')->whereColumn('districts.id', 'staff.district_id'), $direction)))
             ->groupingSettingsHidden()
+            ->paginated([25, 50, 'all'])->defaultPaginationPageOption(50)  // all the districts on one page
             ->columns([
                 TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->weight('medium')
                     ->description(fn (Staff $s) => self::streetNames($s) ?: $s->streets_note),
