@@ -9,5 +9,5 @@
 @if ($files->isNotEmpty())
     {{-- "v": browsers kept an old copy of the file sent with "X-Frame-Options: DENY"; a new address is never that copy --}}
     <iframe src="{{ route('bot-file', [$files->first(), 'v' => 2]) }}" title="PDF" loading="lazy"
-            style="width:100%;height:560px;border:1px solid rgba(127,127,127,.3);border-radius:8px;margin-top:6px"></iframe>
+            style="width:100%;height:calc(100vh - 16rem);min-height:480px;border:1px solid rgba(127,127,127,.3);border-radius:8px;margin-top:6px"></iframe>
 @endif

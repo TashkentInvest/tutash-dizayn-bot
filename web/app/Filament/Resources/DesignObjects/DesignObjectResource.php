@@ -20,6 +20,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -70,8 +71,26 @@ class DesignObjectResource extends Resource
 
     public static function infolist(Schema $schema): Schema
     {
-        return $schema->components([
-            Section::make()->columns(4)->schema([
+        // two columns: what the business is and the staff's evidence on the left (they read top to bottom), the street's
+        // concept PDF on the right, staying in view while the evidence scrolls; one column on a phone
+        return $schema->columns(['default' => 1, 'lg' => 3])->components([
+            Group::make()->columnSpan(['default' => 1, 'lg' => 2])->schema([
+                self::details(),
+                Section::make('Xodim dalillari')->icon(Heroicon::OutlinedCamera)->schema([
+                    ViewEntry::make('inspections')->hiddenLabel()->view('filament.objects.inspections'),
+                ]),
+            ]),
+            Group::make()->columnSpan(1)->extraAttributes(['style' => 'position:sticky;top:5rem;align-self:start'])->schema([
+                Section::make('Ko‘chaning konsepsiyasi (PDF)')->icon(Heroicon::OutlinedDocumentText)->schema([
+                    ViewEntry::make('street_files')->hiddenLabel()->view('filament.objects.street-files'),
+                ]),
+            ]),
+        ]);
+    }
+
+    private static function details(): Section
+    {
+        return Section::make('Obyekt')->icon(Heroicon::OutlinedBuildingStorefront)->columns(['default' => 2, 'md' => 4])->schema([
                 TextEntry::make('street.district.name')->label('Tuman'),
                 TextEntry::make('street.name')->label('Ko‘cha'),
                 TextEntry::make('creator.full_name')->label('Kiritgan xodim')->placeholder('admin'),
@@ -86,13 +105,6 @@ class DesignObjectResource extends Resource
                 TextEntry::make('point')->label('Joylashuv')->placeholder('Hali tasdiqlangan dalil yo‘q')
                     ->state(fn (DesignObject $o) => $o->latitude ? "{$o->latitude}, {$o->longitude}" : null)
                     ->url(fn (DesignObject $o) => $o->latitude ? "https://maps.google.com/?q={$o->latitude},{$o->longitude}" : null, shouldOpenInNewTab: true),
-            ]),
-            Section::make('Ko‘chaning konsepsiyasi (PDF)')->schema([
-                ViewEntry::make('street_files')->hiddenLabel()->view('filament.objects.street-files'),
-            ]),
-            Section::make('Xodim dalillari')->schema([
-                ViewEntry::make('inspections')->hiddenLabel()->view('filament.objects.inspections'),
-            ]),
         ]);
     }
 
