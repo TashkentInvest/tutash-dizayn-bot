@@ -642,4 +642,25 @@ class StaffAppTest extends TestCase
         $this->assertNotSame($token, ($fresh = $s->fresh())->inviteLink(true) ? $fresh->invite_token : null, 'renew makes a new one');
         Livewire::test(ManageStaff::class)->assertTableActionHidden('invite', $this->staff);   // already linked
     }
+
+    public function test_a_bent_street_imported_from_kmz_is_measured_along_its_real_shape(): void
+    {
+        $db = DB::connection('bot');
+        // an L-shaped street: north 1.1 km, then east 1.2 km. The corner is ~800 m from the straight start -> end line.
+        $path = [[41.3100, 69.2700], [41.3200, 69.2700], [41.3200, 69.2850]];
+        $db->table('streets')->where('id', $this->street)->update(['path' => json_encode($path),
+            'start_lat' => 41.3100, 'start_lon' => 69.2700, 'end_lat' => 41.3200, 'end_lon' => 69.2850]);
+        \Illuminate\Support\Facades\Http::fake(fn () => \Illuminate\Support\Facades\Http::response(['address' => ['road' => 'Boshqa ko‘cha']]));
+        $street = \App\Models\Street::find($this->street);
+        $this->assertLessThan(20, $street->distanceTo(41.3199, 69.2701));   // at the corner: on the street
+        $this->assertGreaterThan(700, $street->distanceTo(41.3100, 69.2850));  // the empty corner of the L
+
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Burchakda', 'latitude' => 41.3199, 'longitude' => 69.2701], $this->headers())->assertOk();
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Bo‘sh joyda', 'latitude' => 41.3100, 'longitude' => 69.2850], $this->headers())->assertStatus(422);
+
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $this->assertStringContainsString('"path":[[41.31,69.27],[41.32,69.27],[41.32,69.285]]', $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->getContent());
+    }
 }

@@ -375,7 +375,8 @@ def _added_columns():
     return (("users", REG_COLUMNS), ("districts", {"phone": "TEXT"}),
             # the street's start and end ("dan" / "gacha" of the official list): staff must stand near this line to work on it
             ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0", "start_lat": "REAL", "start_lon": "REAL",
-                         "end_lat": "REAL", "end_lon": "REAL"}),
+                         "end_lat": "REAL", "end_lon": "REAL",
+                         "path": "TEXT"}),  # the real shape, [[lat, lon], ...] (tools/import_street_lines.py); else start -> end
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
             # a personal invite link from the dashboard (t.me/<bot>?start=s_<token>): links a staff member whatever number they joined with
             ("staff", {"invite_token": "TEXT", "invite_expires": "TEXT"}),

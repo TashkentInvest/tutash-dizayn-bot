@@ -142,7 +142,7 @@ class StaffAppController extends Controller
         $staff = $this->staff($r);
         $geo = Geocoder::reverse($lat, $lon);
         $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
-            ->get(['id', 'name', 'start_lat', 'start_lon', 'end_lat', 'end_lon']);
+            ->get(['id', 'name', 'start_lat', 'start_lon', 'end_lat', 'end_lon', 'path']);
 
         $objects = DesignObject::query()->active()->with(['pendingInspection', 'street:id,name'])
             ->whereIn('street_id', $streets->pluck('id'))

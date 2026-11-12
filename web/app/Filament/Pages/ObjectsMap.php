@@ -44,7 +44,7 @@ class ObjectsMap extends Page
             ->groupBy('street_id')->get()->keyBy('street_id');
         $streets = $db->table('streets as s')->join('districts as d', 'd.id', '=', 's.district_id')
             ->whereNotNull('s.start_lat')->whereNotNull('s.end_lat')
-            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon'])
+            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path'])
             ->map(function ($s) use ($counts) {
                 $total = (int) $s->planned_objects;
                 $installed = (int) ($counts[$s->id]->installed ?? 0);
@@ -53,6 +53,8 @@ class ObjectsMap extends Page
                 return [
                     'id' => $s->id, 'name' => $s->name, 'district' => $s->district, 'district_id' => (int) $s->district_id,
                     'line' => [[(float) $s->start_lat, (float) $s->start_lon], [(float) $s->end_lat, (float) $s->end_lon]],
+                    // the real shape where a KMZ was imported (it follows the road), else null: the map draws start -> end
+                    'path' => ($p = json_decode((string) $s->path, true)) && count($p) >= 2 ? $p : null,
                     'total' => $total, 'installed' => $installed, 'removed' => $removed,
                     'pct' => $total ? round($installed / $total * 100, 1) : 0,
                 ];

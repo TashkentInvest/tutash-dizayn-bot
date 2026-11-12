@@ -27,6 +27,7 @@
     </div>
 
     <div class="omap-legend">
+        <span><i style="background:repeating-linear-gradient(90deg,#94a3b8 0 6px,transparent 6px 10px)"></i>uzuq chiziq: ko‘chaning faqat boshi va oxiri ma’lum (haqiqiy shakli yuklanmagan)</span>
         <span><i style="background:#94a3b8"></i>Ko‘cha: hali boshlanmagan</span>
         <span><i style="background:#f59e0b"></i>jarayonda</span>
         <span><i style="background:#22c55e"></i>to‘liq bajarilgan</span>
@@ -58,7 +59,7 @@
             function draw(district) {
                 streets.clearLayers(); points.clearLayers();
                 data.streets.filter(function (s) { return !district || s.district_id === district; }).forEach(function (s) {
-                    var line = L.polyline(s.line, { color: streetColor(s), weight: 6, opacity: .85 }).addTo(streets);
+                    var line = L.polyline(s.path || s.line, { color: streetColor(s), weight: 6, opacity: .85, dashArray: s.path ? null : '10 8' }).addTo(streets);
                     // start and end as small dots, so a short street is still visible from far away
                     s.line.forEach(function (p) { L.circleMarker(p, { radius: 3, color: streetColor(s), weight: 2, fillOpacity: 1 }).addTo(streets); });
                     line.bindTooltip(esc(s.name), { sticky: true });
