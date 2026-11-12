@@ -24,7 +24,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from . import db, i18n
+from . import adb, db, i18n
 from .config import REQUIRE_APPROVAL, UPLOADS_DIR, WEBAPP_URL
 from .i18n import t
 from .keyboards import choice_kb, districts_kb, lang_pick_kb
@@ -97,7 +97,7 @@ async def send_lang_pick(bot: Bot, chat_id: int) -> None:
 
 
 async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
-    s, L = step(user_id), i18n.lang(user_id)
+    s, L = await adb.run(step, user_id), i18n.lang(user_id)
     if s == "lang":
         await send_lang_pick(bot, chat_id)
     elif s == "consent":
@@ -117,14 +117,14 @@ async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
         await bot.send_message(chat_id, t(L, "location"),
                                reply_markup=_kb([[KeyboardButton(text=t(L, "btn_location"), request_location=True)]]))
     elif s == "photo":
-        n = db.photo_count(user_id)
+        n = await adb.photo_count(user_id)
         await bot.send_message(chat_id, t(L, "photo", PHOTOS_NEEDED, n + 1), reply_markup=ReplyKeyboardRemove())
 
 
 async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: int | None = None) -> None:
     """Main menu. In a private chat the chat id is the user id, so it also tells the language."""
     L = lang or i18n.lang(chat_id)
-    if staff := db.staff_by_user(user_id or chat_id):  # district staff get their own menu instead of the citizens' one
+    if staff := await adb.staff_by_user(user_id or chat_id):  # district staff get their own menu instead of the citizens' one
         return await send_staff_menu(bot, chat_id, staff, L)
     await bot.send_message(chat_id, t(L, "choice"), reply_markup=choice_kb(L))
 
@@ -146,30 +146,30 @@ def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
 
 
 async def send_staff_menu(bot: Bot, chat_id: int, staff: dict, L: str) -> None:
-    text, kb = staff_menu(staff, L)
+    text, kb = await adb.run(staff_menu, staff, L)
     await bot.send_message(chat_id, text, reply_markup=kb, parse_mode="HTML")
 
 
 async def finish(m: Message) -> None:
     L = i18n.lang(m.from_user.id)
     await m.answer(t(L, "done"), reply_markup=ReplyKeyboardRemove())
-    if has_access(m.from_user.id):
-        await m.answer(t(L, "districts"), reply_markup=districts_kb(L))
+    if await adb.run(has_access, m.from_user.id):
+        await m.answer(t(L, "districts"), reply_markup=await adb.run(districts_kb, L))
     else:
         await m.answer(t(L, "pending"))
 
 
 class NotRegistered(BaseFilter):
     async def __call__(self, m: Message) -> bool:
-        return bool(m.from_user) and not db.is_registered(m.from_user.id)
+        return bool(m.from_user) and not await adb.is_registered(m.from_user.id)
 
 
 @router.callback_query(F.data == "consent")
 async def consent(c: CallbackQuery):
     uid = c.from_user.id
     async with _locks[uid]:
-        if not (db.get_user(uid) or {}).get("consent_at"):
-            db.update_user(uid, consent_at=_now())
+        if not (await adb.get_user(uid) or {}).get("consent_at"):
+            await adb.update_user(uid, consent_at=_now())
     await c.answer()
     try:
         await c.message.edit_reply_markup(reply_markup=None)
@@ -183,7 +183,7 @@ async def register(m: Message):
     uid = m.from_user.id
     L = i18n.lang(uid)
     async with _locks[uid]:
-        s = step(uid)
+        s = await adb.run(step, uid)
         if s == "done":  # the heal in step() just completed a registration that had lost its last write
             return await finish(m)
         if s in ("lang", "consent", "choice"):  # these steps are answered with buttons, not text
@@ -194,7 +194,7 @@ async def register(m: Message):
             name = " ".join((m.text or "").split())
             if len(name.split()) < 2 or len(name) < 5 or len(name) > 120 or name.startswith("/"):
                 return await m.answer(t(L, "name_bad"))
-            db.update_user(uid, full_name=name)
+            await adb.update_user(uid, full_name=name)
         elif s == "phone":
             # only the person's own number, sent with Telegram's contact button: a typed number proves nothing
             contact_kb = _kb([[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]])
@@ -205,7 +205,7 @@ async def register(m: Message):
             phone = normalize_phone(m.contact.phone_number or "")
             if not phone:
                 return await m.answer(t(L, "phone_bad"), reply_markup=ReplyKeyboardRemove())
-            db.update_user(uid, phone=phone)
+            await adb.update_user(uid, phone=phone)
             await m.answer(t(L, "thanks"), reply_markup=ReplyKeyboardRemove())  # the choice comes with inline buttons
         elif s == "location":
             loc = m.location
@@ -213,20 +213,20 @@ async def register(m: Message):
                 return await m.answer(t(L, "location_bad"))
             if not (LAT_RANGE[0] <= loc.latitude <= LAT_RANGE[1] and LON_RANGE[0] <= loc.longitude <= LON_RANGE[1]):
                 return await m.answer(t(L, "location_out"))
-            db.update_user(uid, latitude=loc.latitude, longitude=loc.longitude)
+            await adb.update_user(uid, latitude=loc.latitude, longitude=loc.longitude)
         elif s == "photo":
             if not m.photo:
                 return await m.answer(t(L, "photo_bad"))
-            n = db.photo_count(uid)
+            n = await adb.photo_count(uid)
             if n >= PHOTOS_NEEDED:
                 return
             photo = m.photo[-1]  # largest size
             if (photo.file_size or 0) > MAX_PHOTO_BYTES:
                 return await m.answer(t(L, "photo_big"))
-            if db.fetch_all("SELECT 1 FROM user_photos WHERE user_id=? AND file_unique_id=?", (uid, photo.file_unique_id)):
+            if await adb.fetch_all("SELECT 1 FROM user_photos WHERE user_id=? AND file_unique_id=?", (uid, photo.file_unique_id)):
                 return await m.answer(t(L, "photo_dup"))
             dest = UPLOADS_DIR / str(uid) / f"{n + 1}_{photo.file_unique_id}.jpg"
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            await adb.run(dest.parent.mkdir, parents=True, exist_ok=True)
             try:
                 await m.bot.download(photo, destination=dest)
             except Exception:
@@ -234,10 +234,10 @@ async def register(m: Message):
                 dest.unlink(missing_ok=True)  # never keep a half-written file
                 return await m.answer(t(L, "photo_fail"))
             # path is relative to UPLOADS_DIR and times are UTC, so a web app can read them as they are
-            db.add_photo(uid, photo.file_id, photo.file_unique_id, dest.relative_to(UPLOADS_DIR).as_posix())
+            await adb.add_photo(uid, photo.file_id, photo.file_unique_id, dest.relative_to(UPLOADS_DIR).as_posix())
             if n + 1 >= PHOTOS_NEEDED:
-                db.update_user(uid, registered_at=_now())
-                db.forget_access(uid)
+                await adb.update_user(uid, registered_at=_now())
+                db.forget_access(uid)  # memory only, no query
                 return await finish(m)
         await prompt(m.bot, m.chat.id, uid)
 
@@ -248,7 +248,7 @@ async def fallback(m: Message):
     again instead of silence."""
     if not m.from_user:
         return
-    if m.contact and m.contact.user_id == m.from_user.id and not db.staff_by_user(m.from_user.id):
+    if m.contact and m.contact.user_id == m.from_user.id and not await adb.staff_by_user(m.from_user.id):
         # answered the staff confirmation with a number that is not on the list (StaffContact took the ones that are)
         await m.answer(t(i18n.lang(m.from_user.id), "staff_not_found"), reply_markup=ReplyKeyboardRemove())
     await send_choice(m.bot, m.chat.id, None, m.from_user.id)

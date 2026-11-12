@@ -25,6 +25,50 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
+  # the bot's database on real PostgreSQL: the migrations (tables, indexes, foreign keys) build it from nothing, twice
+  # (the second run must do nothing), then the bot's own calls run against it (tools/pg_smoke.py)
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: tutash
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: tutash
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      BOT_DB_DRIVER: pgsql
+      BOT_DB_HOST: 127.0.0.1
+      BOT_DB_DATABASE: tutash
+      BOT_DB_USERNAME: tutash
+      BOT_DB_PASSWORD: ci-only-password
+      DATABASE_URL: postgresql://tutash:ci-only-password@127.0.0.1:5432/tutash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_sqlite, pdo_pgsql, sqlite3, gd, intl, mbstring, zip
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: migrations on an empty PostgreSQL, twice
+        working-directory: web
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          cp .env.example .env && php artisan key:generate && touch database/database.sqlite
+          php artisan migrate --path=database/migrations/bot --force
+          php artisan migrate --path=database/migrations/bot --force
+      - run: python tools/pg_smoke.py
+        env:
+          PYTHONIOENCODING: utf-8
+          LINK_SECRET: ci
+
   web:
     runs-on: ubuntu-latest
     defaults:

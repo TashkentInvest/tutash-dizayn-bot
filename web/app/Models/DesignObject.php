@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Labels;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,11 +22,16 @@ class DesignObject extends Model
 
     public const INSTALLED = 'installed';
 
-    public const STATUSES = [self::PENDING => 'Kutilmoqda', self::REMOVED => 'Yechildi (jarayonda)', self::INSTALLED => 'Qo‘yildi (qilindi)'];
 
     public const STATUS_COLORS = [self::PENDING => 'gray', self::REMOVED => 'warning', self::INSTALLED => 'success'];
 
     protected $connection = 'bot';
+
+    /** @return array<string, string> status => its name (shared/labels.json: the bot and the Mini App say the same) */
+    public static function statuses(): array
+    {
+        return array_intersect_key(Labels::group('status'), array_flip([self::PENDING, self::REMOVED, self::INSTALLED]));
+    }
 
     protected $table = 'objects';
 

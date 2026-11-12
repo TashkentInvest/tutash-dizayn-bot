@@ -1,0 +1,19 @@
+{
+  "_": "Words the bot, the dashboard and the Mini App all show. Change them here only: bot/i18n.py and web/app/Support/Labels.php read this file.",
+  "status": {
+    "pending": {"uz": "Kutilmoqda", "ru": "Ожидает"},
+    "removed": {"uz": "Yechildi", "ru": "Снято"},
+    "installed": {"uz": "Qo‘yildi", "ru": "Установлено"},
+    "review": {"uz": "Jarayonda", "ru": "В процессе"}
+  },
+  "review": {
+    "pending": {"uz": "Tekshiruvda", "ru": "На проверке"},
+    "approved": {"uz": "Tasdiqlandi", "ru": "Одобрено"},
+    "rejected": {"uz": "Rad etildi", "ru": "Отклонено"}
+  },
+  "svod": {
+    "total": {"uz": "Jami obyekt", "ru": "Всего объектов"},
+    "pct": {"uz": "Bajarilish", "ru": "Выполнение"},
+    "review_hint": {"uz": "tasdiq kutmoqda", "ru": "ждёт проверки"}
+  }
+}

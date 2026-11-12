@@ -3,7 +3,7 @@
     DATABASE_URL=postgresql://... python tools/sqlite_to_pg.py /srv/tutash/bot.db            # refuses a non-empty target
     DATABASE_URL=postgresql://... python tools/sqlite_to_pg.py /srv/tutash/bot.db --replace  # empties the target first
 
-Creates the schema (bot/db.py), copies every table row by row (only columns both sides have; 0/1 -> booleans, empty
+Needs the schema first (in web/: php artisan migrate --path=database/migrations/bot --force), copies every table row by row (only columns both sides have; 0/1 -> booleans, empty
 times -> NULL), moves the id counters past the copied ids, and checks that every table has the same number of rows.
 Stop the bot first for the real move, so nothing is written to SQLite meanwhile.
 """
@@ -24,7 +24,7 @@ def main(src: str, replace: bool) -> None:
         sys.exit("DATABASE_URL (postgresql://...) is not set")
     s = sqlite3.connect(src)
     s.row_factory = sqlite3.Row
-    db.init()  # schema on PostgreSQL
+    db.init()  # checks that the migrations created the schema
     with db._db() as c:
         pg = c.c
         filled = [t for t in TABLES if pg.execute(f"SELECT 1 FROM {t} LIMIT 1").fetchone()]

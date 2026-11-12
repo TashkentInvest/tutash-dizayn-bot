@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ReportRecipient;
 use App\Models\Staff;
+use App\Support\Labels;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -53,7 +54,7 @@ class ScheduledReports
 
         return '📊 Dizayn-kod · soat '.$at->copy()->setTimezone(config('app.display_timezone'))->format('H:i')." holati\n"
             ."Bugun: yechildi {$t['day_removed']}, qo‘yildi {$t['day_installed']}\n"
-            ."Jarayonda (tasdiq kutmoqda): {$t['review']}\n"
+            .Labels::get('status.review').' ('.Labels::get('svod.review_hint')."): {$t['review']}\n"
             ."Ishlayotgan xodimlar: $working / $staff\n"
             ."Umumiy: qo‘yildi {$t['installed']} / {$t['total']} (".DesignCodeSvod::pct($t['pct']).')';
     }

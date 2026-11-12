@@ -12,6 +12,8 @@ cd web
 sudo -u tutash composer install --no-dev -o --no-interaction -q
 sudo -u tutash php artisan config:cache -q   # first: migrate must see the current .env, not the last deploy's
 sudo -u tutash php artisan migrate --force -q
+# the bot's database (tables, indexes, foreign keys): its schema lives in these migrations; the bot only checks it at start
+sudo -u tutash php artisan migrate --path=database/migrations/bot --force -q
 sudo -u tutash php artisan filament:assets -q
 sudo -u tutash php artisan view:clear -q
 chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cache
@@ -19,7 +21,7 @@ chgrp -R www-data storage bootstrap/cache; chmod -R g+rwX storage bootstrap/cach
 # group and pass it on to every new folder (setgid). Without it the photos of new users were "not found" in the dashboard.
 chgrp -R www-data "$APP/uploads" "$APP/data"; chmod -R g+rwX "$APP/uploads" "$APP/data"
 find "$APP/uploads" "$APP/data" -type d ! -perm -g+s -exec chmod g+s {} +
-# the bot owns the bot database schema (adds columns/indexes at start): restart it before the new dashboard goes live
+# the new bot (it refuses to start on an old schema, so the migrations above run first), then the new dashboard
 systemctl restart tutash-bot
 sleep 10   # longer than RestartSec: a crash loop would not look "active" by now
 systemctl is-active tutash-bot

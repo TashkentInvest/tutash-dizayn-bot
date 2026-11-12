@@ -54,18 +54,28 @@ Bu papkadagi fayllar tayyor shablonlar: `tutash-bot.service`, `tutash-backup.{sh
    Tekshiruv: `/start`, bitta ro'yxatdan o'tish, kichik fayl, katta havola.
 9. Birinchi zaxirani qo'lda ishga tushiring va **tiklashni sinab ko'ring** (oyda bir marta takrorlang).
 
-## 3. PostgreSQL'ga o'tish (alohida ish, serverda)
+## 3. Baza: PostgreSQL va migratsiyalar
 
-Bot hozir SQLite'da; bu fayllarning o'zida ham ishlaydi. PostgreSQL'ga o'tishda quyidagilar o'zgaradi (`bot/db.py`, `bot/catalog.py`):
-`datetime('now')` → `now()`, `AUTOINCREMENT` → `GENERATED ... AS IDENTITY`, `?` → `%s`, `INSERT OR REPLACE` → `ON CONFLICT DO UPDATE`,
-`lastrowid` → `RETURNING id`, `is_active` 0/1 → `boolean`, `users.user_id` → `BIGINT` (Telegram ID 2^31 dan katta bo'lishi mumkin),
-matn vaqtlar → `timestamptz`. Ma'lumotlarni `pgloader` ko'chiradi. Sxemani raqamlangan SQL-migratsiyalar bilan boshqaring.
-Dashboard tomoni faqat `web/.env` dagi `BOT_DB_*` o'zgaruvchilarini almashtirishni talab qiladi.
-Ikkita rol: bot jadvallar egasi, dashboard esa faqat kerakli jadvallarga huquqli.
+Bot va dashboard bitta PostgreSQL bazasida ishlaydi (`tutash` roli va bazasi, parol `/root/tutash-pg.pass` faylida).
+`provision.sh` ularni o'zi yaratadi. Dashboard'ning o'z kichik bazasi (adminlar, sessiyalar, kesh) SQLite fayl bo'lib qoladi.
+
+* **Jadvallar `web/database/migrations/bot/` dagi migratsiyalarda.** Ular jadvallar, indekslar va foreign key'larni yaratadi.
+  Ishga tushirish: `php artisan migrate --path=database/migrations/bot --force`. `update.sh` buni har deploy'da botni qayta
+  ishga tushirishdan oldin qiladi. Ular alohida papkada turadi, shunda testlardagi `RefreshDatabase` ishlab chiquvchining
+  `bot.db` fayliga tegmaydi.
+* **Bot sxemani yaratmaydi.** U startda kerakli jadval va ustunlar borligini tekshiradi. Biror narsa yetishmasa, ishga
+  tushmaydi va qaysi buyruqni bajarish kerakligini yozadi.
+* **Yangi ustun qo'shish:** (1) `web/database/migrations/bot/` ga migratsiya, (2) `bot/db.py` dagi `_added_columns()` ga.
+  Ikkinchisi lokal SQLite va bot testlari uchun kerak. `BotSchemaMigrationTest` ikki tomon bir xilligini tekshiradi.
+* **Foreign key'lar:**
+  * foydalanuvchi o'chirilsa, uning yuklashlari, rasmlari va murojaatlari ham o'chadi;
+  * ko'cha, tuman yoki xodimga bog'langan yozuvlar bo'lsa, ularni o'chirib bo'lmaydi (dashboard bu tugmani yashiradi).
+  * Batafsil: `2026_11_12_000003_foreign_keys.php`.
+* **Eski SQLite bazani ko'chirish:** avval migratsiyalar, keyin `DATABASE_URL=... python tools/sqlite_to_pg.py bot.db`.
 
 ## 4. Hali qilinmagan (ochiq qoldirilgan)
 
-* PostgreSQL porti (yuqorida), local Bot API serveri (`api_id`/`api_hash`), dashboard 2 bosqichli kirish (2FA).
+* Local Bot API serveri (`api_id`/`api_hash`), dashboard 2 bosqichli kirish (2FA).
 * "Mening ma'lumotlarimni o'chir" buyrug'i va saqlash muddati qoidasi; dashboard'da shaxsiy ma'lumotni ko'rish jurnali.
 * `data/_trash/` va `file_cache` ni vaqti-vaqti bilan tozalash.
 * Rozilik matni (`bot/registration.py`, `TXT_CONSENT`) — huquqshunos yoki o'zingiz tasdiqlashingiz kerak.

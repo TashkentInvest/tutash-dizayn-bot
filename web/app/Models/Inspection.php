@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Labels;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -23,11 +24,16 @@ class Inspection extends Model
 
     public const REJECTED = 'rejected';
 
-    public const REVIEWS = [self::PENDING => 'Tekshiruvda', self::APPROVED => 'Tasdiqlandi', self::REJECTED => 'Rad etildi'];
 
     public const REVIEW_COLORS = [self::PENDING => 'warning', self::APPROVED => 'success', self::REJECTED => 'danger'];
 
     protected $connection = 'bot';
+
+    /** @return array<string, string> review state => its name (shared/labels.json) */
+    public static function reviews(): array
+    {
+        return Labels::group('review');
+    }
 
     protected $table = 'inspections';
 

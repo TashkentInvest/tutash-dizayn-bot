@@ -113,6 +113,15 @@
       openOther: 'Нет, открыть тот объект', kindRemoved: 'Снято', kindInstalled: 'Установлено', netErr: 'Проблема с интернетом. Попробуйте ещё раз.',
       noTg: 'Это окно работает только внутри Telegram. Нажмите в боте кнопку «Открыть объекты».' }
   };
+  // statuses: the same words as the bot and the dashboard (shared/labels.json)
+  (function (L) {
+    ['uz', 'ru'].forEach(function (lg) {
+      var w = T[lg];
+      w.pending = L.status.pending[lg]; w.removed = w.kindRemoved = L.status.removed[lg];
+      w.installed = w.kindInstalled = L.status.installed[lg]; w.review = L.status.review[lg];
+      w.approved = L.review.approved[lg]; w.rejected = L.review.rejected[lg];
+    });
+  })(@json(\App\Support\Labels::all()));
   function t(k, x) { var s = (T[LANG][k] || k); return x !== undefined ? s.replace('{x}', x) : s; }
   var app = document.getElementById('app'), titleEl = document.getElementById('title'), backBtn = document.getElementById('back');
   var stack = [];       // navigation history (functions that redraw a screen)

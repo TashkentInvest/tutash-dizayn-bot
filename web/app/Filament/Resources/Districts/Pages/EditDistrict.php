@@ -12,6 +12,6 @@ class EditDistrict extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [DeleteAction::make()->hidden(fn ($record) => $record->hasObjects())];
+        return [DeleteAction::make()->hidden(fn ($record) => $record->inUse())];
     }
 }

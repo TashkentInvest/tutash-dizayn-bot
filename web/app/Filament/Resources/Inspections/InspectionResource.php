@@ -80,12 +80,12 @@ class InspectionResource extends Resource
                 TextColumn::make('distance_m')->label('Xodim ↔ obyekt')->placeholder('—')->formatStateUsing(fn ($state) => (int) $state.' m')
                     ->tooltip('Xodim turgan joy bilan u xaritada belgilagan obyekt joyi orasidagi masofa. Tasdiqlansa, belgilangan joy obyekt joyi bo‘ladi.'),
                 TextColumn::make('review')->label('Holat')->badge()
-                    ->formatStateUsing(fn ($state) => Inspection::REVIEWS[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => Inspection::reviews()[$state] ?? $state)
                     ->color(fn ($state) => Inspection::REVIEW_COLORS[$state] ?? 'gray')
                     ->description(fn (Inspection $i) => $i->review_note),
             ])
             ->filters([
-                SelectFilter::make('review')->label('Holat')->options(Inspection::REVIEWS)->default(Inspection::PENDING),
+                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->default(Inspection::PENDING),
                 SelectFilter::make('kind')->label('Nima qilindi')->options(Inspection::KINDS),
                 SelectFilter::make('district')->label('Tuman')
                     ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))

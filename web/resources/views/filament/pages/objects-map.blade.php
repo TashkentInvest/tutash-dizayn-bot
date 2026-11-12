@@ -62,7 +62,7 @@
             var RED = '#dc2626';
             var pctColor = function (s) { return s.pct >= 100 ? '#16a34a' : (s.installed || s.removed ? '#f59e0b' : '#64748b'); };
             var pointColor = { pending: '#64748b', removed: '#f59e0b', installed: '#22c55e', review: '#3b82f6' };
-            var statusName = { pending: 'Kutilmoqda', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tasdiq kutmoqda' };
+            var statusName = @json(\App\Support\Labels::group('status'));  // the words the bot and the Mini App use too
             var streets = L.featureGroup().addTo(map), points = L.featureGroup().addTo(map);
             var district = 0, mode = 'kmz';
 
@@ -75,7 +75,8 @@
                     : line('background:#64748b', 'boshlanmagan') + line('background:#f59e0b', 'jarayonda') + line('background:#16a34a', 'to‘liq bajarilgan') +
                       line(dashed('#64748b'), 'uzuq: shakli yuklanmagan');
                 document.getElementById('omap-legend').innerHTML = ln + '<span class="sep"></span>' +
-                    dot('#64748b', 'Obyekt: kutilmoqda') + dot('#f59e0b', 'yechildi') + dot('#22c55e', 'qo‘yildi') + dot('#3b82f6', 'tasdiq kutmoqda');
+                    dot('#64748b', 'Obyekt: ' + statusName.pending.toLowerCase()) + dot('#f59e0b', statusName.removed.toLowerCase()) +
+                    dot('#22c55e', statusName.installed.toLowerCase()) + dot('#3b82f6', statusName.review.toLowerCase() + ' (tasdiq kutmoqda)');
             }
 
             function popup(s) {
@@ -83,7 +84,7 @@
                     return '<br>' + label + ': <a href="#" data-fly="' + p[0] + ',' + p[1] + '"><code>' + p[0].toFixed(6) + ', ' + p[1].toFixed(6) + '</code></a>';
                 };
                 return '<b>' + esc(s.name) + '</b><br>' + esc(s.district) + (s.path ? ' · <span style="color:' + RED + '">KMZ chizig‘i</span>' : '') +
-                    '<br>Jami obyekt: <b>' + s.total + '</b> · Yechildi: ' + s.removed + ' · Qo‘yildi: ' + s.installed +
+                    '<br>Jami obyekt: <b>' + s.total + '</b> · ' + statusName.removed + ': ' + s.removed + ' · ' + statusName.installed + ': ' + s.installed +
                     '<br>Bajarilish: <b>' + String(s.pct).replace('.', ',') + '%</b>' +
                     at(s.line[0], 'Дан (boshlanishi)') + at(s.line[1], 'Гача (tugashi)');
             }

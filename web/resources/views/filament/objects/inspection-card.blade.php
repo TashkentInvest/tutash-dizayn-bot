@@ -2,7 +2,7 @@
 <div style="border:1px solid rgba(127,127,127,.3);border-radius:10px;padding:12px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
         <b>{{ \App\Models\Inspection::KINDS[$i->kind] ?? $i->kind }}</b>
-        <span>{{ \App\Models\Inspection::REVIEWS[$i->review] ?? '' }}
+        <span>{{ \App\Models\Inspection::reviews()[$i->review] ?? '' }}
             @if ($i->reviewed_by) · {{ $i->reviewed_by }} @endif</span>
     </div>
     <div style="font-size:13px;opacity:.65;margin:4px 0 8px">

@@ -22,7 +22,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
 )
 
-from . import catalog, db, registration, web
+from . import adb, catalog, db, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
@@ -46,18 +46,16 @@ DESIGN_LANG = {"uz": "Ўзбекча", "ru": "Русский"}  # download log l
 
 # Requests: level button -> one text message -> saved for the dashboard; the answer comes back through the bot
 FB_MIN, FB_MAX, FB_PER_DAY, FB_WAIT_SECONDS = 10, 2000, 5, 1800
-_fb_wait: dict[int, tuple[str, float]] = {}  # user id -> (level, when the level was picked): waiting for the text
+# which user's request text is awaited is kept in the database (users.fb_wait): a restart of the bot does not lose it
 
 
 class WaitingFeedback(BaseFilter):
     """A message from a user who picked a level and has not sent the text yet (expires after FB_WAIT_SECONDS)."""
 
     async def __call__(self, m: Message) -> bool:
-        w = _fb_wait.get(m.from_user.id) if m.from_user else None
-        if w and time.monotonic() - w[1] > FB_WAIT_SECONDS:
-            _fb_wait.pop(m.from_user.id, None)
+        if not m.from_user or (m.text or "").startswith("/"):
             return False
-        return bool(w) and not (m.text or "").startswith("/")
+        return bool(await adb.fb_wait(m.from_user.id))
 
 
 class RequireRegistration(BaseMiddleware):
@@ -65,9 +63,9 @@ class RequireRegistration(BaseMiddleware):
 
     async def __call__(self, handler, event: CallbackQuery, data):
         uid = event.from_user.id
-        if not db.is_registered(uid):
+        if not await adb.is_registered(uid):
             return await event.answer(t(i18n.lang(uid), "need_reg"), show_alert=True)
-        if not registration.has_access(uid):
+        if not await adb.run(registration.has_access, uid):
             return await event.answer(t(i18n.lang(uid), "pending"), show_alert=True)
         return await handler(event, data)
 
@@ -97,13 +95,18 @@ class OncePerPress(BaseMiddleware):
         return await handler(event, data)
 
 
+def _touch(u, started: bool) -> None:
+    db.touch_user(u, started=started)
+    i18n.lang(u.id)  # loads the language into memory: the handlers read it without touching the database
+
+
 class TrackUsers(BaseMiddleware):
     """Save/update every user who interacts with the bot."""
 
     async def __call__(self, handler, event, data):
         u = data.get("event_from_user")
         if u and not u.is_bot:
-            db.touch_user(u, started=isinstance(event, Message) and (event.text or "").startswith("/start"))
+            await adb.run(_touch, u, isinstance(event, Message) and (event.text or "").startswith("/start"))
         return await handler(event, data)
 
 
@@ -151,14 +154,14 @@ _has_contact = registration.has_contact
 async def start_invite(m: Message, command):
     """A staff member opened their personal invite link from the dashboard: linked at once, whatever number they use."""
     uid = m.from_user.id
-    staff = db.staff_by_invite(command.args[2:])
+    staff = await adb.staff_by_invite(command.args[2:])
     if not staff:
         await m.answer(t(i18n.lang(uid), "invite_bad"))
         return await registration.send_lang_pick(m.bot, m.chat.id)
-    db.link_staff(staff["id"], uid)
-    db.use_invite(staff["id"])
-    if not (db.get_user(uid) or {}).get("lang"):
-        i18n.set_lang(uid, "uz")
+    await adb.link_staff(staff["id"], uid)
+    await adb.use_invite(staff["id"])
+    if not (await adb.get_user(uid) or {}).get("lang"):
+        await adb.run(i18n.set_lang, uid, "uz")
     L = i18n.lang(uid)
     await m.answer(t(L, "staff_linked"), reply_markup=ReplyKeyboardRemove())
     await registration.send_choice(m.bot, m.chat.id, L, uid)
@@ -167,38 +170,43 @@ async def start_invite(m: Message, command):
 @router.message(CommandStart())
 async def start(m: Message):
     """Every /start begins with the language (it is also how a user switches it); the chosen one leads the whole flow."""
-    _fb_wait.pop(m.from_user.id, None)  # /start cancels a request being written
+    await adb.set_fb_wait(m.from_user.id, None)  # /start cancels a request being written
     await registration.send_lang_pick(m.bot, m.chat.id)
 
 
 @menu.callback_query(F.data.in_({"lang:uz", "lang:ru"}))
 async def pick_lang(c: CallbackQuery):
     uid, L = c.from_user.id, c.data.split(":")[1]
-    i18n.set_lang(uid, L)
+    await adb.run(i18n.set_lang, uid, L)
     await c.answer()
     await _drop_markup(c)
-    if _has_contact(uid):  # everyone past the phone step goes to the main menu, registered or not
-        if not db.staff_by_user(uid) and db.staff_by_phone((db.get_user(uid) or {}).get("phone") or ""):
+    if await adb.run(_has_contact, uid):  # everyone past the phone step goes to the main menu, registered or not
+        if await adb.run(_unconfirmed_staff, uid):
             return await _ask_staff_contact(c.message, L)  # on the staff list: confirm the phone with the contact button
         return await registration.send_choice(c.bot, c.message.chat.id, L, uid)
-    if registration.step(uid) == "consent":
+    if await adb.run(registration.step, uid) == "consent":
         await c.message.answer(t(L, "intro"))
     await registration.prompt(c.bot, c.message.chat.id, uid)
+
+
+def _unconfirmed_staff(uid: int) -> bool:
+    """The user's phone is on the staff list but the account is not linked yet."""
+    return not db.staff_by_user(uid) and bool(db.staff_by_phone((db.get_user(uid) or {}).get("phone") or ""))
 
 
 @menu.callback_query(F.data.startswith("pick:") | F.data.startswith("dc:") | F.data.startswith("fb:"))
 async def main_menu(c: CallbackQuery):
     uid = c.from_user.id
     L = i18n.lang(uid)
-    if not _has_contact(uid):
+    if not await adb.run(_has_contact, uid):
         return await c.answer(t(L, "need_reg"), show_alert=True)
     what = c.data.split(":", 1)[1]
     if what == "design":  # the edition in the user's language: Uzbek = the short one, Russian = the full one
         what = L
     if what == "menu":  # "back" from the level choice
-        _fb_wait.pop(uid, None)
-        if staff := db.staff_by_user(uid):  # staff came from their own menu
-            text, kb = registration.staff_menu(staff, L)
+        await adb.set_fb_wait(uid, None)
+        if staff := await adb.staff_by_user(uid):  # staff came from their own menu
+            text, kb = await adb.run(registration.staff_menu, staff, L)
             try:
                 await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
             except TelegramBadRequest:
@@ -208,16 +216,16 @@ async def main_menu(c: CallbackQuery):
     elif what == "feedback":
         await _edit(c, t(L, "fb_level"), level_kb(L))
     elif c.data.startswith("fb:") and what in FB_LEVELS:
-        if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
+        if await adb.feedback_count_since(uid, 24) >= FB_PER_DAY:
             return await c.answer(t(L, "fb_limit", FB_PER_DAY), show_alert=True)
-        _fb_wait[uid] = (what, time.monotonic())
+        await adb.set_fb_wait(uid, what, FB_WAIT_SECONDS)
         await _edit(c, t(L, "fb_write", t(L, f"lvl_{what}")), None)
     elif what == "concept":
-        if not (db.get_user(uid) or {}).get("concept_at"):
-            db.update_user(uid, concept_at=registration._now())
-        if registration.has_access(uid):
-            await _edit(c, t(L, "districts"), districts_kb(L))
-        elif db.is_registered(uid):
+        if not (await adb.get_user(uid) or {}).get("concept_at"):
+            await adb.update_user(uid, concept_at=registration._now())
+        if await adb.run(registration.has_access, uid):
+            await _edit(c, t(L, "districts"), await adb.run(districts_kb, L))
+        elif await adb.is_registered(uid):
             await c.answer(t(L, "pending"), show_alert=True)
             return
         else:  # concept needs the object: location, then photos
@@ -227,7 +235,7 @@ async def main_menu(c: CallbackQuery):
     elif what in DESIGN_CODE:
         rel, name = DESIGN_CODE[what]
         f = DATA_DIR / rel
-        if not f.is_file():
+        if not await adb.run(f.is_file):
             logging.error("design code file missing: %s", f)
             return await c.answer(t(L, "no_file"), show_alert=True)
         # name = what the download log says (unchanged for the dashboard), label = what the user sees in the caption
@@ -250,7 +258,7 @@ class StaffContact(BaseFilter):
         if not (m.contact and m.from_user and m.contact.user_id == m.from_user.id and not m.forward_origin):
             return False
         phone = registration.normalize_phone(m.contact.phone_number or "")
-        staff = db.staff_by_phone(phone) if phone else None
+        staff = await adb.staff_by_phone(phone) if phone else None
         return {"staff": staff, "phone": phone} if staff else False
 
 
@@ -259,9 +267,9 @@ async def staff_contact(m: Message, staff: dict, phone: str):
     """Links the account to the staff member: at the phone step of registration or later, from the confirm prompt."""
     uid = m.from_user.id
     L = i18n.lang(uid)
-    if not (db.get_user(uid) or {}).get("phone"):
-        db.update_user(uid, phone=phone)
-    db.link_staff(staff["id"], uid)
+    if not (await adb.get_user(uid) or {}).get("phone"):
+        await adb.update_user(uid, phone=phone)
+    await adb.link_staff(staff["id"], uid)
     await m.answer(t(L, "staff_linked"), reply_markup=ReplyKeyboardRemove())
     await registration.send_choice(m.bot, m.chat.id, L, uid)
 
@@ -269,10 +277,10 @@ async def staff_contact(m: Message, staff: dict, phone: str):
 @menu.callback_query(F.data == "staff:refresh")
 async def staff_refresh(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
-    staff = db.staff_by_user(c.from_user.id)
+    staff = await adb.staff_by_user(c.from_user.id)
     if not staff:
         return await c.answer(t(L, "stale"), show_alert=True)
-    text, kb = registration.staff_menu(staff, L)
+    text, kb = await adb.run(registration.staff_menu, staff, L)
     try:
         await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except TelegramBadRequest:  # nothing changed
@@ -291,14 +299,12 @@ async def feedback_text(m: Message):
         return await m.answer(t(L, "fb_short"))
     if len(text) > FB_MAX:
         return await m.answer(t(L, "fb_long", FB_MAX))
-    w = _fb_wait.get(uid)
-    if not w:  # the same text arrived twice (a split long message): the first one already saved it
-        return
-    if db.feedback_count_since(uid, 24) >= FB_PER_DAY:
-        _fb_wait.pop(uid, None)
+    if await adb.feedback_count_since(uid, 24) >= FB_PER_DAY:
+        await adb.set_fb_wait(uid, None)
         return await m.answer(t(L, "fb_limit", FB_PER_DAY))
-    fid = db.add_feedback(uid, w[0], text)  # if this fails the user can simply send the text again
-    _fb_wait.pop(uid, None)
+    fid = await adb.save_awaited_feedback(uid, text)  # if this fails the wait stays: the user can simply send the text again
+    if not fid:  # the same text arrived twice (a split long message): the first one already saved it
+        return
     await m.answer(t(L, "fb_saved", fid))
     await registration.send_choice(m.bot, m.chat.id)
 
@@ -316,32 +322,33 @@ async def deliver_answers(bot: Bot) -> None:
     """Sends the answers written in the dashboard. Polls the shared database, so the dashboard needs no bot token."""
     while True:
         try:
-            for r in db.unsent_answers():
+            for r in await adb.unsent_answers():
                 text = r["text"] if len(r["text"]) <= 600 else r["text"][:600] + "…"
+                L = await adb.run(i18n.lang, r["user_id"])
                 try:
-                    await bot.send_message(r["user_id"], t(i18n.lang(r["user_id"]), "fb_answer", r["id"], html.escape(text), html.escape(r["answer"])),
+                    await bot.send_message(r["user_id"], t(L, "fb_answer", r["id"], html.escape(text), html.escape(r["answer"])),
                                            parse_mode="HTML")
-                    db.mark_answer_sent(r["id"])
+                    await adb.mark_answer_sent(r["id"])
                 except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
                     logging.warning("answer %s not delivered: %s", r["id"], e)
-                    db.mark_answer_sent(r["id"], error=str(e)[:200])
-            for r in db.unsent_outbox():  # review results for staff and report pictures, written by the dashboard
+                    await adb.mark_answer_sent(r["id"], error=str(e)[:200])
+            for r in await adb.unsent_outbox():  # review results for staff and report pictures, written by the dashboard
                 try:
                     if r["photo"]:
                         f = (UPLOADS_DIR / r["photo"]).resolve()
-                        if UPLOADS_DIR.resolve() not in f.parents or not f.is_file():
-                            db.mark_outbox_sent(r["id"], error="picture file missing")
+                        if UPLOADS_DIR.resolve() not in f.parents or not await adb.run(f.is_file):
+                            await adb.mark_outbox_sent(r["id"], error="picture file missing")
                             continue
                         await bot.send_photo(r["user_id"], FSInputFile(f), caption=r["text"][:1024] or None)
                     else:
                         await bot.send_message(r["user_id"], r["text"])
-                    db.mark_outbox_sent(r["id"])
+                    await adb.mark_outbox_sent(r["id"])
                 except TelegramRetryAfter as e:  # too fast for Telegram: the rest goes next round
                     await asyncio.sleep(e.retry_after + 1)
                     break
                 except (TelegramForbiddenError, TelegramBadRequest) as e:
                     logging.warning("outbox %s not delivered: %s", r["id"], e)
-                    db.mark_outbox_sent(r["id"], error=str(e)[:200])
+                    await adb.mark_outbox_sent(r["id"], error=str(e)[:200])
         except Exception:  # database busy, network: try again next round
             logging.exception("deliver_answers failed")
         await asyncio.sleep(10)
@@ -366,17 +373,17 @@ async def _drop_markup(c: CallbackQuery) -> None:
 @router.callback_query(F.data == "back")
 async def back(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
-    await c.message.edit_text(t(L, "districts"), reply_markup=districts_kb(L))
+    await c.message.edit_text(t(L, "districts"), reply_markup=await adb.run(districts_kb, L))
     await c.answer()
 
 
 @router.callback_query(F.data.startswith("d:"))
 async def pick_district(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
-    d = catalog.district(int(c.data.split(":")[1]))
+    d = await adb.run(catalog.district, int(c.data.split(":")[1]))
     if not d:
         return await c.answer(t(L, "stale"), show_alert=True)
-    kb = streets_kb(d, L)
+    kb = await adb.run(streets_kb, d, L)
     has_streets = len(kb.inline_keyboard) > 1
     dn = html.escape(i18n.name(L, d.name))
     text = t(L, "streets" if has_streets else "empty", dn)
@@ -389,14 +396,19 @@ async def pick_district(c: CallbackQuery):
 @router.callback_query(F.data.startswith("s:"))
 async def pick_street(c: CallbackQuery):
     _, dn, sn = c.data.split(":")
-    d = catalog.district(int(dn))
-    s = catalog.street(d, int(sn)) if d else None
+    d, s, named = await adb.run(_street_files, int(dn), int(sn))
     if not s:
         return await c.answer(t(i18n.lang(c.from_user.id), "stale"), show_alert=True)
-    named = catalog.named_files(s)
     if not named:
         return await c.answer(t(i18n.lang(c.from_user.id), "no_file"), show_alert=True)
     await _start_send(c, d, s, named)
+
+
+def _street_files(dn: int, sn: int):
+    """(district, street, its files on disk); street None when either is gone."""
+    d = catalog.district(dn)
+    s = catalog.street(d, sn) if d else None
+    return d, s, (catalog.named_files(s) if s else [])
 
 
 async def _start_send(c: CallbackQuery, d, s, named) -> None:
@@ -432,7 +444,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
     loader = keep_action = None
     try:
         try:
-            eta_s = _estimate(named)
+            eta_s = await adb.run(_estimate, named)
         except OSError:  # a file vanished between the listing and now
             eta_s = 0
         if eta_s >= 5:
@@ -441,12 +453,12 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
             loader = await c.message.answer(t(L, "loading", sl) + t(L, "eta", _fmt_eta(eta_s, L)))
             keep_action = asyncio.create_task(_keep_upload_action(c.bot, c.message.chat.id))
         for i, (f, name) in enumerate(named, 1):
-            st = f.stat()
+            st = await adb.run(f.stat)
             size_mb = st.st_size // (1024 * 1024)
             if loader and len(files) > 1:
                 await _safe_edit(
                     loader,
-                    t(L, "loading", sl) + f" ({i}/{len(files)})" + t(L, "eta", _fmt_eta(_estimate(named[i - 1:]), L)),
+                    t(L, "loading", sl) + f" ({i}/{len(files)})" + t(L, "eta", _fmt_eta(await adb.run(_estimate, named[i - 1:]), L)),
                 )
             sent_ok = False
             if st.st_size <= MAX_FILE_MB * 1024 * 1024 - 2 * 1024 * 1024:  # margin below Telegram's limit
@@ -463,7 +475,7 @@ async def _send_street(c: CallbackQuery, d, s, named, uid: int):
                     t(L, "link", html.escape(dl), html.escape(sl), size_mb, html.escape(url, quote=True), LINK_TTL_HOURS),
                     parse_mode="HTML", link_preview_options=LinkPreviewOptions(is_disabled=True),
                 )
-            db.log_download(uid, d.name, s.name, name)
+            await adb.log_download(uid, d.name, s.name, name)
     except Exception:
         logging.exception("street handler failed")
         _recent.pop((uid, tuple(str(f) for f in files)), None)  # let the user try again at once
@@ -493,18 +505,18 @@ async def _send_file(msg: Message, f, st, caption: str, name: str):
     key, mtime = _cache_key(f, name), int(st.st_mtime)
     for attempt in range(4):
         try:
-            file_id = db.get_cached(key, st.st_size, mtime)
+            file_id = await adb.get_cached(key, st.st_size, mtime)
             if file_id:
                 return await msg.answer_document(file_id, caption=caption)
             async with _file_locks[key]:
-                file_id = db.get_cached(key, st.st_size, mtime)  # uploaded by someone else while we waited
+                file_id = await adb.get_cached(key, st.st_size, mtime)  # uploaded by someone else while we waited
                 if file_id:
                     return await msg.answer_document(file_id, caption=caption)
                 async with _upload_slots:
                     t0 = time.monotonic()
                     sent = await msg.answer_document(FSInputFile(f, filename=name), caption=caption, request_timeout=1800)
-                    db.record_upload(st.st_size, time.monotonic() - t0)
-                db.set_cached(key, st.st_size, mtime, sent.document.file_id)
+                    await adb.record_upload(st.st_size, time.monotonic() - t0)
+                await adb.set_cached(key, st.st_size, mtime, sent.document.file_id)
                 return sent
         except TelegramRetryAfter as e:
             if attempt == 3:

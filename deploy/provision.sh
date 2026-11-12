@@ -1,8 +1,12 @@
 #!/bin/bash
 # One-time server setup, Ubuntu 24.04, run as root. Safe to run again (every step checks what is already done).
 #   DOMAIN=bot.3dot.uz EMAIL=you@example.com bash provision.sh
-# What it does NOT do: put the bot token in (you type it into /srv/tutash/.env yourself), copy data/uploads/bot.db (see
-# deploy/README.md), PostgreSQL (the bot still uses SQLite; that port is a separate job).
+# The bot's database is PostgreSQL (role and database "tutash" on this server, password in /root/tutash-pg.pass); its tables
+# come from the dashboard's migrations (web/database/migrations/bot). The dashboard's own small database (admin logins,
+# sessions, cache) stays a SQLite file.
+# What it does NOT do: put the bot token in (you type it into /srv/tutash/.env yourself), copy data/ uploads/ and the old
+# database (see deploy/README.md).
+# SSH: password login stays on unless SSH_KEY_ONLY=1 (and a key is installed).
 set -euo pipefail
 : "${DOMAIN:?set DOMAIN, e.g. DOMAIN=bot.3dot.uz}"
 # EMAIL is optional (certificate expiry notices; renewal is automatic anyway). ADMIN_EMAIL is only the dashboard login name.
@@ -15,7 +19,7 @@ KEY=/home/tutash/.ssh/id_ed25519_deploy
 export DEBIAN_FRONTEND=noninteractive
 step() { echo; echo "==> $*"; }
 
-step "1/11 packages"
+step "1/12 packages"
 apt-get update -y
 apt-get -y upgrade
 # composer.lock was resolved on PHP 8.4 (Symfony 8 needs >= 8.4.1) but Ubuntu 24.04 ships 8.3: use the standard PHP PPA
@@ -23,7 +27,7 @@ apt-get install -y software-properties-common
 add-apt-repository -y ppa:ondrej/php
 apt-get update -y
 apt-get install -y ufw fail2ban nginx git rsync sqlite3 curl unzip ca-certificates unattended-upgrades \
-  python3 python3-venv python3-pip certbot python3-certbot-nginx \
+  python3 python3-venv python3-pip certbot python3-certbot-nginx postgresql postgresql-client \
   php8.4-fpm php8.4-cli php8.4-sqlite3 php8.4-pgsql php8.4-mbstring php8.4-xml php8.4-intl php8.4-gd \
   php8.4-zip php8.4-curl php8.4-bcmath composer
 
@@ -34,25 +38,42 @@ if [ -n "${SSH_PUBKEY:-}" ]; then
   chmod 600 /root/.ssh/authorized_keys
 fi
 
-step "2/11 swap (a 2 GB upload must not be able to kill the server)"
+step "2/12 swap (a 2 GB upload must not be able to kill the server)"
 if ! swapon --show | grep -q .; then
   fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
 fi
 
-step "3/11 user and folders"
+step "3/12 user and folders"
 id tutash >/dev/null 2>&1 || useradd --create-home --shell /bin/bash tutash
 usermod -aG www-data tutash
 mkdir -p "$APP/data" "$APP/uploads" /home/tutash/.ssh
 chown -R tutash:www-data "$APP"; chmod 2770 "$APP" "$APP/data" "$APP/uploads"
 chown -R tutash:tutash /home/tutash/.ssh; chmod 700 /home/tutash/.ssh
-# php-fpm writes into the same folders (dashboard uploads, bot.db): files it creates must be group-writable
+# php-fpm writes into the same folders (dashboard uploads): files it creates must be group-writable
 systemctl disable --now php8.3-fpm 2>/dev/null || true   # the first run installed 8.3; one PHP is enough
 mkdir -p /etc/systemd/system/php8.4-fpm.service.d
 printf '[Service]\nUMask=0007\n' > /etc/systemd/system/php8.4-fpm.service.d/umask.conf
 systemctl daemon-reload
 
-step "4/11 access to the repository"
+step "4/12 PostgreSQL: the bot's database"
+systemctl enable --now postgresql
+PG_PASS_FILE=/root/tutash-pg.pass
+if [ ! -s "$PG_PASS_FILE" ]; then
+  ( umask 077; python3 -c "import secrets;print(secrets.token_hex(24))" > "$PG_PASS_FILE" )   # hex: safe inside a URL
+fi
+PG_PASS=$(cat "$PG_PASS_FILE")
+cd /tmp   # postgres cannot read root's working directory
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='tutash'" | grep -q 1; then
+  sudo -u postgres psql -q -c "CREATE ROLE tutash LOGIN PASSWORD '$PG_PASS'"
+else
+  sudo -u postgres psql -q -c "ALTER ROLE tutash PASSWORD '$PG_PASS'"   # the password file is the truth
+fi
+sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='tutash'" | grep -q 1 || \
+  sudo -u postgres createdb -O tutash -E UTF8 tutash
+# only local connections (the default listen_addresses = localhost): nothing to open in the firewall
+
+step "5/12 access to the repository"
 if [[ "$REPO_URL" == git@* ]]; then
   [ -f "$KEY" ] || sudo -u tutash ssh-keygen -t ed25519 -N "" -C "tutash-server-deploy" -f "$KEY" -q
   if ! sudo -u tutash GIT_SSH_COMMAND="ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"        git ls-remote "$REPO_URL" >/dev/null 2>&1; then
@@ -63,7 +84,7 @@ else
   sudo -u tutash git ls-remote "$REPO_URL" >/dev/null   # public: just check that it is reachable
 fi
 
-step "5/11 code from GitHub"
+step "6/12 code from GitHub"
 cd "$APP"
 sudo -u tutash bash -c "
   export GIT_SSH_COMMAND='ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new'
@@ -72,7 +93,7 @@ sudo -u tutash bash -c "
   git fetch -q origin main && git checkout -q -f -B main origin/main
 "
 
-step "6/11 bot: python environment and settings"
+step "7/12 bot: python environment and settings"
 sudo -u tutash bash -c "python3 -m venv '$APP/venv' && '$APP/venv/bin/pip' install -q -r '$APP/requirements.txt'"
 if [ ! -f "$APP/.env" ]; then
   LINK_SECRET=$(python3 -c "import secrets;print(secrets.token_hex(32))")
@@ -85,7 +106,7 @@ WEB_PORT=8787
 LINK_TTL_HOURS=24
 DATA_DIR=$APP/data
 UPLOADS_DIR=$APP/uploads
-DB_PATH=$APP/bot.db
+DATABASE_URL=postgresql://tutash:$PG_PASS@127.0.0.1:5432/tutash
 REQUIRE_APPROVAL=0
 USER_COOLDOWN=0.7
 MAX_PARALLEL_UPLOADS=3
@@ -93,7 +114,7 @@ EOF
   chown tutash:tutash "$APP/.env"; chmod 600 "$APP/.env"
 fi
 
-step "7/11 dashboard: dependencies, settings, admin account"
+step "8/12 dashboard: dependencies, settings, admin account"
 sudo -u tutash bash -c "cd '$APP/web' && composer install --no-dev -o --no-interaction -q"
 if [ ! -f "$APP/web/.env" ]; then
   sudo -u tutash bash -c "cd '$APP/web' && cp .env.example .env && php artisan key:generate --force -q"
@@ -116,8 +137,12 @@ SESSION_SECURE_COOKIE=true
 SESSION_SAME_SITE=strict
 DB_CONNECTION=sqlite
 CACHE_STORE=database
-BOT_DB_DRIVER=sqlite
-BOT_DB_DATABASE=$APP/bot.db
+BOT_DB_DRIVER=pgsql
+BOT_DB_HOST=127.0.0.1
+BOT_DB_PORT=5432
+BOT_DB_DATABASE=tutash
+BOT_DB_USERNAME=tutash
+BOT_DB_PASSWORD=$PG_PASS
 BOT_DATA_PATH=$APP/data
 BOT_UPLOADS_PATH=$APP/uploads
 DISPLAY_TIMEZONE=Asia/Tashkent
@@ -125,7 +150,9 @@ EOF
   chown tutash:www-data "$APP/web/.env"; chmod 640 "$APP/web/.env"
 fi
 cd "$APP/web"
-sudo -u tutash bash -c "touch database/database.sqlite && php artisan migrate --force -q && php artisan filament:assets -q && php artisan config:cache -q"
+# config:cache first (migrate must see this .env), then the dashboard's own tables, then the bot's tables and foreign keys
+sudo -u tutash bash -c "touch database/database.sqlite && php artisan config:cache -q && php artisan migrate --force -q \
+  && php artisan migrate --path=database/migrations/bot --force -q && php artisan filament:assets -q"
 if ! sudo -u tutash sqlite3 database/database.sqlite "select 1 from users where email='$ADMIN_EMAIL'" | grep -q 1; then
   ADMIN_PW=$(python3 -c "import secrets;print(secrets.token_urlsafe(18))")
   sudo -u tutash php artisan make:filament-user --name=Admin --email="$ADMIN_EMAIL" --password="$ADMIN_PW" --no-interaction
@@ -134,7 +161,7 @@ if ! sudo -u tutash sqlite3 database/database.sqlite "select 1 from users where 
 fi
 chgrp -R www-data "$APP/web/storage" "$APP/web/bootstrap/cache" "$APP/web/database"; chmod -R g+rwX "$APP/web/storage" "$APP/web/bootstrap/cache" "$APP/web/database"
 
-step "8/11 php and nginx"
+step "9/12 php and nginx"
 cp "$APP/deploy/php-fpm-99-tutash.ini" /etc/php/8.4/fpm/conf.d/99-tutash.ini
 install -m 644 "$APP/deploy/nginx-limits.conf" /etc/nginx/conf.d/tutash-limits.conf
 sed "s/YOUR-DOMAIN/$DOMAIN/g" "$APP/deploy/nginx-tutash.conf" > /etc/nginx/sites-available/tutash
@@ -142,7 +169,7 @@ ln -sf /etc/nginx/sites-available/tutash /etc/nginx/sites-enabled/tutash
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx && systemctl restart php8.4-fpm
 
-step "9/11 systemd: bot, nightly backup"
+step "10/12 systemd: bot, nightly backup"
 install -m 644 "$APP/deploy/tutash-bot.service" /etc/systemd/system/tutash-bot.service
 install -m 644 "$APP/deploy/tutash-backup.service" /etc/systemd/system/tutash-backup.service
 install -m 644 "$APP/deploy/tutash-backup.timer" /etc/systemd/system/tutash-backup.timer
@@ -153,7 +180,7 @@ systemctl enable tutash-bot
 if grep -qE '^BOT_TOKEN=.+' "$APP/.env"; then systemctl restart tutash-bot; else
   echo "BOT_TOKEN is empty in $APP/.env: put the new token there, then: systemctl start tutash-bot"; fi
 
-step "10/11 HTTPS certificate (needs $DOMAIN to point to this server)"
+step "11/12 HTTPS certificate (needs $DOMAIN to point to this server)"
 SERVER_IP=$(curl -s -4 https://ifconfig.me || true)
 DNS_IP=$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}' || true)
 if [ -n "$SERVER_IP" ] && [ "$DNS_IP" = "$SERVER_IP" ]; then
@@ -164,15 +191,17 @@ else
   echo "When DNS is right run:  certbot --nginx -d $DOMAIN --agree-tos --redirect --non-interactive --register-unsafely-without-email"
 fi
 
-step "11/11 firewall and SSH hardening"
+step "12/12 firewall and SSH hardening"
 ufw default deny incoming; ufw default allow outgoing
 ufw allow OpenSSH; ufw allow 80/tcp; ufw allow 443/tcp
 ufw --force enable
 install -m 644 "$APP/deploy/fail2ban-tutash.local" /etc/fail2ban/jail.d/tutash.local
 systemctl enable fail2ban && systemctl restart fail2ban
-if [ -s /root/.ssh/authorized_keys ]; then   # only when a key is installed, otherwise we would lock ourselves out
+# key-only login only when asked for, and only when a key is installed (otherwise we would lock ourselves out)
+if [ "${SSH_KEY_ONLY:-0}" = 1 ] && [ -s /root/.ssh/authorized_keys ]; then
   printf 'PasswordAuthentication no\nPermitRootLogin prohibit-password\n' > /etc/ssh/sshd_config.d/99-tutash.conf
   sshd -t && systemctl reload ssh
 fi
 
-echo; echo "DONE. Next: put BOT_TOKEN in $APP/.env, copy data/ uploads/ bot.db (deploy/README.md), then: systemctl restart tutash-bot"
+echo; echo "DONE. Next: put BOT_TOKEN in $APP/.env (and the same value as TELEGRAM_BOT_TOKEN in $APP/web/.env),"
+echo "copy data/ and uploads/, restore the database if you move one (deploy/README.md), then: systemctl restart tutash-bot"

@@ -41,4 +41,10 @@ class District extends Model
     {
         return DesignObject::query()->whereIn('street_id', $this->streets()->select('id'))->exists();
     }
+
+    /** Businesses or staff point at it: the database refuses the delete (foreign keys), so the button is hidden. */
+    public function inUse(): bool
+    {
+        return $this->hasObjects() || Staff::query()->where('district_id', $this->id)->exists();
+    }
 }

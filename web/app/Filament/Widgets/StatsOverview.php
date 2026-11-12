@@ -11,6 +11,7 @@ use App\Filament\Resources\Inspections\InspectionResource;
 use App\Filament\Resources\Staff\StaffResource;
 use App\Services\BotStats;
 use App\Services\DesignCodeSvod as Svod;
+use App\Support\Labels;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -49,7 +50,7 @@ class StatsOverview extends StatsOverviewWidget
                 ->color($w['feedback_open'] ? 'danger' : 'success')
                 ->url(FeedbackResource::getUrl('index').'?'.http_build_query(['filters' => ['status' => ['value' => 'new']]])),
             Stat::make('Dizayn-kod bajarilishi', Svod::pct($w['pct']))
-                ->description("Qo‘yildi {$w['installed']} · yechildi {$w['removed']} · jami {$w['planned']}")
+                ->description(Labels::get('status.installed')." {$w['installed']} · ".mb_strtolower(Labels::get('status.removed'))." {$w['removed']} · jami {$w['planned']}")
                 ->descriptionIcon('heroicon-m-check-badge')->color('success')
                 ->url(DesignCodeSvod::getUrl()),
             Stat::make('Tuman xodimlari', "{$w['staff_linked']} / {$w['staff']}")

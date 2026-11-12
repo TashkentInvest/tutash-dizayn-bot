@@ -12,6 +12,7 @@ class EditStreet extends EditRecord
 
     protected function getHeaderActions(): array
     {
-        return [DeleteAction::make()];
+        // a street with businesses cannot be deleted (foreign key): switch it off for the bot instead
+        return [DeleteAction::make()->hidden(fn ($record) => $record->objects()->exists())];
     }
 }

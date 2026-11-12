@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Labels as L;
 use Carbon\CarbonInterface;
 use GdImage;
 
@@ -27,15 +28,17 @@ class SvodImage
 
         if ($kind === 'progress') {
             $rows = collect($svod['rows'])->sortBy([['pct', 'desc'], ['installed', 'desc'], ['total', 'desc']])->values();
-            $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], ['Jami obyekt', 84, 'c'], ['Qo‘yildi', 76, 'c'], ['Bajarilish', 250, 'bar']];
+            $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 84, 'c'], [L::get('status.installed'), 76, 'c'], [L::get('svod.pct'), 250, 'bar']];
             $body = $rows->map(fn ($r, $i) => [$i + 1, $r['name'], $r['total'], $r['installed'], [$r['pct'], $pct($r['pct'])]])->all();
             $total = ['', $svod['total']['name'], $svod['total']['total'], $svod['total']['installed'], [$svod['total']['pct'], $pct($svod['total']['pct'])]];
 
             return self::table('Dizayn-kod: tumanlar kesimida bajarilish — '.$date, $cols, $total, $body);
         }
 
-        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], ['Jami obyekt', 76, 'c'], ['Kutilmoqda', 92, 'c'], ['Yechildi', 70, 'c'],
-            ['Qo‘yildi', 70, 'c'], ['Bugun yechildi', 80, 'c'], ['Bugun qo‘yildi', 80, 'c'], ['Jarayonda', 90, 'c'], ['Bajarilish', 86, 'c']];
+        [$removed, $installed] = [L::get('status.removed'), L::get('status.installed')];
+        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 76, 'c'], [L::get('status.pending'), 92, 'c'], [$removed, 70, 'c'],
+            [$installed, 70, 'c'], ['Bugun '.mb_strtolower($removed), 80, 'c'], ['Bugun '.mb_strtolower($installed), 80, 'c'],
+            [L::get('status.review'), 90, 'c'], [L::get('svod.pct'), 86, 'c']];
         $line = fn ($r, $n) => [$n, $r['name'], $r['total'], $r['pending'], $r['removed'], $r['installed'], $r['day_removed'], $r['day_installed'], $r['review'], $pct($r['pct'])];
         $body = array_map(fn ($r, $i) => $line($r, $i + 1), $svod['rows'], array_keys($svod['rows']));
 

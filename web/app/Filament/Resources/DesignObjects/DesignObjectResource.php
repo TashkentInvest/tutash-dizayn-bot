@@ -61,7 +61,7 @@ class DesignObjectResource extends Resource
             TextInput::make('owner_phone')->label('Tadbirkor telefoni')->tel()->maxLength(30)
                 ->dehydrateStateUsing(fn ($state) => filled($state) ? (Phone::normalize($state) ?? $state) : null),
             TextInput::make('stir')->label('STIR')->regex('/^\d{9}$|^\d{14}$/')->validationMessages(['regex' => 'STIR: 9 ta raqam (JShShIR: 14).']),
-            Select::make('status')->label('Holat')->options(DesignObject::STATUSES)->required()
+            Select::make('status')->label('Holat')->options(DesignObject::statuses())->required()
                 ->helperText('Odatda holat xodim dalili tasdiqlanganda o‘zgaradi. Bu yerda faqat xatoni tuzatish uchun.'),
             Toggle::make('is_active')->label('Hisobga olinsin')->default(true)
                 ->helperText('Xato yoki takror kiritilgan bo‘lsa, belgini o‘chiring: svod va xodim ro‘yxatidan chiqadi.'),
@@ -76,7 +76,7 @@ class DesignObjectResource extends Resource
                 TextEntry::make('street.name')->label('Ko‘cha'),
                 TextEntry::make('creator.full_name')->label('Kiritgan xodim')->placeholder('admin'),
                 TextEntry::make('status')->label('Holat')->badge()
-                    ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => DesignObject::statuses()[$state] ?? $state)
                     ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray'),
                 TextEntry::make('shop_name')->label('Do‘kon / firma')->placeholder('—'),
                 TextEntry::make('address')->label('Manzil')->placeholder('—'),
@@ -108,7 +108,7 @@ class DesignObjectResource extends Resource
                 TextColumn::make('shop_name')->label('Do‘kon / firma')->placeholder('—')->searchable()
                     ->description(fn (DesignObject $o) => trim(implode(' · ', array_filter([$o->address, $o->owner_name, $o->stir ? 'STIR '.$o->stir : null]))) ?: null),
                 TextColumn::make('status')->label('Holat')->badge()
-                    ->formatStateUsing(fn ($state) => DesignObject::STATUSES[$state] ?? $state)
+                    ->formatStateUsing(fn ($state) => DesignObject::statuses()[$state] ?? $state)
                     ->color(fn ($state) => DesignObject::STATUS_COLORS[$state] ?? 'gray')
                     ->description(fn (DesignObject $o) => $o->pendingInspection ? '⏳ dalil tekshiruvda' : null),
             ])
@@ -118,7 +118,7 @@ class DesignObjectResource extends Resource
                     ->query(fn (Builder $query, array $data) => filled($data['value'] ?? null) ? $query->inDistrict((int) $data['value']) : $query),
                 SelectFilter::make('street_id')->label('Ko‘cha')->searchable()
                     ->options(fn () => Street::query()->orderBy('name')->pluck('name', 'id')),
-                SelectFilter::make('status')->label('Holat')->options(DesignObject::STATUSES),
+                SelectFilter::make('status')->label('Holat')->options(DesignObject::statuses()),
                 Filter::make('in_review')->label('Dalili tekshiruvda')->toggle()
                     ->query(fn (Builder $query) => $query->whereHas('pendingInspection')),
                 TernaryFilter::make('is_active')->label('Hisobga olinadi')->default(true),

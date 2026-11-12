@@ -2,9 +2,11 @@
     @php
         // Yechildi / Qo'yildi = all time; "Bugun" = the report day (yesterday 18:00 - today 18:00); Jarayonda = waiting for review
         $dayWord = $isToday ? 'Bugun' : $shownDay->format('d.m');
+        $L = \App\Support\Labels::class;  // the words the bot and the Mini App use too (shared/labels.json)
         $cols = [
-            'total' => 'Jami obyekt', 'pending' => 'Kutilmoqda', 'removed' => 'Yechildi', 'installed' => 'Qo‘yildi',
-            'day_removed' => $dayWord.' yechildi', 'day_installed' => $dayWord.' qo‘yildi', 'review' => 'Jarayonda',
+            'total' => $L::get('svod.total'), 'pending' => $L::get('status.pending'), 'removed' => $L::get('status.removed'),
+            'installed' => $L::get('status.installed'), 'day_removed' => $dayWord.' '.mb_strtolower($L::get('status.removed')),
+            'day_installed' => $dayWord.' '.mb_strtolower($L::get('status.installed')), 'review' => $L::get('status.review'),
         ];
         // colour = meaning: amber in progress, green done, blue waiting for review
         $tone = ['removed' => 'amber', 'installed' => 'green', 'review' => 'blue', 'day_removed' => 'amber', 'day_installed' => 'green'];

@@ -202,7 +202,14 @@ async def consent_flow():
     check("request button -> problem level (ru)", t("ru", "fb_level") in texts())
     await press("fb:high"); sent.clear(); await say("коротко")
     check("too short request is refused", t("ru", "fb_short") in texts() and not db.fetch_all("SELECT 1 FROM feedback WHERE user_id=?", (uid,)))
+    check("the awaited request is kept in the database (a bot restart does not lose it)", db.fb_wait(uid) == "high")
+    db.execute("UPDATE users SET fb_wait_until=? WHERE user_id=?", (time.time() - 1, uid))
+    check("an expired wait is not a wait", db.fb_wait(uid) is None and db.save_awaited_feedback(uid, "x" * 20) is None)
+    db.execute("UPDATE users SET fb_wait_until=? WHERE user_id=?", (time.time() + 600, uid))
     body = "На нашей улице вечером не работает освещение, опасно для пешеходов <b>"
+    two = await asyncio.gather(bm.adb.save_awaited_feedback(uid, "дубль " * 5), bm.adb.save_awaited_feedback(uid, "дубль " * 5))
+    check("the same text sent twice at once makes one request", sum(1 for x in two if x) == 1 and db.fb_wait(uid) is None)
+    db.execute("DELETE FROM feedback WHERE user_id=?", (uid,)); db.set_fb_wait(uid, "high", 600)
     sent.clear(); await say(body)
     rows = db.fetch_all("SELECT id, level, text FROM feedback WHERE user_id=?", (uid,))
     check("request saved with its level", len(rows) == 1 and rows[0]["level"] == "high" and rows[0]["text"] == body

@@ -23,7 +23,7 @@
                 </div>
                 @forelse ($inspections as $i)
                     <a href="{{ $inspectionUrl }}" class="fi-pending-row">
-                        <x-filament::badge :color="$i->kind === 'installed' ? 'success' : 'warning'" size="sm">{{ $i->kind === 'installed' ? 'Qo‘yildi' : 'Yechildi' }}</x-filament::badge>
+                        <x-filament::badge :color="$i->kind === 'installed' ? 'success' : 'warning'" size="sm">{{ \App\Support\Labels::get('status.'.$i->kind) }}</x-filament::badge>
                         <span class="fi-pending-text">{{ $i->object?->shop_name }} · {{ $i->object?->street?->name }}</span>
                         <span class="fi-pending-meta">{{ $i->staff?->full_name }} · {{ $i->submitted_at?->timezone($tz)->format('d.m H:i') }}</span>
                     </a>

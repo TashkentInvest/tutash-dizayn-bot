@@ -3,10 +3,22 @@
 t(lang, key, *args) returns the text; names stored in Uzbek Cyrillic (districts, streets) are shown in Latin for Uzbek
 through name().
 """
+import json
+from pathlib import Path
+
 from . import db
 
 LANGS = ("uz", "ru")
 DEFAULT = "uz"
+
+# the words the dashboard and the Mini App show too (statuses): one file for all three, shared/labels.json
+LABELS = json.loads((Path(__file__).resolve().parent.parent / "shared" / "labels.json").read_text(encoding="utf-8"))
+
+
+def _w(key: str, lang: str) -> str:
+    group, name_ = key.split(".")
+    return LABELS[group][name_][lang]
+
 
 TEXTS: dict[str, tuple[str, str]] = {
     # language choice (always shown in both languages)
@@ -142,11 +154,11 @@ TEXTS: dict[str, tuple[str, str]] = {
     ),
 
     # district staff
-    "staff_menu": (
-        "👷 Tuman xodimi: <b>{}</b>\n{}\n\nJami obyekt: <b>{}</b>\n🔧 Yechildi: <b>{}</b>\n"
-        "✅ Qo‘yildi: <b>{}</b>\n⏳ Jarayonda (tasdiq kutmoqda): <b>{}</b>\n\nObyektlar bilan ishlash uchun pastdagi tugmani bosing.",
-        "👷 Сотрудник района: <b>{}</b>\n{}\n\nВсего объектов: <b>{}</b>\n🔧 Снято: <b>{}</b>\n"
-        "✅ Установлено: <b>{}</b>\n⏳ В процессе (ждёт проверки): <b>{}</b>\n\nДля работы с объектами нажмите кнопку ниже.",
+    "staff_menu": tuple(
+        f"{head}: <b>{{}}</b>\n{{}}\n\n{_w('svod.total', lg)}: <b>{{}}</b>\n🔧 {_w('status.removed', lg)}: <b>{{}}</b>\n"
+        f"✅ {_w('status.installed', lg)}: <b>{{}}</b>\n⏳ {_w('status.review', lg)} ({_w('svod.review_hint', lg)}): <b>{{}}</b>\n\n{tail}"
+        for lg, head, tail in (("uz", "👷 Tuman xodimi", "Obyektlar bilan ishlash uchun pastdagi tugmani bosing."),
+                               ("ru", "👷 Сотрудник района", "Для работы с объектами нажмите кнопку ниже."))
     ),
     "btn_objects": ("📋 Obyektlarni ochish", "📋 Открыть объекты"),
     "btn_refresh": ("🔄 Yangilash", "🔄 Обновить"),

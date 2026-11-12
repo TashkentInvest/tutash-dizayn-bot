@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Services\DesignCodeSvod;
+use App\Support\Labels;
 use Filament\Widgets\ChartWidget;
 
 /** Design-code progress by district: done / in progress / waiting, against the official object list. */
@@ -28,9 +29,9 @@ class DesignCodeProgressChart extends ChartWidget
 
         return [
             'datasets' => [
-                ['label' => 'Qo‘yildi', 'data' => array_column($rows, 'installed'), 'backgroundColor' => '#22c55e', 'borderRadius' => 3],
-                ['label' => 'Yechildi', 'data' => array_column($rows, 'removed'), 'backgroundColor' => '#f59e0b', 'borderRadius' => 3],
-                ['label' => 'Kutilmoqda', 'data' => array_column($rows, 'pending'), 'backgroundColor' => '#94a3b866', 'borderRadius' => 3],
+                ['label' => Labels::get('status.installed'), 'data' => array_column($rows, 'installed'), 'backgroundColor' => '#22c55e', 'borderRadius' => 3],
+                ['label' => Labels::get('status.removed'), 'data' => array_column($rows, 'removed'), 'backgroundColor' => '#f59e0b', 'borderRadius' => 3],
+                ['label' => Labels::get('status.pending'), 'data' => array_column($rows, 'pending'), 'backgroundColor' => '#94a3b866', 'borderRadius' => 3],
             ],
             'labels' => array_map($short, array_column($rows, 'name')),
         ];
