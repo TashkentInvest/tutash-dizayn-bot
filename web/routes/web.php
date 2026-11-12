@@ -43,6 +43,7 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-file/{file}', functio
         // "public" with no max-age let browsers reuse a copy for weeks, with the headers it had back then
         'Cache-Control' => 'private, no-cache',
     ]);
+    $response->setPrivate();  // response()->file() makes it public itself: an admin-only file must not sit in shared caches
     $response->isNotModified(request());
 
     return $response;
