@@ -66,13 +66,13 @@ class StaffResource extends Resource
                 ->dehydrateStateUsing(fn ($state) => Phone::normalize($state)),
             Select::make('district_id')->label('Tuman')->required()->live()
                 ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id')),
-            Select::make('priority_streets')->label('Asosiy ko‘chalar')->multiple()->searchable()
-                ->helperText('Mini App’da tepada turadi. Xodim tumanning boshqa ko‘chalarini ham ko‘radi.')
+            Select::make('priority_streets')->label('Biriktirilgan ko‘chalar')->multiple()->searchable()
+                ->helperText('Xodim Mini App’da faqat shu ko‘chalarni ko‘radi va faqat ularda ishlaydi. Bo‘sh qoldirilsa, tumanning hamma ko‘chalari.')
                 ->options(fn (Get $get) => $get('district_id')
                     ? Street::query()->where('district_id', $get('district_id'))->orderBy('sort_order')->pluck('name', 'id')
                     : [])
                 ->dehydrateStateUsing(fn ($state) => array_values(array_map('intval', (array) $state))),
-            Textarea::make('streets_note')->label('Biriktirilgan ko‘chalar (izoh)')->rows(2)->columnSpanFull(),
+            Textarea::make('streets_note')->label('Izoh')->rows(2)->columnSpanFull(),
             Toggle::make('is_active')->label('Faol')->default(true),
         ]);
     }

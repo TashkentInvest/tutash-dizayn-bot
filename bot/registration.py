@@ -130,7 +130,7 @@ async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: 
 
 
 def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
-    n = db.staff_counts(staff["district_id"])
+    n = db.staff_counts(staff)  # only the streets assigned to this person (all of the district when none are)
     text = t(L, "staff_menu", html.escape(staff["full_name"]), html.escape(i18n.name(L, staff["district"])),
              n["total"], n["removed"], n["installed"], n["review"])
     # Telegram opens Mini Apps over https only; a plain link keeps a local http setup usable for testing

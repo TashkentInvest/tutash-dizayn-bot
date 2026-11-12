@@ -244,6 +244,17 @@ async def consent_flow():
     datas = [b.callback_data for row in (staff_msg.reply_markup.inline_keyboard if staff_msg else []) for b in row]
     check("staff menu: design code and request buttons too", "pick:design" in datas and "pick:feedback" in datas)
     check("staff menu: button to the Mini App", btn is not None and (btn.web_app or btn.url) and "/tg/app" in ((btn.web_app.url if btn.web_app else btn.url) or ""))
+    # assigned streets: the staff menu counts only those (as the Mini App shows only those)
+    dstreets = [r[0] for r in db.fetch_all("SELECT id FROM streets WHERE district_id=(SELECT MIN(id) FROM districts) ORDER BY id")]
+    other_d = db.fetch_all("SELECT id FROM streets WHERE district_id<>(SELECT MIN(id) FROM districts) LIMIT 1")[0][0]
+    db.execute("UPDATE streets SET planned_objects=CASE WHEN id=? THEN 4 WHEN id=? THEN 6 ELSE 0 END", (dstreets[0], dstreets[1]))
+    whole = db.staff_counts(db.staff_by_user(424242))["total"]
+    db.execute("UPDATE staff SET priority_streets=? WHERE id=?", (f"[{dstreets[1]}, {other_d}]", sid))
+    st = db.staff_by_user(424242)
+    check("assigned streets: the staff menu counts only those, never another district's",
+          whole == 10 and db.staff_street_ids(st) == [dstreets[1]] and db.staff_counts(st)["total"] == 6)
+    db.execute("UPDATE staff SET priority_streets=NULL WHERE id=?", (sid,))
+    db.execute("UPDATE streets SET planned_objects=0")
     forged = {**contact, "update_id": n[0] + 1}
     forged["message"] = {**contact["message"], "message_id": n[0] + 1, "from": {"id": 515151, "is_bot": False, "first_name": "X"},
                          "chat": {"id": 515151, "type": "private"}}

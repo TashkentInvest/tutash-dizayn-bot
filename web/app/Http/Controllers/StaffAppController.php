@@ -72,8 +72,8 @@ class StaffAppController extends Controller
     public function me(Request $r): JsonResponse
     {
         $staff = $this->staff($r);
-        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
-            ->get(['id', 'name', 'planned_objects']);
+        // only the streets assigned to this person (all of the district when none are)
+        $streets = $staff->streetsQuery()->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'planned_objects']);
         $counts = DB::connection('bot')->table('objects')->where('is_active', true)
             ->whereIn('street_id', $streets->pluck('id'))
             ->selectRaw("street_id, COUNT(*) AS added, SUM(CASE WHEN status='removed' THEN 1 ELSE 0 END) AS removed, "
@@ -109,7 +109,7 @@ class StaffAppController extends Controller
 
     public function objects(Request $r, Street $street): JsonResponse
     {
-        if ((int) $street->district_id !== (int) $this->staff($r)->district_id) {
+        if (! $this->staff($r)->worksOn($street->id)) {
             return $this->fail($r, 'not_yours', 403);
         }
         $objects = DesignObject::query()->active()->where('street_id', $street->id)->with('pendingInspection')
@@ -141,7 +141,7 @@ class StaffAppController extends Controller
         $lon = (float) $data['longitude'];
         $staff = $this->staff($r);
         $geo = Geocoder::reverse($lat, $lon);
-        $streets = Street::query()->where('district_id', $staff->district_id)->orderBy('sort_order')->orderBy('name')
+        $streets = $staff->streetsQuery()->orderBy('sort_order')->orderBy('name')
             ->get(['id', 'name', 'start_lat', 'start_lon', 'end_lat', 'end_lon', 'path']);
 
         $objects = DesignObject::query()->active()->with(['pendingInspection', 'street:id,name'])
@@ -218,7 +218,7 @@ class StaffAppController extends Controller
     /** A business the staff member found on the street (shop / firm name required). */
     public function create(Request $r, Street $street): JsonResponse
     {
-        if ((int) $street->district_id !== (int) $this->staff($r)->district_id) {
+        if (! $this->staff($r)->worksOn($street->id)) {
             return $this->fail($r, 'not_yours', 403);
         }
         $data = $this->validateDetails($r, true);
@@ -536,9 +536,7 @@ class StaffAppController extends Controller
 
     private function guardObject(Request $r, DesignObject $object): ?JsonResponse
     {
-        $districtId = Street::query()->whereKey($object->street_id)->value('district_id');
-
-        return (! $object->is_active || (int) $districtId !== (int) $this->staff($r)->district_id) ? $this->fail($r, 'not_yours', 403) : null;
+        return (! $object->is_active || ! $this->staff($r)->worksOn((int) $object->street_id)) ? $this->fail($r, 'not_yours', 403) : null;
     }
 
     private function brief(DesignObject $o): array

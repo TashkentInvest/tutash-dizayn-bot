@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A district staff member (table `staff`, created by the bot). Works in the Mini App on the objects of their district.
+ * A district staff member (table `staff`, created by the bot). Works in the Mini App on the streets assigned to them
+ * ("Biriktirilgan ko'chalar"), or on every street of their district when none are assigned.
  * `user_id` is set by the bot once the person confirmed their phone with Telegram's contact button.
  */
 class Staff extends Model
@@ -39,6 +41,33 @@ class Staff extends Model
                     'text' => '👷 Iltimos, /start ni qaytadan bosing.']);
             }
         });
+    }
+
+    /** @return list<int>|null the streets this person works on; null = every street of the district (none assigned) */
+    public function streetIds(): ?array
+    {
+        $ids = array_values(array_unique(array_map('intval', $this->priority_streets ?? [])));
+        if (! $ids) {
+            return null;
+        }
+        // only those still in their district (it may have been changed since): none left = the whole district again
+        $ids = Street::query()->where('district_id', $this->district_id)->whereIn('id', $ids)->pluck('id')->map(fn ($i) => (int) $i)->all();
+
+        return $ids ?: null;
+    }
+
+    /** The streets this person may see and work on: in the Mini App list, "find my place", adding businesses, evidence. */
+    public function streetsQuery(): Builder
+    {
+        $q = Street::query()->where('district_id', $this->district_id);
+        $ids = $this->streetIds();
+
+        return $ids === null ? $q : $q->whereIn('id', $ids);
+    }
+
+    public function worksOn(int $streetId): bool
+    {
+        return $this->streetsQuery()->whereKey($streetId)->exists();
     }
 
     /**

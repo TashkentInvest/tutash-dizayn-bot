@@ -267,6 +267,34 @@ class StaffAppTest extends TestCase
         $this->getJson("/tg/api/streets/$other/objects", $h)->assertStatus(403);
     }
 
+    public function test_staff_with_assigned_streets_see_and_work_only_on_those(): void
+    {
+        $db = DB::connection('bot');
+        $h = $this->headers();
+        $mine = (int) $db->table('streets')->where('district_id', $this->district)->where('id', '!=', $this->street)->orderBy('id')->value('id');
+        $db->table('streets')->where('id', $mine)->update(['planned_objects' => 2]);
+        // nothing assigned: the whole district
+        $this->assertEqualsCanonicalizing([$this->street, $mine], collect($this->getJson('/tg/api/me', $h)->json('streets'))->pluck('id')->all());
+
+        $this->staff->forceFill(['priority_streets' => [$mine]])->save();
+        $me = $this->getJson('/tg/api/me', $h)->assertOk();
+        $this->assertSame([$mine], collect($me->json('streets'))->pluck('id')->all());
+        $this->assertSame(2, $me->json('totals.total'));  // the numbers are those of the assigned streets only
+
+        // the district's other street: closed for reading, adding a business and evidence on its businesses
+        $this->getJson("/tg/api/streets/{$this->street}/objects", $h)->assertStatus(403);
+        $this->postJson("/tg/api/streets/{$this->street}/objects", ['shop_name' => 'Yangi', 'latitude' => 41.31, 'longitude' => 69.28], $h)->assertStatus(403);
+        $this->postJson("/tg/api/objects/{$this->object->id}/inspections", ['kind' => 'removed'], $h)->assertStatus(403);
+        $this->getJson("/tg/api/streets/$mine/objects", $h)->assertOk();
+        \Illuminate\Support\Facades\Http::fake(fn () => \Illuminate\Support\Facades\Http::response(['address' => ['road' => 'Boshqa ko‘cha']]));
+        $this->assertNotContains($this->street, collect($this->postJson('/tg/api/nearby', ['latitude' => 41.31, 'longitude' => 69.28], $h)->json('streets'))->pluck('id')->all());
+
+        // moved to another district: the old assignment no longer counts, the whole new district is open
+        $this->staff->forceFill(['district_id' => $this->otherDistrict])->save();
+        $ids = collect($this->getJson('/tg/api/me', $h)->json('streets'))->pluck('id');
+        $this->assertNotContains($mine, $ids->all());
+    }
+
     public function test_a_started_inspection_with_media_is_not_dropped_silently(): void
     {
         $h = $this->headers();

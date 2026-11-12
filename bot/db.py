@@ -5,6 +5,7 @@ Queries are written once, SQLite style ("?" placeholders, datetime('now')); for 
 PostgreSQL: one long-lived connection per worker thread (the bot calls the database from a small thread pool, see adb.py,
 so a slow query never stops its event loop). SQLite: one shared connection guarded by a lock.
 """
+import json
 import re
 import sqlite3
 import threading
@@ -638,17 +639,34 @@ def link_staff(staff_id: int, user_id: int) -> None:
         c.commit()
 
 
-def staff_counts(district_id: int) -> dict:
+def staff_street_ids(staff: dict) -> list[int]:
+    """The streets a staff member works on: the ones assigned in the dashboard (staff.priority_streets) that are still in
+    their district, else every street of the district. The Mini App uses the same rule (web: Staff::streetIds)."""
+    with _db() as c:
+        all_ids = [r[0] for r in c.execute("SELECT id FROM streets WHERE district_id=?", (staff["district_id"],)).fetchall()]
+    try:
+        wanted = {int(x) for x in json.loads(staff.get("priority_streets") or "[]")}
+    except (ValueError, TypeError):
+        wanted = set()
+    return [i for i in all_ids if i in wanted] or all_ids
+
+
+def staff_counts(staff: dict) -> dict:
+    """The numbers of the staff menu, for the streets this person works on."""
+    ids = staff_street_ids(staff)
+    if not ids:
+        return {"total": 0, "removed": 0, "installed": 0, "review": 0}
+    marks = ",".join("?" * len(ids))
     with _db() as c:
         r = c.execute(
-            "SELECT SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed, "
-            "SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed "
-            "FROM objects o JOIN streets s ON s.id = o.street_id WHERE s.district_id=? AND o.is_active = TRUE", (district_id,)
+            "SELECT SUM(CASE WHEN status='removed' THEN 1 ELSE 0 END) AS removed, "
+            "SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installed "
+            f"FROM objects WHERE street_id IN ({marks}) AND is_active = TRUE", tuple(ids)
         ).fetchone()
-        planned = c.execute("SELECT COALESCE(SUM(planned_objects), 0) FROM streets WHERE district_id=?", (district_id,)).fetchone()[0]
+        planned = c.execute(f"SELECT COALESCE(SUM(planned_objects), 0) FROM streets WHERE id IN ({marks})", tuple(ids)).fetchone()[0]
         pending = c.execute(
-            "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id JOIN streets s ON s.id=o.street_id "
-            "WHERE s.district_id=? AND i.review='pending'", (district_id,)
+            "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id "
+            f"WHERE o.street_id IN ({marks}) AND i.review='pending'", tuple(ids)
         ).fetchone()[0]
     return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
 

@@ -55,7 +55,7 @@ check("catalog: streets", isinstance(s, list))
 sid = db.execute("INSERT INTO staff (full_name, phone, district_id) VALUES ('Smoke', '+998900000000', ?)", (d[0].num,))
 db.link_staff(sid, uid)
 check("staff link + lookup (boolean column)", db.staff_by_user(uid)["id"] == sid and db.staff_by_phone("+998900000000"))
-counts = db.staff_counts(d[0].num)
+counts = db.staff_counts(db.staff_by_user(uid))
 check("staff_counts (CASE sums, planned total)", set(counts) == {"total", "removed", "installed", "review"})
 db.log_download(uid, "Smoke", "Smoke street", "x.pdf")
 row = db.fetch_all("SELECT COUNT(*) AS n FROM downloads WHERE user_id=?", (uid,))[0]
