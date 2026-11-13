@@ -389,6 +389,8 @@ class StaffAppTest extends TestCase
         Livewire::test($page)->filterTable('incomplete', true)
             ->assertCanSeeTableRecords([\App\Models\BotUser::find(880002), \App\Models\BotUser::find(880003)])
             ->assertCanNotSeeTableRecords([\App\Models\BotUser::find(880001)]);
+        Livewire::test($page)->searchTable('90 100 00 01')->assertCanSeeTableRecords([\App\Models\BotUser::find(880001)])
+            ->assertCanNotSeeTableRecords([\App\Models\BotUser::find(880002)]);
         Livewire::test($page)->filterTable('blocked', true)->assertCanSeeTableRecords([\App\Models\BotUser::find(880004)])
             ->assertSee('Botni bloklagan');
     }

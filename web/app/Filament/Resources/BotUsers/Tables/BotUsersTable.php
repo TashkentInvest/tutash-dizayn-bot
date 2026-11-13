@@ -22,10 +22,14 @@ class BotUsersTable
     {
         return $table
             ->defaultSort('first_seen', 'desc')
+            ->splitSearchTerms(false)  // "90 175 65 45" is one phone number, not four words
             ->columns([
                 TextColumn::make('full_name')->label('F.I.SH.')->placeholder('— F.I.Sh. kiritilmagan —')->searchable()->sortable()
                     ->description(fn ($record) => $record->blocked_at ? 'Botni bloklagan ('.$record->blocked_at->timezone(config('app.display_timezone'))->format('d.m.Y').')' : null),
-                TextColumn::make('phone')->label('Telefon')->searchable()->copyable()->placeholder('— raqam yo‘q —'),
+                TextColumn::make('phone')->label('Telefon')->copyable()
+                    // "90 175 65 45", "+998 (90) 175-65-45", "1756545": the digits are compared, not the spelling
+                    ->searchable(query: fn (Builder $query, string $search) => strlen($d = preg_replace('/\D/', '', $search)) >= 3
+                        ? $query->orWhere('phone', 'like', '%'.$d.'%') : $query)->placeholder('— raqam yo‘q —'),
                 TextColumn::make('lang')->label('Til')->badge()->color('gray')->placeholder('—')
                     ->formatStateUsing(fn (?string $state) => ['uz' => 'O‘zbekcha', 'ru' => 'Русский'][$state] ?? $state)->toggleable(),
                 TextColumn::make('username')->label('Username')->prefix('@')->searchable()->placeholder('—'),

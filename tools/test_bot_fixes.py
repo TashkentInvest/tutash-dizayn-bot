@@ -327,6 +327,21 @@ async def consent_flow():
     check("outbox picture sent as a photo with caption; missing / outside files never sent",
           [p.caption for p in photos] == ["Dizayn-kod · svod"] and not db.unsent_outbox())
 
+    # registered long ago, before consent was asked: /start asks it now, the menu stays closed until it is given
+    old = 393939
+    db.execute("INSERT INTO users (user_id, first_name, full_name, phone, lang, registered_at, latitude, longitude) "
+               "VALUES (?, 'O', 'Eski Foydalanuvchi', '+998901231234', 'uz', '2026-10-22 10:00:00', 41.3, 69.2)", (old,))
+    db.forget_access(old)
+    sent.clear(); await say("/start", old); await press("lang:uz", old)
+    check("old registration without consent: consent asked, not the menu", t("uz", "consent") in texts() and t("uz", "choice") not in texts())
+    sent.clear(); await say("salom", old)
+    check("text before consent: consent asked again", t("uz", "consent") in texts())
+    sent.clear(); await press("consent", old)
+    check("after consent: the menu", reg.step(old) == "done" and t("uz", "choice") in texts())
+    db.execute("UPDATE users SET full_name=NULL WHERE user_id=?", (old,))
+    sent.clear(); await say("Yangi Ismli Odam", old)
+    check("registered but the name is missing: the typed name is taken", db.get_user(old)["full_name"] == "Yangi Ismli Odam")
+
     # someone who blocked the bot is marked (a mass message skips them) and unmarked when they come back
     from aiogram.exceptions import TelegramForbiddenError
     from aiogram.methods import SendMessage as SM

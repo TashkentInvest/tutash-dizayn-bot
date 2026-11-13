@@ -55,8 +55,7 @@ def has_access(user_id: int) -> bool:
 
 def step(user_id: int) -> str:
     u = db.get_user(user_id) or {}
-    if u.get("registered_at"):
-        return "done"
+    # language, consent, name and phone come first for everyone: also for those who registered before a step existed
     if u.get("lang") not in i18n.LANGS:
         return "lang"
     if not u.get("consent_at"):
@@ -68,6 +67,8 @@ def step(user_id: int) -> str:
         db.update_user(user_id, full_name=staff["full_name"])  # a linked staff member: the name on the staff list
     if not u.get("phone"):
         return "phone"
+    if u.get("registered_at"):
+        return "done"
     if not u.get("concept_at") and u.get("latitude") is None:  # a location given before this step existed = concept
         return "choice"
     if u.get("latitude") is None:
@@ -123,8 +124,8 @@ async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
     elif s == "phone":
         await bot.send_message(chat_id, t(L, "phone"),
                                reply_markup=_kb([[KeyboardButton(text=t(L, "btn_contact"), request_contact=True)]]))
-    elif s == "choice":
-        await send_choice(bot, chat_id)
+    elif s in ("choice", "done"):  # "done": an old registration that only lacked the consent, name or phone
+        await send_choice(bot, chat_id, None, user_id)
     elif s == "location":
         await bot.send_message(chat_id, t(L, "location"),
                                reply_markup=_kb([[KeyboardButton(text=t(L, "btn_location"), request_location=True)]]))
@@ -138,7 +139,7 @@ async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: 
     Whoever has not given the name and phone yet gets the missing step instead."""
     if not await adb.run(has_contact, user_id or chat_id):
         return await prompt(bot, chat_id, user_id or chat_id)
-    L = lang or i18n.lang(chat_id)
+    L = lang or i18n.lang(user_id or chat_id)
     if staff := await adb.staff_by_user(user_id or chat_id):  # district staff get their own menu instead of the citizens' one
         return await send_staff_menu(bot, chat_id, staff, L)
     await bot.send_message(chat_id, t(L, "choice"), reply_markup=choice_kb(L))
@@ -176,7 +177,8 @@ async def finish(m: Message) -> None:
 
 class NotRegistered(BaseFilter):
     async def __call__(self, m: Message) -> bool:
-        return bool(m.from_user) and not await adb.is_registered(m.from_user.id)
+        # registered long ago but without consent, name or phone: those steps are still answered here
+        return bool(m.from_user) and not (await adb.is_registered(m.from_user.id) and await adb.run(has_contact, m.from_user.id))
 
 
 @router.callback_query(F.data == "consent")
