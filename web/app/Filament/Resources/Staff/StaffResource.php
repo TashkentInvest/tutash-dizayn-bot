@@ -145,17 +145,7 @@ class StaffResource extends Resource
                             ->getSearchResultsUsing(fn (Staff $record, string $search) => self::botAccounts($record, $search))
                             ->getOptionLabelUsing(fn ($value) => ($u = BotUser::find($value)) ? self::account($u) : (string) $value),
                     ])
-                    ->action(function (Staff $s, array $data) {
-                        $uid = (int) $data['user_id'];
-                        DB::connection('bot')->transaction(function () use ($s, $uid) {
-                            // one Telegram account per staff member: it moves from anyone who had it
-                            Staff::query()->where('user_id', $uid)->whereKeyNot($s->getKey())->update(['user_id' => null]);
-                            $s->forceFill(['user_id' => $uid])->save();
-                            DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
-                                'text' => '✅ Siz '.($s->district?->name ?? 'tuman').' xodimi sifatida biriktirildingiz. Xodim menyusini ochish uchun /start ni bosing.']);
-                        });
-                        Notification::make()->success()->title('Bog‘landi')->body('Xodimga botda xabar yuboriladi.')->send();
-                    }),
+                    ->action(fn (Staff $s, array $data) => self::linkToBot($s, (int) $data['user_id'])),
                 // not in the bot under this number (or not found in the list above): a personal link to send them
                 Action::make('invite')->label('Taklif havolasi')->icon('heroicon-o-envelope')->color('info')
                     ->visible(fn (Staff $s) => $s->user_id === null)
@@ -191,8 +181,20 @@ class StaffResource extends Resource
             ->map(fn ($n) => \App\Support\Latin::of($n))->implode(', ');
     }
 
-    /** Bot accounts to link: the one with this staff member's phone first, then the latest; or a search. */
-    private static function botAccounts(Staff $staff, ?string $search): array
+    /** Links the staff member to this bot account (it moves from anyone who had it) and tells them in the bot. */
+    public static function linkToBot(Staff $s, int $uid): void
+    {
+        DB::connection('bot')->transaction(function () use ($s, $uid) {
+            Staff::query()->where('user_id', $uid)->whereKeyNot($s->getKey())->update(['user_id' => null]);
+            $s->forceFill(['user_id' => $uid])->save();
+            DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
+                'text' => '✅ Siz '.($s->district?->name ?? 'tuman').' xodimi sifatida biriktirildingiz. Xodim menyusini ochish uchun /start ni bosing.']);
+        });
+        Notification::make()->success()->title('Bog‘landi')->body($s->full_name.': botda xabar yuboriladi, /start bosgach xodim menyusi ochiladi.')->send();
+    }
+
+    /** Bot accounts to link: the one with this staff member's phone first, then similar names, then who was in the bot last. */
+    public static function botAccounts(Staff $staff, ?string $search): array
     {
         $q = BotUser::query()->whereNotIn('user_id', Staff::query()->whereNotNull('user_id')->select('user_id'));
         if ($search !== null && trim($search) !== '') {
@@ -212,10 +214,13 @@ class StaffResource extends Resource
         return $q->limit(30)->get()->mapWithKeys(fn (BotUser $u) => [$u->user_id => self::account($u, $u->phone === $staff->phone, $similar($u))])->all();
     }
 
-    private static function account(BotUser $u, bool $samePhone = false, bool $sameName = false): string
+    public static function account(BotUser $u, bool $samePhone = false, bool $sameName = false): string
     {
+        // when they were last in the bot: "the one who pressed /start a minute ago" is easy to find
+        $seen = $u->last_seen ? ' · '.$u->last_seen->copy()->setTimezone(config('app.display_timezone'))->format('d.m H:i') : '';
+
         return trim(($samePhone ? '★ ' : ($sameName ? '≈ ' : '')).($u->full_name ?: $u->first_name ?: 'ID '.$u->user_id)
-            .($u->phone ? ' · '.Phone::pretty($u->phone) : '').($u->username ? ' · @'.$u->username : ''));
+            .($u->phone ? ' · '.Phone::pretty($u->phone) : '').($u->username ? ' · @'.$u->username : '').$seen);
     }
 
     public static function getPages(): array

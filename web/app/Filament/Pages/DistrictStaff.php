@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\NavGroups;
 use App\Filament\Resources\Staff\StaffResource;
+use App\Models\BotUser;
 use App\Models\District;
 use App\Models\Staff;
 use App\Support\Phone;
@@ -12,6 +13,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -93,6 +95,27 @@ class DistrictStaff extends Page implements HasTable
                             ->createOptionUsing(fn (array $data) => Staff::create($data + ['is_active' => true])->getKey()),
                     ])
                     ->action(fn (District $d, array $data) => self::assign($d, array_map('intval', (array) ($data['staff'] ?? [])))),
+                // a staff member uses the bot with another number than the one on the list: the bot shows them the citizens'
+                // menu. Pick the person and their bot account (who pressed /start last is near the top) and link them.
+                Action::make('link')->label('Botga bog‘lash')->icon('heroicon-o-link')->color('success')
+                    ->visible(fn (District $d) => $d->staff->contains(fn (Staff $s) => $s->user_id === null))
+                    ->modalHeading(fn (District $d) => $d->name.': xodimni botga bog‘lash')
+                    ->modalDescription('Xodim botga ro‘yxatdagidan boshqa raqam bilan kirgan bo‘lsa, bot uni fuqaro deb biladi. '
+                        .'Xodimni va uning botdagi akkauntini tanlang: bog‘langach, /start bosganda xodim menyusi va Mini App ochiladi.')
+                    ->modalSubmitActionLabel('Bog‘lash')
+                    ->fillForm(fn (District $d) => ['staff_id' => ($free = $d->staff->whereNull('user_id'))->count() === 1 ? $free->first()->id : null])
+                    ->schema([
+                        Select::make('staff_id')->label('Xodim')->required()->live()
+                            ->options(fn (District $record) => $record->staff->whereNull('user_id')
+                                ->mapWithKeys(fn (Staff $s) => [$s->id => $s->full_name.' · '.Phone::pretty($s->phone)])->all()),
+                        Select::make('user_id')->label('Botdagi akkaunti')->required()->searchable()
+                            ->helperText('Ism, telefon yoki @username bo‘yicha qidiring. ★ xodimning raqami bilan kirgan, ≈ ismi o‘xshash; '
+                                .'qolganlari botga oxirgi kirganlar, yangi /start bosgan odam tepada. Oxirida botga kirgan vaqti.')
+                            ->options(fn (Get $get) => ($s = Staff::find($get('staff_id'))) ? StaffResource::botAccounts($s, null) : [])
+                            ->getSearchResultsUsing(fn (Get $get, string $search) => ($s = Staff::find($get('staff_id'))) ? StaffResource::botAccounts($s, $search) : [])
+                            ->getOptionLabelUsing(fn ($value) => ($u = BotUser::find($value)) ? StaffResource::account($u) : (string) $value),
+                    ])
+                    ->action(fn (array $data) => StaffResource::linkToBot(Staff::findOrFail($data['staff_id']), (int) $data['user_id'])),
             ]);
     }
 

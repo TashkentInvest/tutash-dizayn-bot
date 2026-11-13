@@ -675,6 +675,23 @@ class StaffAppTest extends TestCase
         $this->assertSame([889501], array_keys($m->invoke(null, $s, 'Элёр')));   // search by name
     }
 
+    public function test_district_page_links_a_staff_member_who_joined_with_another_number(): void
+    {
+        $this->actingAs(User::factory()->create(['email' => 'admin@test.local']));
+        config(['app.admin_emails' => ['admin@test.local']]);
+        $db = DB::connection('bot');
+        $db->table('users')->insert(['user_id' => 889601, 'first_name' => 'A', 'full_name' => 'Boshqa Raqamli',
+            'phone' => '+998939990000', 'last_seen' => now()->utc()->format('Y-m-d H:i:s')]);
+        $s = Staff::create(['full_name' => 'Yangi Odam', 'phone' => '+998931119999', 'district_id' => $this->district, 'is_active' => true]);
+        $district = \App\Models\District::findOrFail($this->district);
+
+        Livewire::test(DistrictStaff::class)
+            ->callTableAction('link', $district, ['staff_id' => $s->id, 'user_id' => 889601])->assertHasNoTableActionErrors();
+
+        $this->assertSame(889601, (int) $s->fresh()->user_id);
+        $this->assertTrue($db->table('outbox')->where('user_id', 889601)->where('text', 'like', '%xodimi sifatida biriktirildingiz%')->exists());
+    }
+
     public function test_invite_link_for_someone_not_found_in_the_bot(): void
     {
         config(['telegram.bot_username' => 'DizaynKodBot']);
