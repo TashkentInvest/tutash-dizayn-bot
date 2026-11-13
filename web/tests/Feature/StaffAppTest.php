@@ -339,6 +339,17 @@ class StaffAppTest extends TestCase
         $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status);
         $this->assertStringContainsString('Rasmda peshtaxta ko‘rinmayapti', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
 
+        // an approval taken back: rejected, the object goes back to not started, the staff member is told
+        Livewire::test(ListInspections::class)->filterTable('review', Inspection::APPROVED)
+            ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Xato tasdiqlangan ekan'])->assertHasNoActionErrors();
+        $this->assertSame(Inspection::REJECTED, Inspection::find($id)->review);
+        $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
+        $this->assertStringContainsString('Xato tasdiqlangan ekan', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
+        // approved again, so the pages below show it
+        DB::connection('bot')->table('inspections')->where('id', $id)->update(['review' => Inspection::PENDING]);
+        Livewire::test(ListInspections::class)->callAction(TestAction::make('approve')->table(Inspection::find($id)))->assertHasNoActionErrors();
+        $o = $this->object->fresh();
+
         // admin pages open: svod, objects list and the object page (street PDF + evidence), staff list, media
         Livewire::test(DesignCodeSvod::class)->assertSee('Toshkent shahar jami')->call('pick', $this->district)->assertSee('ko‘chalar kesimida');
         Livewire::test(ListDesignObjects::class)->assertCanSeeTableRecords([$o]);
@@ -496,7 +507,12 @@ class StaffAppTest extends TestCase
         $db->table('outbox')->delete();
         Livewire::test(DesignCodeSvod::class)->callAction('send', ['kinds' => ['progress'], 'to' => [555001]])->assertHasNoActionErrors();
         $this->assertSame(1, $db->table('outbox')->where('user_id', 555001)->count());
-        Livewire::test(\App\Filament\Resources\ReportRecipients\Pages\ManageReportRecipients::class)->assertSee('Rahbar Test')->assertSee('rahbar');
+        Livewire::test(\App\Filament\Resources\ReportRecipients\Pages\ManageReportRecipients::class)->assertSee('Rahbar Test')->assertSee('rahbar')
+            // adding one: picked from the list (staff first), no search needed; the ones already added are not offered
+            ->mountAction('create')->assertFormFieldExists('user_id', fn ($f) => array_key_first($f->getOptions()) === 555001
+                && str_contains($f->getOptions()[555001], 'Test Xodim') && ! isset($f->getOptions()[777001]))
+            ->fillForm(['user_id' => 555001])->callMountedAction()->assertHasNoActionErrors();
+        $this->assertTrue(\App\Models\ReportRecipient::query()->where('user_id', 555001)->exists());
     }
 
     public function test_admin_links_a_staff_member_to_a_bot_account_by_hand(): void

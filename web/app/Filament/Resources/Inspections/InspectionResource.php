@@ -109,8 +109,11 @@ class InspectionResource extends Resource
                     ->modalSubmitActionLabel('Tasdiqlash')
                     ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email), 'Tasdiqlandi')),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
-                    ->visible(fn (Inspection $i) => $i->review === Inspection::PENDING)
-                    ->modalHeading('Dalilni rad etish')->modalWidth('5xl')
+                    // a mistaken approval can be taken back too: the object's status then goes back
+                    ->visible(fn (Inspection $i) => in_array($i->review, [Inspection::PENDING, Inspection::APPROVED], true))
+                    ->modalHeading(fn (Inspection $i) => $i->review === Inspection::APPROVED ? 'Tasdiqlangan dalilni rad etish' : 'Dalilni rad etish')
+                    ->modalDescription(fn (Inspection $i) => $i->review === Inspection::APPROVED
+                        ? 'Tasdiq bekor qilinadi: obyekt holati qolgan tasdiqlangan dalillarga qarab qaytariladi (boshqasi bo‘lmasa, “Boshlanmagan”). Xodimga sababi bilan xabar boradi.' : null)
                     ->schema([
                         ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
                         Textarea::make('reason')->label('Sabab (xodimga yuboriladi)')->required()->minLength(5)->rows(3)->maxLength(500),

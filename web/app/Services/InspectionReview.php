@@ -50,20 +50,50 @@ class InspectionReview
         });
     }
 
-    /** @return bool false when somebody else reviewed it first */
+    /**
+     * Rejects evidence that is waiting, or takes back an approval: then the object's status is worked out again from the
+     * evidence that stays approved (none: not started).
+     *
+     * @return bool false when somebody else reviewed it first (or it is rejected already)
+     */
     public static function reject(Inspection $inspection, string $reason, ?string $by): bool
     {
         return DB::connection('bot')->transaction(function () use ($inspection, $reason, $by) {
-            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::PENDING)->update([
+            $was = Inspection::query()->whereKey($inspection->id)->lockForUpdate()->value('review');
+            if (! in_array($was, [Inspection::PENDING, Inspection::APPROVED], true)) {
+                return false;
+            }
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', $was)->update([
                 'review' => Inspection::REJECTED, 'review_note' => $reason, 'reviewed_by' => $by,
                 'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
             ]);
-            if ($done) {
-                self::tell($inspection->fresh(['object.street', 'staff']), 'rejected', $reason);
+            if (! $done) {
+                return false;
             }
+            $i = $inspection->fresh(['object.street', 'staff']);
+            if ($was === Inspection::APPROVED && $i->object) {
+                self::restatus($i->object);
+            }
+            self::tell($i, 'rejected', $reason);
 
-            return (bool) $done;
+            return true;
         });
+    }
+
+    /** The object's status from its approved evidence: installed beats removed; the place from the latest approved one. */
+    private static function restatus(DesignObject $o): void
+    {
+        $approved = Inspection::query()->where('object_id', $o->id)->where('review', Inspection::APPROVED)
+            ->orderByDesc('reviewed_at')->orderByDesc('id')->get();
+        $status = $approved->contains('kind', DesignObject::INSTALLED) ? DesignObject::INSTALLED
+            : ($approved->contains('kind', DesignObject::REMOVED) ? DesignObject::REMOVED : DesignObject::PENDING);
+        $last = $approved->first();
+        $o->forceFill([
+            'status' => $status,
+            'latitude' => $last?->obj_latitude ?? $last?->latitude ?? $o->latitude,
+            'longitude' => $last?->obj_longitude ?? $last?->longitude ?? $o->longitude,
+            'updated_at' => now()->utc()->format('Y-m-d H:i:s'),
+        ])->save();
     }
 
     private static function tell(Inspection $i, string $result, ?string $note): void
