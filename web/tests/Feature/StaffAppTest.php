@@ -395,6 +395,39 @@ class StaffAppTest extends TestCase
             ->assertSee('Botni bloklagan');
     }
 
+    public function test_a_bot_user_can_be_sent_back_to_registration(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $now = now()->utc()->format('Y-m-d H:i:s');
+        $db->table('users')->insert(['user_id' => 890001, 'full_name' => 'Alsjj KJSkd SKksjd', 'phone' => '+998908898888', 'lang' => 'uz',
+            'consent_at' => $now, 'registered_at' => $now, 'concept_at' => $now, 'latitude' => 41.3, 'longitude' => 69.2]);
+        $db->table('downloads')->insert(['user_id' => 890001, 'district' => 'D', 'street' => 'S', 'file_name' => 'f.pdf']);
+        $db->table('report_recipients')->insert(['user_id' => 890001]);
+        File::ensureDirectoryExists($this->tmp.'/uploads/890001');
+        File::put($this->tmp.'/uploads/890001/1_x.jpg', 'jpg');
+        $db->table('user_photos')->insert(['user_id' => 890001, 'file_id' => 'f', 'file_unique_id' => 'x', 'path' => '890001/1_x.jpg']);
+        $this->staff->forceFill(['user_id' => 890001])->save();
+        $db->table('outbox')->delete();
+
+        Livewire::test(\App\Filament\Resources\BotUsers\Pages\ViewBotUser::class, ['record' => 890001])
+            ->assertSee('Qayta ro‘yxatdan o‘tkazish')
+            ->callAction('reset', ['notify' => true])->assertHasNoActionErrors();
+
+        $u = $db->table('users')->where('user_id', 890001)->first();
+        foreach (['full_name', 'phone', 'consent_at', 'lang', 'registered_at', 'concept_at', 'latitude'] as $c) {
+            $this->assertNull($u->{$c}, "$c wiped");
+        }
+        $this->assertNull($this->staff->fresh()->user_id, 'unlinked from the staff record');
+        $this->assertSame(0, $db->table('user_photos')->where('user_id', 890001)->count());
+        $this->assertFileDoesNotExist($this->tmp.'/uploads/890001/1_x.jpg');
+        $this->assertSame(1, $db->table('downloads')->where('user_id', 890001)->count(), 'history stays');
+        $this->assertTrue($db->table('report_recipients')->where('user_id', 890001)->exists(), 'still gets the reports');
+        $this->assertStringContainsString('/start', $db->table('outbox')->where('user_id', 890001)->value('text'));
+    }
+
     public function test_district_list_assigns_people_to_a_district(): void
     {
         $this->actingAs(User::factory()->create(['email' => 'admin@test.local']));
