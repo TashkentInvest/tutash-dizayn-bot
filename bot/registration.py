@@ -43,9 +43,9 @@ def _now() -> str:
 
 
 def has_contact(user_id: int) -> bool:
-    """Name and phone given (or a linked staff member): enough for the main menu (design code and requests need nothing more)."""
-    u = db.get_user(user_id) or {}
-    return bool(u.get("full_name") and u.get("phone")) or db.staff_by_user(user_id) is not None
+    """Language, consent, full name and own phone given: nobody uses the bot anonymously, staff included.
+    Enough for the main menu (design code and requests need nothing more)."""
+    return step(user_id) not in ("lang", "consent", "name", "phone")
 
 
 def has_access(user_id: int) -> bool:
@@ -62,7 +62,10 @@ def step(user_id: int) -> str:
     if not u.get("consent_at"):
         return "consent"
     if not u.get("full_name"):
-        return "name"
+        staff = db.staff_by_user(user_id)
+        if not staff or not staff.get("full_name"):
+            return "name"
+        db.update_user(user_id, full_name=staff["full_name"])  # a linked staff member: the name on the staff list
     if not u.get("phone"):
         return "phone"
     if not u.get("concept_at") and u.get("latitude") is None:  # a location given before this step existed = concept
@@ -74,6 +77,15 @@ def step(user_id: int) -> str:
         db.forget_access(user_id)
         return "done"
     return "photo"
+
+
+NAME_MARKS = " '-.ʻʼ’‘`"
+
+
+def valid_name(name: str) -> bool:
+    """Surname and name at least: only letters (Latin or Cyrillic) and the marks names use; no digits, links or @."""
+    return (2 <= len(name.split()) <= 6 and 5 <= len(name) <= 120
+            and all(ch.isalpha() or ch in NAME_MARKS for ch in name) and sum(ch.isalpha() for ch in name) >= 4)
 
 
 def normalize_phone(raw: str) -> str | None:
@@ -122,7 +134,10 @@ async def prompt(bot: Bot, chat_id: int, user_id: int) -> None:
 
 
 async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: int | None = None) -> None:
-    """Main menu. In a private chat the chat id is the user id, so it also tells the language."""
+    """Main menu. In a private chat the chat id is the user id, so it also tells the language.
+    Whoever has not given the name and phone yet gets the missing step instead."""
+    if not await adb.run(has_contact, user_id or chat_id):
+        return await prompt(bot, chat_id, user_id or chat_id)
     L = lang or i18n.lang(chat_id)
     if staff := await adb.staff_by_user(user_id or chat_id):  # district staff get their own menu instead of the citizens' one
         return await send_staff_menu(bot, chat_id, staff, L)
@@ -192,7 +207,7 @@ async def register(m: Message):
             return await prompt(m.bot, m.chat.id, uid)
         if s == "name":
             name = " ".join((m.text or "").split())
-            if len(name.split()) < 2 or len(name) < 5 or len(name) > 120 or name.startswith("/"):
+            if not valid_name(name):
                 return await m.answer(t(L, "name_bad"))
             await adb.update_user(uid, full_name=name)
         elif s == "phone":

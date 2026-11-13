@@ -107,6 +107,7 @@ async def consent_flow():
     bot = Bot("42:TEST", session=Fake())
     dp = Dispatcher()
     dp.callback_query.outer_middleware(bm.TrackUsers())
+    dp.message.outer_middleware(bm.TrackUsers())  # as in main(): every message saves the user and the chat id
     bm.router.callback_query.middleware(bm.RequireRegistration())
     bm.private_only(bm.router); bm.private_only(bm.menu); bm.private_only(reg.router)
     dp.include_router(bm.router); dp.include_router(bm.menu); dp.include_router(reg.router)
@@ -266,8 +267,20 @@ async def consent_flow():
     inv = db.execute("INSERT INTO staff (full_name, phone, district_id, invite_token, invite_expires) VALUES "
                      "('Taklif Xodim', '+998901119911', (SELECT MIN(id) FROM districts), 'TOK123', '2999-01-01 00:00:00')")
     sent.clear(); await say("/start s_TOK123", 737373)
-    check("invite link links the staff member and opens the staff menu", (db.staff_by_user(737373) or {}).get("id") == inv
-          and any("Tuman xodimi" in (x or "") for x in texts()))
+    check("invite link links the staff member, then asks the consent (nobody is anonymous, staff included)",
+          (db.staff_by_user(737373) or {}).get("id") == inv and t("uz", "consent") in texts())
+    sent.clear(); await press("consent", 737373)
+    check("staff name taken from the staff list, the phone is asked next",
+          db.get_user(737373)["full_name"] == "Taklif Xodim" and t("uz", "phone") in texts())
+    sent.clear(); await press("pick:design", 737373)
+    check("menu buttons without a phone: the missing step, no file", t("uz", "phone") in texts())
+    n[0] += 1
+    sent.clear(); await dp.feed_update(bot, Update.model_validate({"update_id": n[0], "message": {
+        "message_id": n[0], "date": 0, "chat": {"id": 737373, "type": "private"}, "from": {"id": 737373, "is_bot": False, "first_name": "T"},
+        "contact": {"phone_number": "998935557777", "first_name": "T", "user_id": 737373}}}))
+    check("own contact (another number) saved, then the staff menu",
+          db.get_user(737373)["phone"] == "+998935557777" and any("Tuman xodimi" in (x or "") for x in texts()))
+    check("chat id saved", db.get_user(737373)["chat_id"] == 737373)
     sent.clear(); await say("/start s_TOK123", 747474)
     check("an invite works once", db.staff_by_user(747474) is None and t("uz", "invite_bad") in texts())
     db.execute("UPDATE staff SET invite_token='OLD1', invite_expires='2000-01-01 00:00:00' WHERE id=?", (inv,))
@@ -313,6 +326,18 @@ async def consent_flow():
     photos = [m for m in sent if isinstance(m, SendPhoto)]
     check("outbox picture sent as a photo with caption; missing / outside files never sent",
           [p.caption for p in photos] == ["Dizayn-kod · svod"] and not db.unsent_outbox())
+
+    # someone who blocked the bot is marked (a mass message skips them) and unmarked when they come back
+    from aiogram.exceptions import TelegramForbiddenError
+    from aiogram.methods import SendMessage as SM
+    await bm._maybe_blocked(424242, TelegramForbiddenError(method=SM(chat_id=424242, text="x"), message="Forbidden: bot was blocked by the user"))
+    blocked = db.get_user(424242)["blocked_at"] is not None
+    sent.clear(); await say("/start", 424242)
+    check("blocked the bot -> marked; writes again -> unmarked", blocked and db.get_user(424242)["blocked_at"] is None)
+
+    # full name: letters only (Latin or Cyrillic, with the marks names use), at least two words
+    check("name rules", all(reg.valid_name(x) for x in ["Karimov Alisher", "Тошматов Ғайрат Ўткирович", "O‘ralov G'ani", "Abdu-Malik Sobirov"])
+          and not any(reg.valid_name(x) for x in ["Alisher", "Ali 123", "@user name", "http://x.uz spam", "A B", "/start me"]))
 
     from bot import i18n
     check("transliteration: Uzbek Cyrillic -> Latin", i18n.latin("Мирзо Улуғбек тумани") == "Mirzo Ulug‘bek tumani"

@@ -23,8 +23,9 @@ class BotUsersTable
         return $table
             ->defaultSort('first_seen', 'desc')
             ->columns([
-                TextColumn::make('full_name')->label('F.I.SH.')->placeholder('— ro‘yxatdan o‘tmagan —')->searchable()->sortable(),
-                TextColumn::make('phone')->label('Telefon')->searchable()->copyable()->placeholder('—'),
+                TextColumn::make('full_name')->label('F.I.SH.')->placeholder('— F.I.Sh. kiritilmagan —')->searchable()->sortable()
+                    ->description(fn ($record) => $record->blocked_at ? 'Botni bloklagan ('.$record->blocked_at->timezone(config('app.display_timezone'))->format('d.m.Y').')' : null),
+                TextColumn::make('phone')->label('Telefon')->searchable()->copyable()->placeholder('— raqam yo‘q —'),
                 TextColumn::make('lang')->label('Til')->badge()->color('gray')->placeholder('—')
                     ->formatStateUsing(fn (?string $state) => ['uz' => 'O‘zbekcha', 'ru' => 'Русский'][$state] ?? $state)->toggleable(),
                 TextColumn::make('username')->label('Username')->prefix('@')->searchable()->placeholder('—'),
@@ -38,9 +39,17 @@ class BotUsersTable
                 TextColumn::make('registered_at')->label('Ro‘yxatdan o‘tgan vaqt')->dateTime('d.m.Y H:i')->sortable()->placeholder('—'),
                 TextColumn::make('first_seen')->label('Birinchi kirish')->dateTime('d.m.Y H:i')->sortable()->toggleable(),
                 TextColumn::make('last_seen')->label('Oxirgi faollik')->dateTime('d.m.Y H:i')->sortable()->toggleable(),
-                TextColumn::make('user_id')->label('Telegram ID')->searchable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('user_id')->label('Telegram ID')->searchable()->copyable()->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('chat_id')->label('Chat ID')->searchable()->copyable()->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                // nobody may stay anonymous: these get the missing step (name, phone, consent) at their next /start
+                Filter::make('incomplete')->label('F.I.Sh. yoki telefoni yo‘q')->toggle()
+                    ->query(fn (Builder $query) => $query->where(fn ($w) => $w->whereNull('full_name')->orWhere('full_name', '')
+                        ->orWhereNull('phone')->orWhere('phone', '')->orWhereNull('consent_at'))),
+                TernaryFilter::make('blocked')->label('Botni bloklagan')
+                    ->nullable()->attribute('blocked_at')
+                    ->trueLabel('Ha')->falseLabel('Yo‘q'),
                 TernaryFilter::make('registered')->label('Ro‘yxatdan o‘tgan')
                     ->nullable()->attribute('registered_at')
                     ->trueLabel('Ha')->falseLabel('Yo‘q'),

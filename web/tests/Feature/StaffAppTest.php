@@ -358,6 +358,41 @@ class StaffAppTest extends TestCase
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
     }
 
+    public function test_mass_message_reaches_the_ones_without_name_or_phone_and_skips_the_blocked(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $now = now()->utc()->format('Y-m-d H:i:s');
+        $db->table('users')->insert([
+            ['user_id' => 880001, 'full_name' => 'To‘liq Odam', 'phone' => '+998901000001', 'consent_at' => $now, 'blocked_at' => null],
+            ['user_id' => 880002, 'full_name' => null, 'phone' => null, 'consent_at' => null, 'blocked_at' => null],
+            ['user_id' => 880003, 'full_name' => 'Raqamsiz Odam', 'phone' => null, 'consent_at' => $now, 'blocked_at' => null],
+            ['user_id' => 880004, 'full_name' => null, 'phone' => null, 'consent_at' => null, 'blocked_at' => $now],  // blocked the bot
+        ]);
+        $db->table('outbox')->delete();
+        $page = \App\Filament\Resources\BotUsers\Pages\ListBotUsers::class;
+
+        Livewire::test($page)->callAction('broadcast', ['who' => 'incomplete', 'text' => 'Iltimos /start bosing'])->assertHasNoActionErrors();
+        $to = $db->table('outbox')->where('text', 'Iltimos /start bosing')->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        $this->assertContains(880002, $to);
+        $this->assertContains(880003, $to);
+        $this->assertNotContains(880001, $to, 'has name, phone and consent');
+        $this->assertNotContains(880004, $to, 'blocked the bot');
+
+        // pressed twice: the ones still waiting do not get it twice
+        Livewire::test($page)->callAction('broadcast', ['who' => 'incomplete', 'text' => 'Iltimos /start bosing']);
+        $this->assertSame(count($to), $db->table('outbox')->where('text', 'Iltimos /start bosing')->count());
+
+        // the list shows who is not finished and who blocked the bot
+        Livewire::test($page)->filterTable('incomplete', true)
+            ->assertCanSeeTableRecords([\App\Models\BotUser::find(880002), \App\Models\BotUser::find(880003)])
+            ->assertCanNotSeeTableRecords([\App\Models\BotUser::find(880001)]);
+        Livewire::test($page)->filterTable('blocked', true)->assertCanSeeTableRecords([\App\Models\BotUser::find(880004)])
+            ->assertSee('Botni bloklagan');
+    }
+
     public function test_district_list_assigns_people_to_a_district(): void
     {
         $this->actingAs(User::factory()->create(['email' => 'admin@test.local']));

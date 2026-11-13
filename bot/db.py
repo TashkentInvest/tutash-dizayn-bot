@@ -366,7 +366,9 @@ def _added_columns():
     return (("users", {**REG_COLUMNS,
                        # a request being written: the level picked, and until when (unix time) the text is awaited.
                        # In the database, not in memory: a restart of the bot no longer loses it
-                       "fb_wait": "TEXT", "fb_wait_until": "REAL"}),
+                       "fb_wait": "TEXT", "fb_wait_until": "REAL",
+                       # the private chat the bot writes to, and when Telegram said the user can no longer be reached
+                       "chat_id": "INTEGER", "blocked_at": "TEXT"}),
             ("districts", {"phone": "TEXT"}),
             # the street's start and end ("dan" / "gacha" of the official list): staff must stand near this line to work on it
             ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0", "start_lat": "REAL", "start_lon": "REAL",
@@ -515,21 +517,31 @@ _TOUCH_EVERY = 60.0  # seconds: last_seen is written at most this often per user
 _last_touch: dict[int, float] = {}
 
 
-def touch_user(u, started: bool = False) -> None:
+def touch_user(u, started: bool = False, chat_id: int | None = None) -> None:
+    """Saves the Telegram profile and the private chat id; anyone who writes to the bot can be reached again."""
     now = time.monotonic()
     if not started and now - _last_touch.get(u.id, -_TOUCH_EVERY) < _TOUCH_EVERY:
         return
     _last_touch[u.id] = now
     with _db() as c:
         c.execute(
-            """INSERT INTO users (user_id, username, first_name, last_name, language_code, start_count)
-               VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO users (user_id, username, first_name, last_name, language_code, start_count, chat_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(user_id) DO UPDATE SET
                  username=excluded.username, first_name=excluded.first_name,
                  last_name=excluded.last_name, language_code=excluded.language_code,
+                 chat_id=COALESCE(excluded.chat_id, users.chat_id), blocked_at=NULL,
                  last_seen=datetime('now'), start_count=users.start_count + ?""",
-            (u.id, u.username, u.first_name, u.last_name, u.language_code, int(started), int(started)),
+            (u.id, u.username, u.first_name, u.last_name, u.language_code, int(started), chat_id or u.id, int(started)),
         )
+        c.commit()
+
+
+def mark_blocked(user_id: int) -> None:
+    """Telegram refused a message: the user blocked the bot or deleted the account. Cleared when they come back."""
+    _last_touch.pop(user_id, None)  # their next visit must clear it at once, not after the throttle
+    with _db() as c:
+        c.execute("UPDATE users SET blocked_at=datetime('now') WHERE user_id=? AND blocked_at IS NULL", (user_id,))
         c.commit()
 
 

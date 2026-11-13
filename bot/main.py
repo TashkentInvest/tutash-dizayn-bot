@@ -95,8 +95,8 @@ class OncePerPress(BaseMiddleware):
         return await handler(event, data)
 
 
-def _touch(u, started: bool) -> None:
-    db.touch_user(u, started=started)
+def _touch(u, started: bool, chat_id: int | None = None) -> None:
+    db.touch_user(u, started=started, chat_id=chat_id)
     i18n.lang(u.id)  # loads the language into memory: the handlers read it without touching the database
 
 
@@ -105,8 +105,10 @@ class TrackUsers(BaseMiddleware):
 
     async def __call__(self, handler, event, data):
         u = data.get("event_from_user")
+        chat = data.get("event_chat")
         if u and not u.is_bot:
-            await adb.run(_touch, u, isinstance(event, Message) and (event.text or "").startswith("/start"))
+            await adb.run(_touch, u, isinstance(event, Message) and (event.text or "").startswith("/start"),
+                          chat.id if chat and chat.type == "private" else None)
         return await handler(event, data)
 
 
@@ -198,8 +200,9 @@ def _unconfirmed_staff(uid: int) -> bool:
 async def main_menu(c: CallbackQuery):
     uid = c.from_user.id
     L = i18n.lang(uid)
-    if not await adb.run(_has_contact, uid):
-        return await c.answer(t(L, "need_reg"), show_alert=True)
+    if not await adb.run(_has_contact, uid):  # nobody uses the bot anonymously: the missing step comes first
+        await c.answer(t(L, "need_reg"))
+        return await registration.prompt(c.bot, c.message.chat.id, uid)
     what = c.data.split(":", 1)[1]
     if what == "design":  # the edition in the user's language: Uzbek = the short one, Russian = the full one
         what = L
@@ -280,6 +283,9 @@ async def staff_refresh(c: CallbackQuery):
     staff = await adb.staff_by_user(c.from_user.id)
     if not staff:
         return await c.answer(t(L, "stale"), show_alert=True)
+    if not await adb.run(_has_contact, c.from_user.id):
+        await c.answer()
+        return await registration.prompt(c.bot, c.message.chat.id, c.from_user.id)
     text, kb = await adb.run(registration.staff_menu, staff, L)
     try:
         await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
@@ -332,7 +338,9 @@ async def deliver_answers(bot: Bot) -> None:
                 except (TelegramForbiddenError, TelegramBadRequest) as e:  # blocked the bot / chat gone: will never arrive
                     logging.warning("answer %s not delivered: %s", r["id"], e)
                     await adb.mark_answer_sent(r["id"], error=str(e)[:200])
-            for r in await adb.unsent_outbox():  # review results for staff and report pictures, written by the dashboard
+                    await _maybe_blocked(r["user_id"], e)
+            batch = await adb.unsent_outbox()
+            for r in batch:  # review results for staff, report pictures and mass messages, written by the dashboard
                 try:
                     if r["photo"]:
                         f = (UPLOADS_DIR / r["photo"]).resolve()
@@ -349,9 +357,18 @@ async def deliver_answers(bot: Bot) -> None:
                 except (TelegramForbiddenError, TelegramBadRequest) as e:
                     logging.warning("outbox %s not delivered: %s", r["id"], e)
                     await adb.mark_outbox_sent(r["id"], error=str(e)[:200])
+                    await _maybe_blocked(r["user_id"], e)
         except Exception:  # database busy, network: try again next round
             logging.exception("deliver_answers failed")
-        await asyncio.sleep(10)
+            batch = []
+        # a full batch means more is waiting (a mass message): carry on at once, OutgoingLimiter keeps the pace
+        await asyncio.sleep(1 if len(batch) >= 20 else 10)
+
+
+async def _maybe_blocked(user_id: int, e: Exception) -> None:
+    """Blocked the bot, deactivated or never started it: kept on the user, so a mass message skips them next time."""
+    if isinstance(e, TelegramForbiddenError) or "chat not found" in str(e).lower():
+        await adb.mark_blocked(user_id)
 
 
 async def _edit(c: CallbackQuery, text: str, kb) -> None:

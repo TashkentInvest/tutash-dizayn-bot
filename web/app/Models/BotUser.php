@@ -27,6 +27,8 @@ class BotUser extends Model
             'registered_at' => 'datetime',
             'consent_at' => 'datetime',
             'approved_at' => 'datetime',
+            'blocked_at' => 'datetime',
+            'chat_id' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',
             'start_count' => 'integer',
