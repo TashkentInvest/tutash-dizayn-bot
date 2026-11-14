@@ -759,6 +759,12 @@ class StaffAppTest extends TestCase
         $this->assertStringContainsString('m uzoqdasiz', $home->json('error'));
         $this->assertSame(0, DesignObject::query()->where('shop_name', 'Uydan')->count());
 
+        // a rough fix (±1414 m, as phones report with approximate location): taken when its point is on the street's line,
+        // refused off the line, and never beyond the hard limit
+        $this->postJson($url, ['shop_name' => 'Taxminiy', 'latitude' => 41.3150, 'longitude' => 69.2900, 'accuracy' => 1414], $h)->assertStatus(422)
+            ->assertJsonFragment(['error' => 'Joylashuv aniq emas (±1414 m). Ochiq joyga chiqib, qayta urinib ko‘ring.']);
+        $this->postJson($url, ['shop_name' => 'Juda taxminiy', 'latitude' => 41.3150, 'longitude' => 69.2798, 'accuracy' => 5000], $h)->assertStatus(422);
+        $this->postJson($url, ['shop_name' => 'Taxminiy', 'latitude' => 41.3150, 'longitude' => 69.2798, 'accuracy' => 1414], $h)->assertOk();
         $ok = $this->postJson($url, ['shop_name' => 'Joyida', 'latitude' => 41.3150, 'longitude' => 69.2810], $h)->assertOk();  // ~110 m
         $id = $ok->json('object.id');
 

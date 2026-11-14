@@ -193,6 +193,15 @@ class StaffAppController extends Controller
         return $this->fail($r, 'off_street', 422, ['n' => (int) round($d), 'r' => $radius]);
     }
 
+    /**
+     * A fix of ±max_accuracy_m is always good enough. A rougher one (phones often say ±1-2 km while standing right there)
+     * is taken only when its point is on the place itself: the street's line or the object; never beyond the hard limit.
+     */
+    private static function accurateEnough(float $accuracy, bool $onPlace): bool
+    {
+        return $accuracy <= config('telegram.max_accuracy_m') || ($onPlace && $accuracy <= config('telegram.max_accuracy_on_place_m'));
+    }
+
     /** A refused location, kept for the dashboard ("Xatolikka uchraganlar"): where the staff member was and what it was compared with. */
     private function logFailure(Request $r, string $kind, string $reason, float $lat, float $lon, array $ctx = []): void
     {
@@ -236,9 +245,10 @@ class StaffAppController extends Controller
             'latitude' => ['required', 'numeric', 'between:37,46'], 'longitude' => ['required', 'numeric', 'between:55,74.5'],
             'accuracy' => ['nullable', 'numeric', 'min:0'],
         ], ['latitude.required' => $this->msg($r, 'need_place'), 'longitude.required' => $this->msg($r, 'need_place')]);
-        if ((float) ($at['accuracy'] ?? 0) > config('telegram.max_accuracy_m')) {
+        $onLine = ($d = $street->distanceTo((float) $at['latitude'], (float) $at['longitude'])) !== null && $d <= config('telegram.street_radius_m');
+        if (! self::accurateEnough((float) ($at['accuracy'] ?? 0), $onLine)) {
             $this->logFailure($r, 'add_object', 'accuracy', (float) $at['latitude'], (float) $at['longitude'],
-                ['street_id' => $street->id, 'accuracy' => (float) $at['accuracy']]);
+                ['street_id' => $street->id, 'accuracy' => (float) $at['accuracy'], 'distance_m' => $d === null ? null : round($d, 1)]);
 
             return $this->fail($r, 'accuracy', 422, ['n' => (int) round((float) $at['accuracy'])]);
         }
@@ -366,7 +376,12 @@ class StaffAppController extends Controller
             $acc = (float) ($data['accuracy'] ?? 0);
             $o = $i->object;
             $ctx = ['street_id' => $o->street_id, 'object_id' => $o->id, 'inspection_id' => $i->id, 'accuracy' => $acc ?: null];
-            if ($acc > config('telegram.max_accuracy_m')) {
+            $placeLat = $o->latitude ?? $o->found_lat;
+            $placeLon = $o->longitude ?? $o->found_lon;
+            $there = $placeLat !== null
+                ? self::distance((float) $placeLat, (float) $placeLon, (float) $data['latitude'], (float) $data['longitude']) <= config('telegram.max_distance_m')
+                : (($d = $o->street?->distanceTo((float) $data['latitude'], (float) $data['longitude'])) !== null && $d <= config('telegram.street_radius_m'));
+            if (! self::accurateEnough($acc, $there)) {
                 $this->logFailure($r, 'evidence', 'accuracy', (float) $data['latitude'], (float) $data['longitude'], $ctx);
 
                 return $this->fail($r, 'accuracy', 422, ['n' => (int) round($acc)]);

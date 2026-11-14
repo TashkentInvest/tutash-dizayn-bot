@@ -17,6 +17,9 @@ return [
     // the bot's @username for invite links (asked from Telegram when empty)
     'bot_username' => env('TG_BOT_USERNAME', ''),
     'max_accuracy_m' => (int) env('TG_MAX_ACCURACY_M', 150),
+    // a rougher fix is still taken when the point itself is on the street (within street_radius_m of its KMZ line) or at
+    // the object (within max_distance_m): phones often report ±1-2 km while standing right there; beyond this, never
+    'max_accuracy_on_place_m' => (int) env('TG_MAX_ACCURACY_ON_PLACE_M', 2500),
 
     'video_min_bytes' => 40 * 1024,          // shorter/empty recordings are refused
     'video_max_kb' => 60 * 1024,
