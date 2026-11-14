@@ -61,3 +61,18 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-inspection/{inspectio
     // response()->file answers Range requests, so the video can be scrubbed
     return response()->file($file, ['Content-Type' => $type, 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => 'sandbox']);
 })->name('bot-inspection-media');
+
+// A refused staff location ("Xatolikka uchraganlar") on a map: the dashboard's modal shows it in an iframe
+Route::middleware(['auth', 'can:access-admin'])->get('/failure-map/{failure}', function (\App\Models\LocationFailure $failure) {
+    $f = $failure->load(['street', 'object']);
+    $far = $f->distance_m;
+
+    return response()->view('failures.map', ['data' => [
+        'lat' => $f->latitude, 'lon' => $f->longitude, 'accuracy' => $f->accuracy,
+        'tlat' => $f->target_lat, 'tlon' => $f->target_lon,
+        'street' => $f->street?->points() ?? [], 'streetName' => (string) $f->street?->name,
+        'meLabel' => $f->reason === 'point_far' ? 'Xodim xaritada belgilagan nuqta' : 'Xodim turgan joy',
+        'targetLabel' => $f->reason === 'point_far' ? 'Xodim turgan joy' : 'Obyekt joyi: '.($f->object?->label() ?? ''),
+        'distance' => $far === null ? '' : ($far >= 1000 ? number_format($far / 1000, 1, ',', ' ').' km' : (int) round($far).' m'),
+    ]])->header('Cache-Control', 'private, no-store');
+})->name('location-failure-map');

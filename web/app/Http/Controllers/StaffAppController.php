@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DesignObject;
 use App\Models\Inspection;
+use App\Models\LocationFailure;
 use App\Models\Staff;
 use App\Models\Street;
 use App\Models\StreetFile;
@@ -176,7 +177,7 @@ class StaffAppController extends Controller
      * Is the staff member on this street? Within the radius of its line, or on a road the map names like it (a bent street
      * is not a straight line) and still near it. Returns null when yes, else the error to send.
      */
-    private function offStreet(Request $r, Street $street, float $lat, float $lon): ?JsonResponse
+    private function offStreet(Request $r, Street $street, float $lat, float $lon, string $kind = 'add_object', array $ctx = []): ?JsonResponse
     {
         $d = $street->distanceTo($lat, $lon);
         $radius = (int) config('telegram.street_radius_m');
@@ -187,7 +188,16 @@ class StaffAppController extends Controller
             return null;
         }
 
+        $this->logFailure($r, $kind, 'off_street', $lat, $lon, ['street_id' => $street->id, 'distance_m' => round($d, 1)] + $ctx);
+
         return $this->fail($r, 'off_street', 422, ['n' => (int) round($d), 'r' => $radius]);
+    }
+
+    /** A refused location, kept for the dashboard ("Xatolikka uchraganlar"): where the staff member was and what it was compared with. */
+    private function logFailure(Request $r, string $kind, string $reason, float $lat, float $lon, array $ctx = []): void
+    {
+        LocationFailure::record(['staff_id' => $this->staff($r)->id, 'kind' => $kind, 'reason' => $reason,
+            'latitude' => $lat, 'longitude' => $lon] + $ctx);
     }
 
     private const NEARBY_M = 300;
@@ -227,9 +237,13 @@ class StaffAppController extends Controller
             'accuracy' => ['nullable', 'numeric', 'min:0'],
         ], ['latitude.required' => $this->msg($r, 'need_place'), 'longitude.required' => $this->msg($r, 'need_place')]);
         if ((float) ($at['accuracy'] ?? 0) > config('telegram.max_accuracy_m')) {
+            $this->logFailure($r, 'add_object', 'accuracy', (float) $at['latitude'], (float) $at['longitude'],
+                ['street_id' => $street->id, 'accuracy' => (float) $at['accuracy']]);
+
             return $this->fail($r, 'accuracy', 422, ['n' => (int) round((float) $at['accuracy'])]);
         }
-        if ($resp = $this->offStreet($r, $street, (float) $at['latitude'], (float) $at['longitude'])) {
+        if ($resp = $this->offStreet($r, $street, (float) $at['latitude'], (float) $at['longitude'], 'add_object',
+            ['accuracy' => isset($at['accuracy']) ? (float) $at['accuracy'] : null])) {
             return $resp;
         }
 
@@ -350,19 +364,25 @@ class StaffAppController extends Controller
 
         return $this->step($r, $inspection, 'location', function (Inspection $i) use ($r, $data) {
             $acc = (float) ($data['accuracy'] ?? 0);
+            $o = $i->object;
+            $ctx = ['street_id' => $o->street_id, 'object_id' => $o->id, 'inspection_id' => $i->id, 'accuracy' => $acc ?: null];
             if ($acc > config('telegram.max_accuracy_m')) {
+                $this->logFailure($r, 'evidence', 'accuracy', (float) $data['latitude'], (float) $data['longitude'], $ctx);
+
                 return $this->fail($r, 'accuracy', 422, ['n' => (int) round($acc)]);
             }
-            $o = $i->object;
             // the staff member must be at the object: its approved place, else where it was added, else on its street
             $lat = $o->latitude ?? $o->found_lat;
             $lon = $o->longitude ?? $o->found_lon;
             if ($lat !== null) {
                 $far = self::distance((float) $lat, (float) $lon, (float) $data['latitude'], (float) $data['longitude']);
                 if ($far > config('telegram.max_distance_m')) {
+                    $this->logFailure($r, 'evidence', 'too_far', (float) $data['latitude'], (float) $data['longitude'],
+                        $ctx + ['target_lat' => (float) $lat, 'target_lon' => (float) $lon, 'distance_m' => round($far, 1)]);
+
                     return $this->fail($r, 'too_far', 422, ['n' => (int) round($far)]);
                 }
-            } elseif ($o->street && ($resp = $this->offStreet($r, $o->street, (float) $data['latitude'], (float) $data['longitude']))) {
+            } elseif ($o->street && ($resp = $this->offStreet($r, $o->street, (float) $data['latitude'], (float) $data['longitude'], 'evidence', $ctx))) {
                 return $resp;
             }
             $i->forceFill(['latitude' => $data['latitude'], 'longitude' => $data['longitude'], 'accuracy' => $acc ?: null,
@@ -383,6 +403,11 @@ class StaffAppController extends Controller
         return $this->step($r, $inspection, 'point', function (Inspection $i) use ($r, $data) {
             $distance = self::distance((float) $i->latitude, (float) $i->longitude, (float) $data['latitude'], (float) $data['longitude']);
             if ($distance > config('telegram.max_distance_m')) {
+                // the point picked on the map, compared with where the staff member stood
+                $this->logFailure($r, 'point', 'point_far', (float) $data['latitude'], (float) $data['longitude'], [
+                    'street_id' => $i->object?->street_id, 'object_id' => $i->object_id, 'inspection_id' => $i->id,
+                    'target_lat' => (float) $i->latitude, 'target_lon' => (float) $i->longitude, 'distance_m' => round($distance, 1)]);
+
                 return $this->fail($r, 'point_far', 422, ['n' => (int) round($distance)]);
             }
             $i->forceFill(['obj_latitude' => $data['latitude'], 'obj_longitude' => $data['longitude'],

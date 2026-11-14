@@ -264,6 +264,21 @@ class StaffAppTest extends TestCase
             ->assertStatus(422)->assertJsonFragment(['error' => 'Siz obyektdan 2102 m uzoqdasiz. Obyekt yoniga boring.']);
         $this->postJson("/tg/api/inspections/$id/location", ['latitude' => 41.3112, 'longitude' => 69.2798, 'accuracy' => 10], $h)->assertOk();
 
+        // the refusal is kept for the dashboard: where the staff member stood, the object's place, the distance
+        $f = \App\Models\LocationFailure::query()->sole();
+        $this->assertSame(['evidence', 'too_far', (int) $this->staff->id, (int) $this->object->id], [$f->kind, $f->reason, (int) $f->staff_id, (int) $f->object_id]);
+        $this->assertEqualsWithDelta(41.33, $f->latitude, 0.0001);
+        $this->assertEqualsWithDelta(41.3111, $f->target_lat, 0.0001);
+        $this->assertEqualsWithDelta(2102, $f->distance_m, 2);
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        Livewire::test(\App\Filament\Resources\LocationFailures\Pages\ListLocationFailures::class)
+            ->assertCanSeeTableRecords([$f])->assertSee('Obyektdan uzoqda')->assertSee('2,1 km')->assertSee('Test Xodim');
+        Livewire::test(\App\Filament\Resources\LocationFailures\Pages\ListLocationFailures::class)
+            ->filterTable('district', $this->otherDistrict)->assertCanNotSeeTableRecords([$f]);
+        $this->get(route('location-failure-map', $f))->assertOk()->assertSee('leaflet.js', false)->assertSee('41.33', false);
+
         $other = (int) DB::connection('bot')->table('streets')->where('district_id', $this->otherDistrict)->value('id');
         $this->getJson("/tg/api/streets/$other/objects", $h)->assertStatus(403);
     }
@@ -426,6 +441,31 @@ class StaffAppTest extends TestCase
         $this->assertSame(1, $db->table('downloads')->where('user_id', 890001)->count(), 'history stays');
         $this->assertTrue($db->table('report_recipients')->where('user_id', 890001)->exists(), 'still gets the reports');
         $this->assertStringContainsString('/start', $db->table('outbox')->where('user_id', 890001)->value('text'));
+    }
+
+    public function test_a_bot_user_is_made_staff_from_their_page(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $db->table('users')->insert(['user_id' => 891001, 'full_name' => 'Abdusattorov Abdulaziz', 'phone' => '+998997906699', 'lang' => 'uz']);
+        $db->table('outbox')->delete();
+        $page = \App\Filament\Resources\BotUsers\Pages\ViewBotUser::class;
+
+        Livewire::test($page, ['record' => 891001])->assertActionVisible('staff')
+            ->callAction('staff', ['district_id' => $this->otherDistrict, 'full_name' => 'Abdusattorov Abdulaziz', 'phone' => '99 790 66 99'])
+            ->assertHasNoActionErrors();
+        $s = Staff::query()->where('phone', '+998997906699')->sole();
+        $this->assertSame([891001, $this->otherDistrict], [(int) $s->user_id, (int) $s->district_id]);
+        $this->assertStringContainsString('xodimi sifatida biriktirildingiz', $db->table('outbox')->where('user_id', 891001)->pluck('text')->implode(' | '));
+        Livewire::test($page, ['record' => 891001])->assertActionHidden('staff')->assertSee('Tuman xodimi: Abdusattorov Abdulaziz');
+
+        // the name corrected; unlinked again
+        Livewire::test($page, ['record' => 891001])->callAction('edit', ['full_name' => 'Abdusattorov  Abdulaziz Davron o‘g‘li'])->assertHasNoActionErrors();
+        $this->assertSame('Abdusattorov Abdulaziz Davron o‘g‘li', $db->table('users')->where('user_id', 891001)->value('full_name'));
+        Livewire::test($page, ['record' => 891001])->callAction('unstaff')->assertHasNoActionErrors();
+        $this->assertNull($s->fresh()->user_id);
     }
 
     public function test_district_list_assigns_people_to_a_district(): void
