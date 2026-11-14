@@ -24,8 +24,14 @@ class Inspection extends Model
 
     public const REJECTED = 'rejected';
 
+    /** Held by the moderator with a note: not approved, the object is not done, it may stay so for days; the staff member waits. */
+    public const MODERATION = 'moderation';
 
-    public const REVIEW_COLORS = [self::PENDING => 'warning', self::APPROVED => 'success', self::REJECTED => 'danger'];
+    /** Still open: the object is "in process" and takes no new evidence until the moderator decides. */
+    public const OPEN = [self::PENDING, self::MODERATION];
+
+
+    public const REVIEW_COLORS = [self::PENDING => 'warning', self::MODERATION => 'info', self::APPROVED => 'success', self::REJECTED => 'danger'];
 
     protected $connection = 'bot';
 

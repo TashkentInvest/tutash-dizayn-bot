@@ -32,7 +32,7 @@ class StaffActivity extends TableWidget
                 ->withCount([
                     'createdObjects as objects_today' => fn (Builder $query) => $query->where('created_at', '>=', $today),
                     'inspections as evidence_today' => fn (Builder $query) => $query->where('submitted_at', '>=', $today),
-                    'inspections as evidence_review' => fn (Builder $query) => $query->where('review', Inspection::PENDING),
+                    'inspections as evidence_review' => fn (Builder $query) => $query->whereIn('review', Inspection::OPEN),
                 ]))
             ->defaultSort('objects_today', 'desc')
             ->paginated(false)

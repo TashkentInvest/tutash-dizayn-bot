@@ -9,7 +9,8 @@
   "review": {
     "pending": {"uz": "Tekshiruvda", "ru": "На проверке"},
     "approved": {"uz": "Tasdiqlandi", "ru": "Одобрено"},
-    "rejected": {"uz": "Rad etildi", "ru": "Отклонено"}
+    "rejected": {"uz": "Rad etildi", "ru": "Отклонено"},
+    "moderation": {"uz": "Moderator jarayonida", "ru": "На модерации"}
   },
   "svod": {
     "total": {"uz": "Jami obyekt", "ru": "Всего объектов"},

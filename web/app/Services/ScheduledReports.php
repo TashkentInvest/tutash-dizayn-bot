@@ -54,6 +54,7 @@ class ScheduledReports
 
         return '📊 Dizayn-kod · soat '.$at->copy()->setTimezone(config('app.display_timezone'))->format('H:i')." holati\n"
             ."Bugun: yechildi {$t['day_removed']}, qo‘yildi {$t['day_installed']}\n"
+            ."Bugun yuborildi: dalil {$t['day_sent']}, yangi obyekt {$t['day_added']}\n"
             .Labels::get('status.review').' ('.Labels::get('svod.review_hint')."): {$t['review']}\n"
             ."Ishlayotgan xodimlar: $working / $staff\n"
             ."Umumiy: qo‘yildi {$t['installed']} / {$t['total']} (".DesignCodeSvod::pct($t['pct']).')';

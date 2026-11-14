@@ -355,7 +355,7 @@ class StaffAppTest extends TestCase
         $this->assertStringContainsString('Rasmda peshtaxta ko‘rinmayapti', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
 
         // an approval taken back: rejected, the object goes back to not started, the staff member is told
-        Livewire::test(ListInspections::class)->filterTable('review', Inspection::APPROVED)
+        Livewire::test(ListInspections::class)->filterTable('review', [Inspection::APPROVED])
             ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Xato tasdiqlangan ekan'])->assertHasNoActionErrors();
         $this->assertSame(Inspection::REJECTED, Inspection::find($id)->review);
         $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
@@ -466,6 +466,45 @@ class StaffAppTest extends TestCase
         $this->assertSame('Abdusattorov Abdulaziz Davron o‘g‘li', $db->table('users')->where('user_id', 891001)->value('full_name'));
         Livewire::test($page, ['record' => 891001])->callAction('unstaff')->assertHasNoActionErrors();
         $this->assertNull($s->fresh()->user_id);
+    }
+
+    public function test_moderator_holds_evidence_for_days_and_asks_the_staff_member(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+        $db = DB::connection('bot');
+        $id = $this->sendEvidence('removed');
+        $db->table('outbox')->delete();
+
+        // held with a note: not approved, the object is not done, the staff member is told and cannot send again
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('hold')->table(Inspection::find($id)), ['note' => ''])->assertHasActionErrors(['note' => 'required']);
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('hold')->table(Inspection::find($id)), ['note' => 'Peshtaxta hali to‘liq yechilmagan'])->assertHasNoActionErrors();
+        $this->assertSame(Inspection::MODERATION, Inspection::find($id)->review);
+        $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
+        $this->assertStringContainsString('moderator jarayonida', $db->table('outbox')->where('user_id', 555001)->value('text'));
+        $this->postJson("/tg/api/objects/{$this->object->id}/inspections", ['kind' => 'installed'], $this->headers())->assertStatus(409);
+        $this->assertTrue($this->getJson("/tg/api/objects/{$this->object->id}", $this->headers())->json('in_review'));
+        // still in the moderator's list (waiting + held), "Jarayonda" in the svod, and the report day's sent evidence
+        Livewire::test(ListInspections::class)->assertCanSeeTableRecords([Inspection::find($id)])->assertSee('Moderator jarayonida');
+        $t = Svod::byDistrict(Svod::reportDay())['total'];
+        $this->assertSame([1, 1], [$t['review'], $t['day_sent']]);
+        $this->assertGreaterThanOrEqual(1, $t['day_added'] + 0);
+
+        // days later: asked what happened at the object's place (with the map link)
+        $db->table('outbox')->delete();
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('ask')->table(Inspection::find($id)), ['question' => 'Muammo hal bo‘ldimi?'])->assertHasNoActionErrors();
+        $ask = $db->table('outbox')->where('user_id', 555001)->value('text');
+        $this->assertStringContainsString('Muammo hal bo‘ldimi?', $ask);
+        $this->assertStringContainsString('maps.google.com/?q=', $ask);
+
+        // then decided: approved, the object moves on
+        Livewire::test(ListInspections::class)->callAction(TestAction::make('approve')->table(Inspection::find($id)))->assertHasNoActionErrors();
+        $this->assertSame(Inspection::APPROVED, Inspection::find($id)->review);
+        $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status);
     }
 
     public function test_district_list_assigns_people_to_a_district(): void

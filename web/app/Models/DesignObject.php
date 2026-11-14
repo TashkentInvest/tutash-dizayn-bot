@@ -62,7 +62,7 @@ class DesignObject extends Model
 
     public function pendingInspection(): HasOne
     {
-        return $this->hasOne(Inspection::class, 'object_id')->where('review', Inspection::PENDING)->latestOfMany();
+        return $this->hasOne(Inspection::class, 'object_id')->whereIn('review', Inspection::OPEN)->latestOfMany();
     }
 
     public function scopeActive(Builder $q): Builder

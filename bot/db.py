@@ -678,7 +678,7 @@ def staff_counts(staff: dict) -> dict:
         planned = c.execute(f"SELECT COALESCE(SUM(planned_objects), 0) FROM streets WHERE id IN ({marks})", tuple(ids)).fetchone()[0]
         pending = c.execute(
             "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id "
-            f"WHERE o.street_id IN ({marks}) AND i.review='pending'", tuple(ids)
+            f"WHERE o.street_id IN ({marks}) AND i.review IN ('pending', 'moderation')", tuple(ids)
         ).fetchone()[0]
     return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
 

@@ -18,6 +18,10 @@ class InspectionReview
         'rejected' => ["❌ «%s» (%s) bo‘yicha dalilingiz rad etildi: %s.\nSabab: %s\n\nMini App’da obyektni ochib, qayta yuboring.",
             "❌ Ваши доказательства по «%s» (%s) отклонены: %s.\nПричина: %s\n\nОткройте объект в Mini App и отправьте снова."],
         'note' => ["\nAdmin izohi: %s", "\nКомментарий администратора: %s"],
+        'held' => ["⏸ «%s» (%s) bo‘yicha dalilingiz moderator jarayonida: %s.\nIzoh: %s\n\nObyekt hali tugallanmagan. Moderator qaror qilguncha bu obyektga yangi dalil yuborilmaydi.",
+            "⏸ Ваши доказательства по «%s» (%s) на модерации: %s.\nКомментарий: %s\n\nОбъект ещё не завершён. До решения модератора новые доказательства по нему не принимаются."],
+        'ask' => ["❓ Moderator so‘rayapti: «%s» (%s, %s)\n\n%s\n\nObyekt joyi: %s\nJavobingizni botdagi «Murojaat yuborish» orqali yoki rahbaringizga yuboring.",
+            "❓ Вопрос модератора: «%s» (%s, %s)\n\n%s\n\nМесто объекта: %s\nОтветьте через «Отправить обращение» в боте или руководителю."],
         'kind' => ['removed' => ['eski peshtaxta yechildi', 'старая вывеска снята'], 'installed' => ['dizayn-kod bo‘yicha qo‘yildi', 'установлено по дизайн-коду']],
     ];
 
@@ -25,7 +29,8 @@ class InspectionReview
     public static function approve(Inspection $inspection, ?string $note, ?string $by): bool
     {
         return DB::connection('bot')->transaction(function () use ($inspection, $note, $by) {
-            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::PENDING)->update([
+            // waiting, or held by the moderator for a while
+            $done = Inspection::query()->whereKey($inspection->id)->whereIn('review', Inspection::OPEN)->update([
                 'review' => Inspection::APPROVED, 'review_note' => $note ?: null, 'reviewed_by' => $by,
                 'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
             ]);
@@ -60,7 +65,7 @@ class InspectionReview
     {
         return DB::connection('bot')->transaction(function () use ($inspection, $reason, $by) {
             $was = Inspection::query()->whereKey($inspection->id)->lockForUpdate()->value('review');
-            if (! in_array($was, [Inspection::PENDING, Inspection::APPROVED], true)) {
+            if (! in_array($was, [...Inspection::OPEN, Inspection::APPROVED], true)) {
                 return false;
             }
             $done = Inspection::query()->whereKey($inspection->id)->where('review', $was)->update([
@@ -78,6 +83,46 @@ class InspectionReview
 
             return true;
         });
+    }
+
+    /**
+     * "Moderator jarayonida": not approved, a note why, the object is not done. It may stay so for days (the staff member
+     * cannot send new evidence for it meanwhile); approved or rejected later.
+     *
+     * @return bool false when it is not waiting any more
+     */
+    public static function hold(Inspection $inspection, string $note, ?string $by): bool
+    {
+        return DB::connection('bot')->transaction(function () use ($inspection, $note, $by) {
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::PENDING)->update([
+                'review' => Inspection::MODERATION, 'review_note' => $note, 'reviewed_by' => $by,
+                'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
+            if ($done) {
+                self::tell($inspection->fresh(['object.street', 'staff']), 'held', $note);
+            }
+
+            return (bool) $done;
+        });
+    }
+
+    /** A held one, days later: the moderator asks the staff member what happened at the object's place. */
+    public static function ask(Inspection $inspection, string $question): bool
+    {
+        $i = $inspection->fresh(['object.street.district', 'staff']);
+        $uid = $i?->staff?->user_id;
+        if (! $i || $i->review !== Inspection::MODERATION || ! $uid) {
+            return false;
+        }
+        $o = $i->object;
+        $lat = $o->latitude ?? $i->obj_latitude ?? $o->found_lat ?? $i->latitude;
+        $lon = $o->longitude ?? $i->obj_longitude ?? $o->found_lon ?? $i->longitude;
+        $ru = DB::connection('bot')->table('users')->where('user_id', $uid)->value('lang') === 'ru' ? 1 : 0;
+        $place = $lat !== null ? 'https://maps.google.com/?q='.round((float) $lat, 6).','.round((float) $lon, 6) : '—';
+        DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'created_at' => now()->utc()->format('Y-m-d H:i:s'),
+            'text' => sprintf(self::TEXT['ask'][$ru], $o->shop_name, (string) $o->street?->name, (string) $o->street?->district?->name, trim($question), $place)]);
+
+        return true;
     }
 
     /** The object's status from its approved evidence: installed beats removed; the place from the latest approved one. */
@@ -105,9 +150,11 @@ class InspectionReview
         $ru = DB::connection('bot')->table('users')->where('user_id', $uid)->value('lang') === 'ru' ? 1 : 0;
         $kind = self::TEXT['kind'][$i->kind][$ru] ?? $i->kind;
         $street = (string) $i->object?->street?->name;
-        $text = $result === 'approved'
-            ? sprintf(self::TEXT['approved'][$ru], $i->object->shop_name, $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : '')
-            : sprintf(self::TEXT['rejected'][$ru], $i->object->shop_name, $street, $kind, $note);
+        $text = match ($result) {
+            'approved' => sprintf(self::TEXT['approved'][$ru], $i->object->shop_name, $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : ''),
+            'held' => sprintf(self::TEXT['held'][$ru], $i->object->shop_name, $street, $kind, $note),
+            default => sprintf(self::TEXT['rejected'][$ru], $i->object->shop_name, $street, $kind, $note),
+        };
         DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'text' => $text]);
     }
 }

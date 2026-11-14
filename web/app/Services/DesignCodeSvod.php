@@ -13,7 +13,8 @@ use Illuminate\Support\Facades\DB;
  *   Jami       - the official object list (streets.planned_objects, imported from the Excel list)
  *   Yechildi / Qo'yildi - businesses whose evidence was approved (objects.status)
  *   Kutilmoqda - Jami minus both (never below 0)
- *   Jarayonda (evidence waiting for review), and the report day's approved work, from the evidence (inspections).
+ *   Jarayonda (evidence waiting for review or held by the moderator), and the report day's approved work, from the evidence.
+ *   Bugun yuborildi / qo'shildi - evidence the staff sent and businesses they added in the report day (approved or not).
  * A report day ends at 18:00 (like the demolition svod): from 18:00 the "Bugun" columns start counting the next day.
  */
 class DesignCodeSvod
@@ -73,18 +74,20 @@ class DesignCodeSvod
         $db = DB::connection('bot');
         $total = collect($db->select("SELECT $group AS g, COALESCE(SUM(s.planned_objects), 0) AS n FROM streets s WHERE $where GROUP BY $group", $bind))
             ->mapWithKeys(fn ($r) => [(int) $r->g => (int) $r->n])->all();
+        [$from, $to] = self::window($day);
         $o = collect($db->select(
             "SELECT $group AS g, SUM(CASE WHEN o.status='removed' THEN 1 ELSE 0 END) AS removed,
-                    SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed
-             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where GROUP BY $group", $bind))
+                    SUM(CASE WHEN o.status='installed' THEN 1 ELSE 0 END) AS installed,
+                    SUM(CASE WHEN o.created_at >= ? AND o.created_at < ? THEN 1 ELSE 0 END) AS day_added
+             FROM objects o JOIN streets s ON s.id = o.street_id WHERE o.is_active = TRUE AND $where GROUP BY $group", [$from, $to, ...$bind]))
             ->keyBy(fn ($r) => (int) $r->g)->all();
-        [$from, $to] = self::window($day);
         $i = collect($db->select(
-            "SELECT $group AS g, SUM(CASE WHEN i.review='pending' THEN 1 ELSE 0 END) AS review,
+            "SELECT $group AS g, SUM(CASE WHEN i.review IN ('pending', 'moderation') THEN 1 ELSE 0 END) AS review,
+                    SUM(CASE WHEN i.submitted_at >= ? AND i.submitted_at < ? THEN 1 ELSE 0 END) AS day_sent,
                     SUM(CASE WHEN i.review='approved' AND i.kind='removed' AND i.submitted_at >= ? AND i.submitted_at < ? THEN 1 ELSE 0 END) AS day_removed,
                     SUM(CASE WHEN i.review='approved' AND i.kind='installed' AND i.submitted_at >= ? AND i.submitted_at < ? THEN 1 ELSE 0 END) AS day_installed
              FROM inspections i JOIN objects o ON o.id = i.object_id JOIN streets s ON s.id = o.street_id
-             WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where GROUP BY $group", [$from, $to, $from, $to, ...$bind]))
+             WHERE o.is_active = TRUE AND i.review IS NOT NULL AND $where GROUP BY $group", [$from, $to, $from, $to, $from, $to, ...$bind]))
             ->keyBy(fn ($r) => (int) $r->g)->all();
 
         return [$total, $o, $i];
@@ -101,6 +104,7 @@ class DesignCodeSvod
         return [
             'total' => $total, 'pending' => max($total - $removed - $installed, 0), 'removed' => $removed, 'installed' => $installed,
             'review' => (int) ($i->review ?? 0), 'day_removed' => (int) ($i->day_removed ?? 0), 'day_installed' => (int) ($i->day_installed ?? 0),
+            'day_sent' => (int) ($i->day_sent ?? 0), 'day_added' => (int) ($objects[$id]->day_added ?? 0),
             'pct' => $total ? round($installed / $total * 100, 1) : 0.0,
         ];
     }
@@ -108,7 +112,7 @@ class DesignCodeSvod
     private static function sum(array $rows, string $name): array
     {
         $t = ['id' => null, 'name' => $name];
-        foreach (['total', 'pending', 'removed', 'installed', 'review', 'day_removed', 'day_installed'] as $k) {
+        foreach (['total', 'pending', 'removed', 'installed', 'review', 'day_removed', 'day_installed', 'day_sent', 'day_added'] as $k) {
             $t[$k] = array_sum(array_column($rows, $k));
         }
         $t['pct'] = $t['total'] ? round($t['installed'] / $t['total'] * 100, 1) : 0.0;

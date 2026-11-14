@@ -38,8 +38,10 @@ class SvodImage
         [$removed, $installed] = [L::get('status.removed'), L::get('status.installed')];
         $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 76, 'c'], [L::get('status.pending'), 92, 'c'], [$removed, 70, 'c'],
             [$installed, 70, 'c'], ['Bugun '.mb_strtolower($removed), 80, 'c'], ['Bugun '.mb_strtolower($installed), 80, 'c'],
+            ['Bugun yuborilgan dalil', 84, 'c'], ['Bugun qo‘shilgan obyekt', 84, 'c'],
             [L::get('status.review'), 90, 'c'], [L::get('svod.pct'), 86, 'c']];
-        $line = fn ($r, $n) => [$n, $r['name'], $r['total'], $r['pending'], $r['removed'], $r['installed'], $r['day_removed'], $r['day_installed'], $r['review'], $pct($r['pct'])];
+        $line = fn ($r, $n) => [$n, $r['name'], $r['total'], $r['pending'], $r['removed'], $r['installed'], $r['day_removed'], $r['day_installed'],
+            $r['day_sent'], $r['day_added'], $r['review'], $pct($r['pct'])];
         $body = array_map(fn ($r, $i) => $line($r, $i + 1), $svod['rows'], array_keys($svod['rows']));
 
         return self::table('Dizayn-kod: tumanlar kesimida svod — '.$date, $cols, $line($svod['total'], ''), $body);

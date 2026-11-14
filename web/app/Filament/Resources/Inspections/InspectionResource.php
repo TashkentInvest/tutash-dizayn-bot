@@ -85,7 +85,8 @@ class InspectionResource extends Resource
                     ->description(fn (Inspection $i) => $i->review_note),
             ])
             ->filters([
-                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->default(Inspection::PENDING),
+                // what still needs the moderator: waiting, and held ("Moderator jarayonida")
+                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple()->default(Inspection::OPEN),
                 SelectFilter::make('kind')->label('Nima qilindi')->options(Inspection::KINDS),
                 SelectFilter::make('district')->label('Tuman')
                     ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))
@@ -99,7 +100,7 @@ class InspectionResource extends Resource
                     ->modalSubmitAction(false)->modalCancelActionLabel('Yopish')->modalWidth('5xl')
                     ->schema([ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review')]),
                 Action::make('approve')->label('Tasdiqlash')->icon('heroicon-o-check-circle')->color('success')
-                    ->visible(fn (Inspection $i) => $i->review === Inspection::PENDING)
+                    ->visible(fn (Inspection $i) => in_array($i->review, Inspection::OPEN, true))
                     ->modalHeading('Dalilni tasdiqlash')->modalWidth('5xl')
                     ->modalDescription('Tasdiqlansa, obyekt holati o‘zgaradi va xodimga bot orqali xabar boradi.')
                     ->schema([
@@ -110,7 +111,7 @@ class InspectionResource extends Resource
                     ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email), 'Tasdiqlandi')),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
                     // a mistaken approval can be taken back too: the object's status then goes back
-                    ->visible(fn (Inspection $i) => in_array($i->review, [Inspection::PENDING, Inspection::APPROVED], true))
+                    ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::OPEN, Inspection::APPROVED], true))
                     ->modalHeading(fn (Inspection $i) => $i->review === Inspection::APPROVED ? 'Tasdiqlangan dalilni rad etish' : 'Dalilni rad etish')
                     ->modalDescription(fn (Inspection $i) => $i->review === Inspection::APPROVED
                         ? 'Tasdiq bekor qilinadi: obyekt holati qolgan tasdiqlangan dalillarga qarab qaytariladi (boshqasi bo‘lmasa, “Boshlanmagan”). Xodimga sababi bilan xabar boradi.' : null)
@@ -120,6 +121,29 @@ class InspectionResource extends Resource
                     ])
                     ->modalSubmitActionLabel('Rad etish')
                     ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::reject($i, $data['reason'], auth()->user()?->email), 'Rad etildi')),
+                // not approved yet, not rejected either: held with a note, the object is not done; may stay so for days
+                Action::make('hold')->label('Moderator jarayoniga')->icon('heroicon-o-pause-circle')->color('info')
+                    ->visible(fn (Inspection $i) => $i->review === Inspection::PENDING)
+                    ->modalHeading('Moderator jarayoniga o‘tkazish')->modalWidth('5xl')
+                    ->modalDescription('Dalil tasdiqlanmaydi va obyekt tugallangan deb belgilanmaydi. Dalil izoh bilan kerakli muddat '
+                        .'shu holatda turadi, xodim bu obyektga yangi dalil yubora olmaydi. Keyin «Xodimdan so‘rash», «Tasdiqlash» yoki «Rad etish».')
+                    ->schema([
+                        ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
+                        Textarea::make('note')->label('Izoh (nima uchun, nima kutilyapti) — xodimga ham boradi')->required()->minLength(5)->rows(3)->maxLength(500),
+                    ])
+                    ->modalSubmitActionLabel('Moderator jarayoniga')
+                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::hold($i, $data['note'], auth()->user()?->email), 'Moderator jarayonida')),
+                Action::make('ask')->label('Xodimdan so‘rash')->icon('heroicon-o-chat-bubble-left-ellipsis')->color('gray')
+                    ->visible(fn (Inspection $i) => $i->review === Inspection::MODERATION)
+                    ->modalHeading(fn (Inspection $i) => 'Xodimdan so‘rash: '.$i->object?->label())
+                    ->modalDescription('Xodimga botda obyekt nomi, ko‘chasi va xaritadagi joyi bilan birga yuboriladi.')
+                    ->fillForm(fn (Inspection $i) => ['question' => 'Shu obyekt joylashuvidagi muammo nima bo‘ldi? Hal bo‘lgan bo‘lsa, yozing.'
+                        .($i->review_note ? "\n(Izoh: {$i->review_note})" : '')])
+                    ->schema([Textarea::make('question')->label('Savol')->required()->minLength(5)->rows(4)->maxLength(1000)])
+                    ->modalSubmitActionLabel('Yuborish')
+                    ->action(fn (Inspection $i, array $data) => InspectionReview::ask($i, $data['question'])
+                        ? Notification::make()->success()->title('Xodimga yuborildi')->send()
+                        : Notification::make()->warning()->title('Yuborilmadi: xodim botga bog‘lanmagan yoki dalil endi moderator jarayonida emas')->send()),
             ]);
     }
 

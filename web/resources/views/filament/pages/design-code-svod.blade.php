@@ -6,10 +6,11 @@
         $cols = [
             'total' => $L::get('svod.total'), 'pending' => $L::get('status.pending'), 'removed' => $L::get('status.removed'),
             'installed' => $L::get('status.installed'), 'day_removed' => $dayWord.' '.mb_strtolower($L::get('status.removed')),
-            'day_installed' => $dayWord.' '.mb_strtolower($L::get('status.installed')), 'review' => $L::get('status.review'),
+            'day_installed' => $dayWord.' '.mb_strtolower($L::get('status.installed')),
+            'day_sent' => $dayWord.' yuborilgan dalil', 'day_added' => $dayWord.' qo‘shilgan obyekt', 'review' => $L::get('status.review'),
         ];
         // colour = meaning: amber in progress, green done, blue waiting for review
-        $tone = ['removed' => 'amber', 'installed' => 'green', 'review' => 'blue', 'day_removed' => 'amber', 'day_installed' => 'green'];
+        $tone = ['removed' => 'amber', 'installed' => 'green', 'review' => 'blue', 'day_removed' => 'amber', 'day_installed' => 'green', 'day_sent' => 'blue', 'day_added' => 'blue'];
     @endphp
 
     {{-- one stylesheet for both themes: Filament puts .dark on <html> in dark mode --}}

@@ -60,7 +60,7 @@ class ObjectsMap extends Page
                 ];
             })->values();
 
-        $review = Inspection::query()->where('review', Inspection::PENDING)->pluck('object_id')->flip();
+        $review = Inspection::query()->whereIn('review', Inspection::OPEN)->pluck('object_id')->flip();
         $objects = DesignObject::query()->active()->with('street:id,name,district_id')
             ->where(fn ($q) => $q->whereNotNull('latitude')->orWhereNotNull('found_lat'))->get()
             ->map(fn (DesignObject $o) => [
