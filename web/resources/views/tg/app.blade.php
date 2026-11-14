@@ -75,7 +75,7 @@
   var LANG = params.get('lang') === 'ru' ? 'ru' : 'uz';
   var T = {
     uz: { loading: 'Yuklanmoqda…', title: 'Obyektlar', total: 'Jami', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tekshiruvda',
-      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', findBtn: '📍 Joyimni aniqlash va obyektni topish', locSettings: '⚙️ Joylashuv ruxsatini yoqish', findHint: 'Obyekt oldida turib bosing: manzil va yaqin atrofdagi obyektlar chiqadi.', findWait: 'Joylashuv aniqlanmoqda…', here: 'Siz turgan joy', noAddress: 'Manzil topilmadi — o‘zingiz yozing.', streetLabel: 'Ko‘cha', pickStreet: '— ko‘chani tanlang —', nearbyTitle: 'Yaqin atrofdagi obyektlar ({n} m gacha)', nearbyNone: 'Yaqin atrofda kiritilgan obyekt yo‘q.', addHere: '➕ Shu joyda yangi obyekt qo‘shish', refind: '🔄 Qayta aniqlash', address: 'Manzil', m: 'm', editDetails: '✏️ Ma’lumotlarni tahrirlash', orBrowse: 'Yoki ko‘chani ro‘yxatdan tanlang:', chooseHint: 'Kerakli obyektni tanlang — rasm, video va joylashuv faqat unga yoziladi.', needStreet: 'Avval ko‘chani tanlang.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
+      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', findBtn: '📍 Joyimni aniqlash va obyektni topish', locSettings: '⚙️ Joylashuv ruxsatini yoqish', locTitle: 'Joylashuv ruxsati', locText: 'Obyekt qo‘shish va dalil yuborish uchun joylashuv kerak. «Ruxsatni yoqish»ni bosing va ochilgan oynada joylashuvga ruxsat bering, so‘ng «Tekshirish»ni bosing.', locCheck: '📍 Tekshirish', locOk: '✅ Joylashuv ishlayapti', locOld: 'Telegram ilovasini yangilang: bu versiyada ruxsatni ochib bo‘lmaydi. Telefon sozlamalarida Telegram uchun joylashuvni yoqing.', toHome: '📋 Obyektlarga o‘tish', findHint: 'Obyekt oldida turib bosing: manzil va yaqin atrofdagi obyektlar chiqadi.', findWait: 'Joylashuv aniqlanmoqda…', here: 'Siz turgan joy', noAddress: 'Manzil topilmadi — o‘zingiz yozing.', streetLabel: 'Ko‘cha', pickStreet: '— ko‘chani tanlang —', nearbyTitle: 'Yaqin atrofdagi obyektlar ({n} m gacha)', nearbyNone: 'Yaqin atrofda kiritilgan obyekt yo‘q.', addHere: '➕ Shu joyda yangi obyekt qo‘shish', refind: '🔄 Qayta aniqlash', address: 'Manzil', m: 'm', editDetails: '✏️ Ma’lumotlarni tahrirlash', orBrowse: 'Yoki ko‘chani ro‘yxatdan tanlang:', chooseHint: 'Kerakli obyektni tanlang — rasm, video va joylashuv faqat unga yoziladi.', needStreet: 'Avval ko‘chani tanlang.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
@@ -94,7 +94,7 @@
       openOther: 'Yo‘q, o‘sha obyektni ochish', kindRemoved: 'Yechildi', kindInstalled: 'Qo‘yildi', netErr: 'Internet bilan muammo. Qayta urinib ko‘ring.',
       noTg: 'Bu oyna faqat Telegram ichida ishlaydi. Botdagi “Obyektlarni ochish” tugmasini bosing.' },
     ru: { loading: 'Загрузка…', title: 'Объекты', total: 'Всего', removed: 'Снято', installed: 'Установлено', review: 'На проверке',
-      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', findBtn: '📍 Определить место и найти объект', locSettings: '⚙️ Разрешить доступ к местоположению', findHint: 'Нажмите, стоя у объекта: появится адрес и объекты рядом.', findWait: 'Определяем местоположение…', here: 'Вы находитесь', noAddress: 'Адрес не найден — впишите сами.', streetLabel: 'Улица', pickStreet: '— выберите улицу —', nearbyTitle: 'Объекты рядом (до {n} м)', nearbyNone: 'Рядом нет внесённых объектов.', addHere: '➕ Добавить новый объект здесь', refind: '🔄 Определить снова', address: 'Адрес', m: 'м', editDetails: '✏️ Изменить данные', orBrowse: 'Или выберите улицу из списка:', chooseHint: 'Выберите нужный объект — фото, видео и место запишутся только к нему.', needStreet: 'Сначала выберите улицу.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
+      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', findBtn: '📍 Определить место и найти объект', locSettings: '⚙️ Разрешить доступ к местоположению', locTitle: 'Доступ к местоположению', locText: 'Чтобы добавлять объекты и отправлять доказательства, нужно местоположение. Нажмите «Разрешить доступ», разрешите в открывшемся окне, затем — «Проверить».', locCheck: '📍 Проверить', locOk: '✅ Местоположение работает', locOld: 'Обновите Telegram: в этой версии нельзя открыть доступ. Включите местоположение для Telegram в настройках телефона.', toHome: '📋 К объектам', findHint: 'Нажмите, стоя у объекта: появится адрес и объекты рядом.', findWait: 'Определяем местоположение…', here: 'Вы находитесь', noAddress: 'Адрес не найден — впишите сами.', streetLabel: 'Улица', pickStreet: '— выберите улицу —', nearbyTitle: 'Объекты рядом (до {n} м)', nearbyNone: 'Рядом нет внесённых объектов.', addHere: '➕ Добавить новый объект здесь', refind: '🔄 Определить снова', address: 'Адрес', m: 'м', editDetails: '✏️ Изменить данные', orBrowse: 'Или выберите улицу из списка:', chooseHint: 'Выберите нужный объект — фото, видео и место запишутся только к нему.', needStreet: 'Сначала выберите улицу.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
@@ -146,6 +146,29 @@
   backBtn.onclick = back;
   if (tg && tg.initData) document.body.classList.add('in-tg');
   if (tg && tg.BackButton) { tg.BackButton.onClick(function () { if (stack.length > 1) back(); else tg.close(); }); }
+  // Menu -> /joylashuv opens the app here: Telegram's location permission for this bot, and a check that it works
+  function locPerm() {
+    titleEl.textContent = t('locTitle'); syncBack();
+    h('<div class="card"><p>' + t('locText') + '</p></div>' +
+      (locator.canOpenSettings() ? '<button class="btn" id="open">' + t('openSettings') + '</button>' : '<p class="err">' + t('locOld') + '</p>') +
+      '<button class="btn alt" id="check">' + t('locCheck') + '</button><div id="err" class="err"></div><div id="ok"></div>' +
+      '<button class="btn alt" id="home">' + t('toHome') + '</button>');
+    var o = document.getElementById('open');
+    if (o) o.onclick = function () { locator.openSettings(); };
+    var c = document.getElementById('check');
+    c.onclick = function () {
+      busy(c, function () {
+        document.getElementById('err').textContent = ''; document.getElementById('ok').textContent = '';
+        c.textContent = t('locWait');
+        return locator.locate().then(function (p) {
+          document.getElementById('ok').innerHTML = '<p class="center" style="font-weight:600">' + t('locOk') + ' (±' + Math.round(p.accuracy || 0) + ' ' + t('m') + ')</p>';
+        }).catch(function (e) {
+          throw e && e.code === 'denied' ? { error: t('locDenied') } : (e && (e.code === 'timeout' || e.code === 'unavailable') ? { error: t('locNone') } : e);
+        }).then(function () { c.textContent = t('locCheck'); }, function (e) { c.textContent = t('locCheck'); throw e; });
+      });
+    };
+    document.getElementById('home').onclick = function () { stack = []; show(home); };
+  }
   function syncBack() { if (tg && tg.BackButton) { if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide(); } }
   // the "⋮" menu of the Mini App: "Settings" opens the location permission (once refused, Telegram never asks again)
   if (tg && tg.SettingsButton && locator.canOpenSettings()) {
@@ -619,7 +642,7 @@
   }
 
   if (!tg || !tg.initData) { titleEl.textContent = t('title'); h('<div class="card">' + t('noTg') + '</div>'); return; }
-  show(home);
+  if (params.get('screen') === 'location') { stack.push(home); show(locPerm); } else show(home);
 })();
 </script>
 </body>

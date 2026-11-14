@@ -9,17 +9,20 @@ from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from aiogram.filters import BaseFilter, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
+from aiogram.filters import BaseFilter, Command, CommandStart, ExceptionMessageFilter, ExceptionTypeFilter
 from aiogram.types import (
     BotCommand,
     CallbackQuery,
     ErrorEvent,
     FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
     KeyboardButton,
     LinkPreviewOptions,
     Message,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    WebAppInfo,
 )
 
 from . import adb, catalog, db, registration, web
@@ -32,6 +35,7 @@ from .config import (
     MAX_FILE_MB,
     MAX_PARALLEL_UPLOADS,
     UPLOADS_DIR,
+    WEBAPP_URL,
 )
 from .guard import Guard, OutgoingLimiter
 from . import i18n
@@ -277,6 +281,20 @@ async def staff_contact(m: Message, staff: dict, phone: str):
     await registration.send_choice(m.bot, m.chat.id, L, uid)
 
 
+@menu.message(Command("joylashuv"))
+async def location_permission(m: Message):
+    """Menu -> /joylashuv: once a staff member refused the location in Telegram, it is never asked again; the Mini App
+    opens Telegram's location permission for this bot (that can only be opened from inside the Mini App)."""
+    uid = m.from_user.id
+    L = i18n.lang(uid)
+    if not await adb.staff_by_user(uid):
+        return await m.answer(t(L, "staff_only"))
+    url = f"{WEBAPP_URL}?lang={L}&screen=location"
+    btn = (InlineKeyboardButton(text=t(L, "btn_loc_perm"), web_app=WebAppInfo(url=url)) if WEBAPP_URL.startswith("https://")
+           else InlineKeyboardButton(text=t(L, "btn_loc_perm"), url=url))
+    await m.answer(t(L, "loc_perm"), reply_markup=InlineKeyboardMarkup(inline_keyboard=[[btn]]))
+
+
 @menu.callback_query(F.data == "staff:refresh")
 async def staff_refresh(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
@@ -318,8 +336,9 @@ async def feedback_text(m: Message):
 async def set_commands(bot: Bot) -> None:
     """The "Menu" button next to the message field: /start, described in the Telegram app's language (Russian or Uzbek)."""
     try:
-        await bot.set_my_commands([BotCommand(command="start", description=t("uz", "cmd_start"))])
-        await bot.set_my_commands([BotCommand(command="start", description=t("ru", "cmd_start"))], language_code="ru")
+        for L, code in (("uz", None), ("ru", "ru")):
+            await bot.set_my_commands([BotCommand(command="start", description=t(L, "cmd_start")),
+                                       BotCommand(command="joylashuv", description=t(L, "cmd_location"))], language_code=code)
     except Exception:  # not worth stopping the bot over
         logging.exception("set_my_commands failed")
 

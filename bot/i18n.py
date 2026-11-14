@@ -180,6 +180,17 @@ TEXTS: dict[str, tuple[str, str]] = {
 
     # bot command menu and the one-time announcement after the two-language update (tools/broadcast.py)
     "cmd_start": ("Botni ishga tushirish / tilni tanlash", "Запустить бота / выбрать язык"),
+    "cmd_location": ("Joylashuv ruxsatini yoqish (xodimlar)", "Включить доступ к местоположению (сотрудники)"),
+    "loc_perm": (
+        "📍 Joylashuv ruxsati\n\nObyekt qo‘shish va dalil yuborish uchun joylashuv kerak. Telegram’da bir marta "
+        "«Ruxsat bermaslik» bosilgan bo‘lsa, u qayta so‘ramaydi. Pastdagi tugmani bosing va ochilgan oynada "
+        "«Ruxsatni yoqish»ni bosing.",
+        "📍 Доступ к местоположению\n\nЧтобы добавлять объекты и отправлять доказательства, нужно местоположение. Если в "
+        "Telegram однажды нажали «Запретить», он больше не спрашивает. Нажмите кнопку ниже и в открывшемся окне — "
+        "«Разрешить доступ».",
+    ),
+    "btn_loc_perm": ("⚙️ Joylashuv ruxsatini yoqish", "⚙️ Включить местоположение"),
+    "staff_only": ("Bu buyruq faqat tuman xodimlari uchun.", "Эта команда только для сотрудников районов."),
     "broadcast_restart": (
         "Hurmatli foydalanuvchi! Bot yangilandi: endi u o‘zbek va rus tillarida ishlaydi. "
         "Iltimos, /start ni qaytadan bosing.",

@@ -307,6 +307,14 @@ async def consent_flow():
     sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
     check("next /start: straight to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()) and t("uz", "choice") not in texts())
 
+    # Menu -> /joylashuv: staff get the Mini App's location permission screen, others are told it is for staff
+    sent.clear(); await say("/joylashuv", 424242)
+    lm = next((m for m in sent if isinstance(m, SendMessage) and m.reply_markup), None)
+    b0 = lm.reply_markup.inline_keyboard[0][0] if lm else None
+    check("/joylashuv: staff get the location permission button", b0 is not None and "screen=location" in ((b0.web_app.url if b0.web_app else b0.url) or ""))
+    sent.clear(); await say("/joylashuv", 515151)
+    check("/joylashuv: not for citizens", t(bm.i18n.lang(515151), "staff_only") in texts())
+
     # review results written by the dashboard reach the staff member through the bot
     db.execute("INSERT INTO outbox (user_id, text) VALUES (424242, '✅ №1 obyekt bo‘yicha dalilingiz tasdiqlandi')")
     sent.clear()
