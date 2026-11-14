@@ -10,5 +10,5 @@
             <span><span style="color:#f59e0b">━</span> {{ $f->street->name }}</span>
         @endif
     </div>
-    <iframe src="{{ route('location-failure-map', $f) }}" style="width:100%;height:65vh;border:0;border-radius:12px" loading="lazy"></iframe>
+    <iframe src="{{ route('location-failure-map', $f) }}" style="width:100%;height:65vh;border:0;border-radius:12px" ></iframe>
 </div>
