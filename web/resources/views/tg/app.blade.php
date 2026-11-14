@@ -75,7 +75,7 @@
   var LANG = params.get('lang') === 'ru' ? 'ru' : 'uz';
   var T = {
     uz: { loading: 'Yuklanmoqda…', title: 'Obyektlar', total: 'Jami', removed: 'Yechildi', installed: 'Qo‘yildi', review: 'Tekshiruvda',
-      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', findBtn: '📍 Joyimni aniqlash va obyektni topish', findHint: 'Obyekt oldida turib bosing: manzil va yaqin atrofdagi obyektlar chiqadi.', findWait: 'Joylashuv aniqlanmoqda…', here: 'Siz turgan joy', noAddress: 'Manzil topilmadi — o‘zingiz yozing.', streetLabel: 'Ko‘cha', pickStreet: '— ko‘chani tanlang —', nearbyTitle: 'Yaqin atrofdagi obyektlar ({n} m gacha)', nearbyNone: 'Yaqin atrofda kiritilgan obyekt yo‘q.', addHere: '➕ Shu joyda yangi obyekt qo‘shish', refind: '🔄 Qayta aniqlash', address: 'Manzil', m: 'm', editDetails: '✏️ Ma’lumotlarni tahrirlash', orBrowse: 'Yoki ko‘chani ro‘yxatdan tanlang:', chooseHint: 'Kerakli obyektni tanlang — rasm, video va joylashuv faqat unga yoziladi.', needStreet: 'Avval ko‘chani tanlang.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
+      pending: 'Kutilmoqda', all: 'Hammasi', streetsHint: 'Ko‘chani tanlang', priority: 'Asosiy', none: 'Bu yerda obyekt yo‘q.', findBtn: '📍 Joyimni aniqlash va obyektni topish', locSettings: '⚙️ Joylashuv ruxsatini yoqish', findHint: 'Obyekt oldida turib bosing: manzil va yaqin atrofdagi obyektlar chiqadi.', findWait: 'Joylashuv aniqlanmoqda…', here: 'Siz turgan joy', noAddress: 'Manzil topilmadi — o‘zingiz yozing.', streetLabel: 'Ko‘cha', pickStreet: '— ko‘chani tanlang —', nearbyTitle: 'Yaqin atrofdagi obyektlar ({n} m gacha)', nearbyNone: 'Yaqin atrofda kiritilgan obyekt yo‘q.', addHere: '➕ Shu joyda yangi obyekt qo‘shish', refind: '🔄 Qayta aniqlash', address: 'Manzil', m: 'm', editDetails: '✏️ Ma’lumotlarni tahrirlash', orBrowse: 'Yoki ko‘chani ro‘yxatdan tanlang:', chooseHint: 'Kerakli obyektni tanlang — rasm, video va joylashuv faqat unga yoziladi.', needStreet: 'Avval ko‘chani tanlang.', exists: 'Bu nomdagi obyekt bu ko‘chada allaqachon bor — o‘sha ochildi.',
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
@@ -94,7 +94,7 @@
       openOther: 'Yo‘q, o‘sha obyektni ochish', kindRemoved: 'Yechildi', kindInstalled: 'Qo‘yildi', netErr: 'Internet bilan muammo. Qayta urinib ko‘ring.',
       noTg: 'Bu oyna faqat Telegram ichida ishlaydi. Botdagi “Obyektlarni ochish” tugmasini bosing.' },
     ru: { loading: 'Загрузка…', title: 'Объекты', total: 'Всего', removed: 'Снято', installed: 'Установлено', review: 'На проверке',
-      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', findBtn: '📍 Определить место и найти объект', findHint: 'Нажмите, стоя у объекта: появится адрес и объекты рядом.', findWait: 'Определяем местоположение…', here: 'Вы находитесь', noAddress: 'Адрес не найден — впишите сами.', streetLabel: 'Улица', pickStreet: '— выберите улицу —', nearbyTitle: 'Объекты рядом (до {n} м)', nearbyNone: 'Рядом нет внесённых объектов.', addHere: '➕ Добавить новый объект здесь', refind: '🔄 Определить снова', address: 'Адрес', m: 'м', editDetails: '✏️ Изменить данные', orBrowse: 'Или выберите улицу из списка:', chooseHint: 'Выберите нужный объект — фото, видео и место запишутся только к нему.', needStreet: 'Сначала выберите улицу.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
+      pending: 'Ожидает', all: 'Все', streetsHint: 'Выберите улицу', priority: 'Основная', none: 'Здесь нет объектов.', findBtn: '📍 Определить место и найти объект', locSettings: '⚙️ Разрешить доступ к местоположению', findHint: 'Нажмите, стоя у объекта: появится адрес и объекты рядом.', findWait: 'Определяем местоположение…', here: 'Вы находитесь', noAddress: 'Адрес не найден — впишите сами.', streetLabel: 'Улица', pickStreet: '— выберите улицу —', nearbyTitle: 'Объекты рядом (до {n} м)', nearbyNone: 'Рядом нет внесённых объектов.', addHere: '➕ Добавить новый объект здесь', refind: '🔄 Определить снова', address: 'Адрес', m: 'м', editDetails: '✏️ Изменить данные', orBrowse: 'Или выберите улицу из списка:', chooseHint: 'Выберите нужный объект — фото, видео и место запишутся только к нему.', needStreet: 'Сначала выберите улицу.', exists: 'Объект с таким названием на этой улице уже есть — открыт он.',
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
@@ -147,6 +147,11 @@
   if (tg && tg.initData) document.body.classList.add('in-tg');
   if (tg && tg.BackButton) { tg.BackButton.onClick(function () { if (stack.length > 1) back(); else tg.close(); }); }
   function syncBack() { if (tg && tg.BackButton) { if (stack.length > 1) tg.BackButton.show(); else tg.BackButton.hide(); } }
+  // the "⋮" menu of the Mini App: "Settings" opens the location permission (once refused, Telegram never asks again)
+  if (tg && tg.SettingsButton && locator.canOpenSettings()) {
+    tg.SettingsButton.onClick(function () { locator.openSettings(); });
+    tg.SettingsButton.show();
+  }
 
   // every API call carries Telegram's signed initData; no cookies are used
   function api(path, opts) {
@@ -196,6 +201,7 @@
         '<div><b class="s-installed">' + tot.installed + '</b><span>' + t('installed') + '</span></div><div><b class="s-review">' + tot.review + '</b><span>' + t('review') + '</span></div></div></div>';
       if (d.draft) html += '<button class="btn alt" id="draft">↩︎ ' + t('continueDraft') + '</button>';
       html += '<button class="btn" id="find">' + t('findBtn') + '</button><p class="muted">' + t('findHint') + '</p>';
+      if (locator.canOpenSettings()) html += '<button class="btn alt" id="locset">' + t('locSettings') + '</button>';
       html += '<p class="muted" style="margin-top:16px">' + t('orBrowse') + '</p>';
       d.streets.forEach(function (s) {
         html += '<div class="card street" data-id="' + s.id + '"><div class="row"><span class="name">' + esc(s.name) + '</span>' +
@@ -210,6 +216,8 @@
       var dr = document.getElementById('draft');
       if (dr) dr.onclick = function () { show(function () { object(d.draft.object_id); }); };
       document.getElementById('find').onclick = function () { show(findHere); };
+      var ls = document.getElementById('locset');
+      if (ls) ls.onclick = function () { locator.openSettings(); };
     }).catch(fatal);
   }
 
