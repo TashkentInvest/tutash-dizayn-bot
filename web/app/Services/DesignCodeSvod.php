@@ -11,9 +11,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Design-code progress by district (or by street of one district).
  *   Jami       - the official object list (streets.planned_objects, imported from the Excel list)
- *   Yechildi / Qo'yildi - businesses whose evidence was approved (objects.status)
+ *   Jarayonda (key "removed") - businesses whose old sign is off, the design code not on yet (objects.status = removed)
+ *   Qo'yildi - the design code is on: it leaves Jarayonda and Kutilmoqda gets smaller
  *   Kutilmoqda - Jami minus both (never below 0)
- *   Jarayonda (evidence waiting for review or held by the moderator), and the report day's approved work, from the evidence.
+ *   Tasdiq kutmoqda (key "review": evidence waiting for review or held by the moderator), and the report day's approved work.
  *   Bugun yuborildi / qo'shildi - evidence the staff sent and businesses they added in the report day (approved or not).
  * A report day ends at 18:00 (like the demolition svod): from 18:00 the "Bugun" columns start counting the next day.
  */

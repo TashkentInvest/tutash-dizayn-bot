@@ -637,7 +637,7 @@ class StaffAppTest extends TestCase
         $db->table('outbox')->delete();
 
         Livewire::test(DesignCodeSvod::class)
-            ->assertSee('Jarayonda')->assertSee('Bugun yechildi')->assertDontSee('Tekshiruvda')
+            ->assertSee('Jarayonda')->assertSee('Tasdiq kutmoqda')->assertSee('Bugun yechildi')->assertDontSee('Tekshiruvda')
             ->callAction('send', ['kinds' => ['svod', 'progress'], 'to' => [777001]])
             ->assertHasNoActionErrors();
 
