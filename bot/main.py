@@ -25,7 +25,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from . import adb, catalog, db, registration, web
+from . import adb, catalog, config, db, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
@@ -333,14 +333,32 @@ async def feedback_text(m: Message):
     await registration.send_choice(m.bot, m.chat.id)
 
 
+def profile_texts(L: str) -> tuple[str, str]:
+    """The bot's "about" and description in one language, with the support phone (SUPPORT_PHONE) when it is set."""
+    about, desc = t(L, "bot_about"), t(L, "bot_desc")
+    if config.SUPPORT_PHONE:
+        line = t(L, "support").format(config.SUPPORT_PHONE)
+        about = about + "\n" + line if len(about) + len(line) < 120 else line
+        desc = desc + "\n\n" + line
+    return about[:120], desc[:512]
+
+
 async def set_commands(bot: Bot) -> None:
-    """The "Menu" button next to the message field: /start, described in the Telegram app's language (Russian or Uzbek)."""
+    """The "Menu" button next to the message field: /start, described in the Telegram app's language (Russian or Uzbek).
+    Also the bot's profile texts (about + description, with the support phone)."""
     try:
         for L, code in (("uz", None), ("ru", "ru")):
             await bot.set_my_commands([BotCommand(command="start", description=t(L, "cmd_start")),
                                        BotCommand(command="joylashuv", description=t(L, "cmd_location"))], language_code=code)
     except Exception:  # not worth stopping the bot over
         logging.exception("set_my_commands failed")
+    try:
+        for L, code in (("uz", None), ("uz", "uz"), ("ru", "ru")):
+            about, desc = profile_texts(L)
+            await bot.set_my_short_description(short_description=about, language_code=code)
+            await bot.set_my_description(description=desc, language_code=code)
+    except Exception:
+        logging.exception("set_my_description failed")
 
 
 async def deliver_answers(bot: Bot) -> None:

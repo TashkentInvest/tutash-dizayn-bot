@@ -31,6 +31,8 @@ PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8787").rst
 # District staff's Mini App (served by the dashboard). Telegram opens Mini Apps over https only.
 WEBAPP_URL = os.environ.get("WEBAPP_URL", PUBLIC_BASE_URL + "/tg/app").rstrip("/")
 WEB_PORT = int(os.environ.get("WEB_PORT", "8787"))
+# Shown in the bot's profile and description ("Texnik yordam uchun: ..."). Kept in .env, not in the repository.
+SUPPORT_PHONE = os.environ.get("SUPPORT_PHONE", "").strip()
 # Separate key for the signed download links (never reuse the bot token: rotating the token must not break links,
 # and a leaked token must not let anyone forge links). Generate: python -c "import secrets;print(secrets.token_hex(32))"
 LINK_SECRET = os.environ.get("LINK_SECRET", "")

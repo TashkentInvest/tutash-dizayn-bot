@@ -181,6 +181,20 @@ TEXTS: dict[str, tuple[str, str]] = {
     # bot command menu and the one-time announcement after the two-language update (tools/broadcast.py)
     "cmd_start": ("Botni ishga tushirish / tilni tanlash", "Запустить бота / выбрать язык"),
     "cmd_location": ("Joylashuv ruxsatini yoqish (xodimlar)", "Включить доступ к местоположению (сотрудники)"),
+    # the bot's profile: "about" (short) and the text on an empty chat before /start (Telegram: 120 / 512 characters)
+    "bot_about": ("Toshkent shahri dizayn-kodi: hujjatlar, savol va takliflar.",
+                  "Дизайн-код города Ташкента: документы, вопросы и предложения."),
+    "bot_desc": ("Toshkent shahri dizayn-kodi rasmiy boti.\n\n"
+                 "• Dizayn-kod hujjatlarini yuklab olish\n"
+                 "• Savol va takliflar yuborish\n"
+                 "• Tuman xodimlari uchun obyektlarni tekshirish ilovasi\n\n"
+                 "Boshlash uchun «Start» tugmasini bosing.",
+                 "Официальный бот дизайн-кода города Ташкента.\n\n"
+                 "• Скачать документы дизайн-кода\n"
+                 "• Отправить вопрос или предложение\n"
+                 "• Приложение для проверки объектов (сотрудники районов)\n\n"
+                 "Нажмите «Старт», чтобы начать."),
+    "support": ("Texnik yordam uchun: {}", "Техническая поддержка: {}"),
     "loc_perm": (
         "📍 Joylashuv ruxsati\n\nObyekt qo‘shish va dalil yuborish uchun joylashuv kerak. Telegram’da bir marta "
         "«Ruxsat bermaslik» bosilgan bo‘lsa, u qayta so‘ramaydi. Pastdagi tugmani bosing va ochilgan oynada "
