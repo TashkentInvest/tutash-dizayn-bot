@@ -36,7 +36,7 @@ class SvodImage
         }
 
         [$removed, $installed] = [L::get('status.removed'), L::get('status.installed')];
-        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 76, 'c'], [L::get('status.pending'), 92, 'c'], [L::get('status.review'), 84, 'c'],
+        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 76, 'c'], [L::get('svod.left'), 92, 'c'], [L::get('status.review'), 84, 'c'],
             [$installed, 70, 'c'], ['Bugun '.mb_strtolower($removed), 80, 'c'], ['Bugun '.mb_strtolower($installed), 80, 'c'],
             ['Bugun yuborilgan dalil', 84, 'c'], ['Bugun qo‘shilgan obyekt', 84, 'c'],
             [L::get('svod.awaiting'), 90, 'c'], [L::get('svod.pct'), 86, 'c']];

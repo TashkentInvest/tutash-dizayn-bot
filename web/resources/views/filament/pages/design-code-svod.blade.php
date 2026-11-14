@@ -5,7 +5,7 @@
         $L = \App\Support\Labels::class;  // the words the bot and the Mini App use too (shared/labels.json)
         $cols = [
             // Jarayonda = the old sign is off, the design code is not on yet (objects "Yechildi"); Qo'yildi leaves it
-            'total' => $L::get('svod.total'), 'pending' => $L::get('status.pending'), 'removed' => $L::get('status.review'),
+            'total' => $L::get('svod.total'), 'pending' => $L::get('svod.left'), 'removed' => $L::get('status.review'),
             'installed' => $L::get('status.installed'), 'day_removed' => $dayWord.' '.mb_strtolower($L::get('status.removed')),
             'day_installed' => $dayWord.' '.mb_strtolower($L::get('status.installed')),
             'day_sent' => $dayWord.' yuborilgan dalil', 'day_added' => $dayWord.' qo‘shilgan obyekt', 'review' => $L::get('svod.awaiting'),
@@ -51,7 +51,7 @@
         <label style="font-size:14px">Kun:
             <input type="date" class="svod-date" wire:model.live="day" max="{{ $maxDay }}">
         </label>
-        <span class="svod-hint">“{{ $dayWord }}” ustunlari: {{ $shownDay->copy()->subDay()->format('d.m') }} soat 18:00 dan {{ $shownDay->format('d.m') }} soat 18:00 gacha yuborilib, tasdiqlangan dalillar (har kuni 18:00 da yangilanadi). Jarayonda — eski peshtaxtasi yechilgan, dizayn-kod hali qo‘yilmagan obyektlar; qo‘yilgach «Qo‘yildi»ga o‘tadi. Kutilmoqda = Jami − Jarayonda − Qo‘yildi. Tasdiq kutmoqda — moderator ko‘rmagan dalillar.</span>
+        <span class="svod-hint">“{{ $dayWord }}” ustunlari: {{ $shownDay->copy()->subDay()->format('d.m') }} soat 18:00 dan {{ $shownDay->format('d.m') }} soat 18:00 gacha yuborilib, tasdiqlangan dalillar (har kuni 18:00 da yangilanadi). Jarayonda — eski peshtaxtasi yechilgan, dizayn-kod hali qo‘yilmagan obyektlar; qo‘yilgach «Qo‘yildi»ga o‘tadi. Qolgan = Jami − Jarayonda − Qo‘yildi (hali boshlanmagan). Tasdiq kutmoqda — moderator ko‘rmagan dalillar.</span>
         @if ($waiting)
             <a href="{{ \App\Filament\Resources\Inspections\InspectionResource::getUrl() }}" style="margin-left:auto;color:#d97706;font-weight:600">⏳ {{ $waiting }} ta dalil tasdiq kutmoqda</a>
         @endif
