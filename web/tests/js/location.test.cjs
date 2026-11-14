@@ -31,12 +31,16 @@ const fastEnv = (tg, navigator = null) => ({ tg, navigator, fallbackMs: 30, tota
   assert.strictEqual(b.latitude, 41.3);
   assert.strictEqual(lm.inits, 1, 'init() is called once and cached');
 
-  // 2. access denied -> "denied", and the settings button works
+  // 2. access denied in Telegram, no browser location either -> "denied", and the settings button works
   const denied = fakeLM({ granted: false });
-  const l2 = makeLocator(fastEnv({ LocationManager: denied }));
+  const l2 = makeLocator(fastEnv({ LocationManager: denied }, { geolocation: { getCurrentPosition: (ok, no) => setTimeout(() => no({ code: 2 }), 1) } }));
   await assert.rejects(l2.locate(), (e) => e.code === 'denied');
   l2.openSettings();
   assert.strictEqual(denied.opened, 1);
+  // denied in Telegram once, but the phone's own permission allows it -> the browser's reading is used
+  const navOk = { geolocation: { getCurrentPosition: (ok) => setTimeout(() => ok({ coords: { latitude: 41.2, longitude: 69.2, accuracy: 15 } }), 1) } };
+  const r2 = await makeLocator(fastEnv({ LocationManager: fakeLM({ granted: false }) }, navOk)).locate();
+  assert.strictEqual(r2.source, 'browser');
 
   // 3. no LocationManager (old Telegram) -> browser geolocation
   const nav = { geolocation: { getCurrentPosition: (ok) => setTimeout(() => ok({ coords: { latitude: 40.1, longitude: 70.1, accuracy: 30 } }), 1) } };
@@ -59,5 +63,5 @@ const fastEnv = (tg, navigator = null) => ({ tg, navigator, fallbackMs: 30, tota
   const navDenied = { geolocation: { getCurrentPosition: (ok, no) => setTimeout(() => no({ code: 1 }), 1) } };
   await assert.rejects(makeLocator(fastEnv({}, navDenied)).locate(), (e) => e.code === 'denied');
 
-  console.log('location.js: all 6 checks passed');
+  console.log('location.js: all 7 checks passed');
 })().catch((e) => { console.error(e); process.exit(1); });

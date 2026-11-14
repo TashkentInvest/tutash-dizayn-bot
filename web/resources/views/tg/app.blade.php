@@ -297,7 +297,7 @@
       '<label>' + t('address') + '</label><input id="address" maxlength="200" value="' + esc(place && place.address || '') + '">' +
       '<label>' + t('owner') + '</label><input id="owner_name" maxlength="150">' +
       '<label>' + t('phone') + '</label><input id="owner_phone" inputmode="tel" maxlength="30">' +
-      '<label>' + t('stir') + '</label><input id="stir" inputmode="numeric" maxlength="14"></div><div id="err" class="err"></div>' +
+      '<label>' + t('stir') + '</label><input id="stir" inputmode="numeric" maxlength="14"></div><div id="err" class="err"></div><div id="extra"></div>' +
       '<button class="btn" id="go">' + t('create') + '</button>');
     var go = document.getElementById('go');
     go.onclick = function () {
@@ -306,8 +306,13 @@
         // where the staff member stands is required (no adding from home): reuse a fresh "find my place", else locate now
         var fresh = place && Date.now() - place.at < 120000;
         go.textContent = fresh ? go.textContent : t('locWait');
+        document.getElementById('extra').innerHTML = '';
         return (fresh ? Promise.resolve({ latitude: place.lat, longitude: place.lon, accuracy: place.accuracy }) : locator.locate()).catch(function (e) {
           go.textContent = t('create');
+          if (e && e.code === 'denied' && locator.canOpenSettings()) {  // the way to turn it back on, as on the other screens
+            document.getElementById('extra').innerHTML = '<button class="btn alt" id="settings">' + t('openSettings') + '</button>';
+            document.getElementById('settings').onclick = function () { locator.openSettings(); };
+          }
           throw e && e.code === 'denied' ? { error: t('locDenied') } : (e && (e.code === 'timeout' || e.code === 'unavailable') ? { error: t('locNone') } : e);
         }).then(function (p) {
           body.latitude = p.latitude; body.longitude = p.longitude; body.accuracy = p.accuracy;

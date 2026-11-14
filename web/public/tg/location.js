@@ -69,10 +69,12 @@
         var finish = function (v) { done(resolve, v); };
         var fail = function (e) { done(reject, e); };
         var browserStarted = false;
-        function tryBrowser() {
+        function tryBrowser(refused) {
           if (browserStarted || settled) return;
           browserStarted = true;
-          fromBrowser().then(finish, fail);
+          // Telegram remembers a "no" for this bot and never asks again: the phone's own permission may still allow it.
+          // If that fails too, the answer stays "denied" (the settings button), not "GPS is off".
+          fromBrowser().then(finish, function (e) { fail(refused ? err('denied') : e); });
         }
         timers.push(setT(function () { fail(err('timeout')); }, totalMs));
         timers.push(setT(tryBrowser, fallbackMs));
@@ -80,11 +82,11 @@
         initOnce().then(function (m) {
           if (settled) return;
           if (!m || !m.isLocationAvailable) return tryBrowser();
-          if (m.isAccessRequested && !m.isAccessGranted) return fail(err('denied'));
+          if (m.isAccessRequested && !m.isAccessGranted) return tryBrowser(true);
           try {
             m.getLocation(function (data) {
               if (data) finish({ latitude: data.latitude, longitude: data.longitude, accuracy: data.horizontal_accuracy || null, source: 'telegram' });
-              else if (m.isAccessRequested && !m.isAccessGranted) fail(err('denied'));
+              else if (m.isAccessRequested && !m.isAccessGranted) tryBrowser(true);
               else tryBrowser();
             });
           } catch (e) { tryBrowser(); }
