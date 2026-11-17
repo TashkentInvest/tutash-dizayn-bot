@@ -11,7 +11,7 @@
     "approved": {"uz": "Tasdiqlandi", "ru": "Одобрено"},
     "rejected": {"uz": "Rad etildi", "ru": "Отклонено"},
     "moderation": {"uz": "Moderator jarayonida", "ru": "На модерации"},
-    "confirming": {"uz": "Jarayonda (yakuniy tasdiq)", "ru": "В процессе (финальное подтверждение)"}
+    "confirming": {"uz": "Jarayonli tasdiqlandi", "ru": "Принято с доработкой"}
   },
   "svod": {
     "total": {"uz": "Jami obyekt", "ru": "Всего объектов"},
@@ -19,7 +19,7 @@
     "review_hint": {"uz": "tasdiq kutmoqda", "ru": "ждёт проверки"},
     "awaiting": {"uz": "Tasdiq kutmoqda", "ru": "Ждёт проверки"},
     "installed": {"uz": "Dizayn-kodga keltirildi", "ru": "Приведено к дизайн-коду"},
-    "final_hint": {"uz": "yakuniy tasdiq kutmoqda", "ru": "ждёт окончательного подтверждения"},
+    "final_hint": {"uz": "qayta ishlash kerak", "ru": "нужна доработка"},
     "left": {"uz": "Qolgan", "ru": "Осталось"}
   }
 }

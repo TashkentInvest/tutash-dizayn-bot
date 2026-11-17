@@ -162,6 +162,7 @@ TEXTS: dict[str, tuple[str, str]] = {
                                ("ru", "👷 Сотрудник района", "Для работы с объектами нажмите кнопку ниже."))
     ),
     "btn_objects": ("📋 Obyektlarni ochish", "📋 Открыть объекты"),
+    "btn_process": ("🔄 Jarayondagilar", "🔄 В процессе"),
     "btn_refresh": ("🔄 Yangilash", "🔄 Обновить"),
     "staff_confirm": (
         "Siz tuman xodimlari ro‘yxatidasiz. Tasdiqlash uchun pastdagi tugma orqali raqamingizni yuboring.",

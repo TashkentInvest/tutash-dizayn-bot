@@ -79,7 +79,7 @@
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
-      inReview: 'Bu obyekt bo‘yicha dalil tekshiruvda. Admin natijasini kuting.', inProcess: 'Obyekt jarayonda: yakuniy tasdiq kutilmoqda. Yangi rasm, video va joylashuv yuborishingiz mumkin — avvalgilari saqlanib qoladi.', continueDraft: 'Tugallanmagan tekshiruvni davom ettirish',
+      inReview: 'Bu obyekt bo‘yicha dalil tekshiruvda. Admin natijasini kuting.', inProcess: 'Obyekt jarayonda. Kamchilikni tuzatib, yangi rasm, video va joylashuv yuboring — avvalgilari saqlanib qoladi.', toFix: 'Nimani tuzatish kerak', processList: '🔄 Jarayondagilar', processNone: 'Jarayonda obyekt yo‘q.', continueDraft: 'Tugallanmagan tekshiruvni davom ettirish',
       history: 'Tarix', approved: 'Tasdiqlandi', rejected: 'Rad etildi', st1: '1/5 · Jonli rasm', st2: '2/5 · Sizning joylashuvingiz', st3: '3/5 · Obyekt joylashuvi', st4: '4/5 · Jonli video', st5: '5/5 · Izoh',
       pointHint: 'Xaritada obyektni belgilang: belgini suring yoki xaritaga bosing. Ko‘k doira — siz turgan joydan {x} m.',
       pointBtn: '📍 Obyekt shu yerda — tasdiqlash', pointKnown: 'Obyektning tasdiqlangan joyi ko‘rsatilgan. To‘g‘ri bo‘lsa, tasdiqlang.', mapErr: 'Xarita yuklanmadi. Internetni tekshirib, qayta oching.',
@@ -98,7 +98,7 @@
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
-      inReview: 'Доказательства по этому объекту на проверке. Дождитесь решения администратора.', inProcess: 'Объект в процессе: ждёт окончательного подтверждения. Можно отправить новые фото, видео и местоположение — прежние сохраняются.', continueDraft: 'Продолжить незавершённую проверку',
+      inReview: 'Доказательства по этому объекту на проверке. Дождитесь решения администратора.', inProcess: 'Объект в процессе. Исправьте недочёт и отправьте новые фото, видео и местоположение — прежние сохраняются.', toFix: 'Что исправить', processList: '🔄 В процессе', processNone: 'Объектов в процессе нет.', continueDraft: 'Продолжить незавершённую проверку',
       history: 'История', approved: 'Подтверждено', rejected: 'Отклонено', st1: '1/5 · Фото', st2: '2/5 · Ваше местоположение', st3: '3/5 · Место объекта', st4: '4/5 · Видео', st5: '5/5 · Комментарий',
       pointHint: 'Отметьте объект на карте: передвиньте метку или нажмите на карту. Синий круг — {x} м от вас.',
       pointBtn: '📍 Объект здесь — подтвердить', pointKnown: 'Показано подтверждённое место объекта. Если верно — подтвердите.', mapErr: 'Карта не загрузилась. Проверьте интернет и откройте снова.',
@@ -226,6 +226,7 @@
         '<div><b class="s-installed">' + tot.installed + '</b><span>' + t('installed') + '</span></div><div><b class="s-review">' + tot.review + '</b><span>' + t('review') + '</span></div>' +
         '<div><b class="s-process">' + (tot.process || 0) + '</b><span>' + t('process') + '</span></div></div></div>';
       if (d.draft) html += '<button class="btn alt" id="draft">↩︎ ' + t('continueDraft') + '</button>';
+      if (tot.process) html += '<button class="btn alt" id="proc">' + t('processList') + ' (' + tot.process + ')</button>';
       html += '<button class="btn" id="find">' + t('findBtn') + '</button><p class="muted">' + t('findHint') + '</p>';
       if (locator.canOpenSettings()) html += '<button class="btn alt" id="locset">' + t('locSettings') + '</button>';
       html += '<p class="muted" style="margin-top:16px">' + t('orBrowse') + '</p>';
@@ -240,6 +241,8 @@
       if (!d.streets.length) html += '<p class="muted">' + t('none') + '</p>';
       h(html);
       app.querySelectorAll('.street').forEach(function (el) { el.onclick = function () { var s = d.streets.find(function (x) { return x.id == el.dataset.id; }); show(function () { street(s); }); }; });
+      var pr = document.getElementById('proc');
+      if (pr) pr.onclick = function () { show(processList); };
       var dr = document.getElementById('draft');
       if (dr) dr.onclick = function () { show(function () { object(d.draft.object_id); }); };
       document.getElementById('find').onclick = function () { show(findHere); };
@@ -330,6 +333,20 @@
     }).catch(fatal);
   }
 
+  // "Jarayondagilar": accepted with something to fix, across all of the staff member's streets
+  function processList() {
+    titleEl.textContent = t('processList'); syncBack();
+    h('<p class="muted center">' + t('loading') + '</p>');
+    api('/process').then(function (d) {
+      h(d.objects.map(function (o) {
+        return '<div class="card obj" data-id="' + o.id + '"><div class="row"><b>' + esc(o.shop_name) + '</b>' + statusPill(o) + '</div>' +
+          '<div class="muted">' + esc(o.street || '') + '</div>' +
+          (o.process_note ? '<div style="margin-top:4px"><b>' + t('toFix') + ':</b> ' + esc(o.process_note) + '</div>' : '') + '</div>';
+      }).join('') || '<p class="muted">' + t('processNone') + '</p>');
+      app.querySelectorAll('.obj').forEach(function (el) { el.onclick = function () { show(function () { object(+el.dataset.id); }); }; });
+    }).catch(fatal);
+  }
+
   // a business the staff member found on the street
   function addObject(s, place) {
     titleEl.textContent = t('addTitle'); syncBack();
@@ -379,7 +396,7 @@
       } else if (o.in_review) {
         html += '<div class="card">⏳ ' + t('inReview') + '</div>';
       } else {
-        if (o.in_process) html += '<div class="card">🔄 ' + t('inProcess') + '</div>';
+        if (o.in_process) html += '<div class="card">🔄 ' + t('inProcess') + (o.process_note ? '<div style="margin-top:6px"><b>' + t('toFix') + ':</b> ' + esc(o.process_note) + '</div>' : '') + '</div>';
         if (o.status === 'pending') html += '<button class="btn" data-kind="removed">' + t('startRemoved') + '</button>';
         if (o.status !== 'installed') html += '<button class="btn" data-kind="installed">' + t('startInstalled') + '</button>';
       }
@@ -653,7 +670,9 @@
   }
 
   if (!tg || !tg.initData) { titleEl.textContent = t('title'); h('<div class="card">' + t('noTg') + '</div>'); return; }
-  if (params.get('screen') === 'location') { stack.push(home); show(locPerm); } else show(home);
+  if (params.get('screen') === 'location') { stack.push(home); show(locPerm); }
+  else if (params.get('screen') === 'process') { stack.push(home); show(processList); }
+  else show(home);
 })();
 </script>
 </body>

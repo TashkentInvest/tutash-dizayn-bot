@@ -373,48 +373,54 @@ class StaffAppTest extends TestCase
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
     }
 
-    public function test_installed_evidence_goes_to_in_process_first_and_is_done_only_after_the_final_confirmation(): void
+    public function test_installed_evidence_full_or_in_process_approval_with_reasons(): void
     {
         $admin = User::factory()->create();
         config(['app.admin_emails' => [$admin->email]]);
         $this->actingAs($admin);
 
         $id = $this->sendEvidence('installed');
+        // 2) "Jarayonli tasdiqlash": a reason must be ticked
         Livewire::test(ListInspections::class)
-            ->assertActionHidden(TestAction::make('confirm')->table(Inspection::find($id)))
-            ->callAction(TestAction::make('approve')->table(Inspection::find($id)))->assertHasNoActionErrors();
+            ->callAction(TestAction::make('process')->table(Inspection::find($id)), ['reasons' => []])->assertHasActionErrors(['reasons' => 'required']);
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('process')->table(Inspection::find($id)), ['reasons' => ['letters'], 'note' => 'Kirish tomonda'])->assertHasNoActionErrors();
         $this->assertSame(Inspection::CONFIRMING, Inspection::find($id)->review);
-        $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'Jarayonda, not Qo‘yildi yet');
-        $this->assertStringContainsString('yakuniy tasdiq kutilmoqda', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
-        // "Jarayonda" in the Mini App, and more evidence can be sent; the first one stays with its files
+        $this->assertSame('Bukva qo‘yilmagan. Kirish tomonda', Inspection::find($id)->review_note);
+        $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'Jarayonda');
+        $msg = DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text');
+        $this->assertStringContainsString('Bukva qo‘yilmagan', $msg);
+        $this->assertStringContainsString('Jarayondagilar', $msg);
+        // "Jarayondagilar" in the Mini App, with what to fix; more evidence can be sent, the first one stays with its files
         $h = $this->headers();
         $street = $this->getJson("/tg/api/streets/{$this->object->street_id}/objects", $h)->assertOk()->json('objects');
         $mine = collect($street)->firstWhere('id', $this->object->id);
         $this->assertTrue($mine['in_process']);
         $this->assertFalse($mine['in_review']);
         $this->assertSame(1, $this->getJson('/tg/api/me', $h)->json('totals.process'));
+        $list = $this->getJson('/tg/api/process', $h)->assertOk()->json('objects');
+        $this->assertSame([$this->object->id], array_column($list, 'id'));
+        $this->assertSame('Bukva qo‘yilmagan. Kirish tomonda', $list[0]['process_note']);
         $id2 = $this->sendEvidence('installed', [41.3112, 69.2798]);
         $this->assertNotSame($id, $id2);
         $this->assertSame(Inspection::CONFIRMING, Inspection::find($id)->review);
-        $this->assertNotNull(Inspection::find($id)->photo);
         $this->assertFileExists(rtrim((string) config('bot.uploads_path'), '/\\').'/'.Inspection::find($id)->photo);
         $this->assertTrue($this->getJson("/tg/api/objects/{$this->object->id}", $h)->json('in_review'), 'the new one waits for review');
         // the review window shows the earlier evidence too
         $card = view('filament.objects.inspection-review', ['getRecord' => fn () => Inspection::find($id2)])->render();
         $this->assertStringContainsString('Shu obyekt bo‘yicha oldingi dalillar (1)', $card);
         $this->assertStringContainsString(route('bot-inspection-media', [$id, 'photo']), $card);
-        Livewire::test(ListInspections::class)->callAction(TestAction::make('approve')->table(Inspection::find($id2)))->assertHasNoActionErrors();
-        $this->assertSame(Inspection::CONFIRMING, Inspection::find($id2)->review);
 
-        // the final confirmation: done, and the evidence added meanwhile is confirmed with it
-        Livewire::test(ListInspections::class)->assertCanSeeTableRecords([Inspection::find($id)])
-            ->callAction(TestAction::make('confirm')->table(Inspection::find($id)))->assertHasNoActionErrors();
+        // 1) "Tasdiqlash" of the new one: fully approved, done, and the one accepted with reasons is approved with it
+        Livewire::test(ListInspections::class)->callAction(TestAction::make('approve')->table(Inspection::find($id2)))->assertHasNoActionErrors();
         $this->assertSame(Inspection::APPROVED, Inspection::find($id)->review);
         $this->assertSame(Inspection::APPROVED, Inspection::find($id2)->review);
         $this->assertSame(DesignObject::INSTALLED, $this->object->fresh()->status);
         $this->assertStringContainsString('tasdiqlandi', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
 
-        // a second one, approved once and then rejected: the object goes back to not started
+        $this->assertSame([], $this->getJson('/tg/api/process', $h)->json('objects'));
+
+        // accepted with reasons, then rejected: the object goes back to not started
         DB::connection('bot')->table('inspections')->whereIn('id', [$id, $id2])->update(['review' => Inspection::CONFIRMING]);
         Livewire::test(ListInspections::class)
             ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Hali to‘liq emas'])->assertHasNoActionErrors();
@@ -589,12 +595,12 @@ class StaffAppTest extends TestCase
         $this->assertSame(['total' => 3, 'pending' => 3, 'installed' => 0, 'review' => 1, 'day_installed' => 0],
             array_intersect_key($row, array_flip(['total', 'pending', 'installed', 'review', 'day_installed'])));
 
-        \App\Services\InspectionReview::approve(Inspection::find($id), null, 'test');
-        // approved once: "Jarayonda", not done yet
+        \App\Services\InspectionReview::process(Inspection::find($id), ['design'], null, 'test');
+        // accepted with something to fix: "Jarayonda", not done yet
         $row = collect(Svod::byDistrict($day)['rows'])->firstWhere('id', $this->district);
         $this->assertSame([3, 2, 1, 0, 0, 0], [$row['total'], $row['pending'], $row['removed'], $row['installed'], $row['review'], $row['day_installed']]);
 
-        \App\Services\InspectionReview::confirm(Inspection::find($id), null, 'test');
+        \App\Services\InspectionReview::approve(Inspection::find($id), null, 'test');
         $svod = Svod::byDistrict($day);
         $row = collect($svod['rows'])->firstWhere('id', $this->district);
         // total from the official list (3); one approved "installed" -> 2 still waiting, 33.3 %

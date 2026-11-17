@@ -28,10 +28,17 @@ class Inspection extends Model
     public const MODERATION = 'moderation';
 
     /**
-     * "Installed" evidence the moderator approved once: the object goes to "Jarayonda" (not "Qo'yildi" yet) and becomes
-     * done only after the final confirmation ("Yakuniy tasdiqlash"), which may come days later.
+     * "Jarayonli tasdiqlash": installed evidence accepted with something still to fix (PROCESS_REASONS). The object is
+     * "Jarayonda", the staff member sees it under "Jarayondagilar" with the reasons and sends new evidence; a full
+     * approval ("Tasdiqlash") of that one (or of this one) makes the object done.
      */
     public const CONFIRMING = 'confirming';
+
+    /** What is still to fix, ticked by the moderator: key => [uz, ru]. */
+    public const PROCESS_REASONS = [
+        'letters' => ['Bukva qo‘yilmagan', 'Буквы не установлены'],
+        'design' => ['Dizayn-kodga mos emas', 'Не соответствует дизайн-коду'],
+    ];
 
     /** Still open: the object is "in process" and takes no new evidence until the moderator decides. */
     public const OPEN = [self::PENDING, self::MODERATION];

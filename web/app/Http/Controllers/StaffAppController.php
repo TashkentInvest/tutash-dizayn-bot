@@ -137,6 +137,17 @@ class StaffAppController extends Controller
      * "Find my place": the address where the staff member stands, the street of their district it is on (matched by name),
      * and the businesses already entered nearby, nearest first. The staff member picks one of them, or adds a new one here.
      */
+    /** "Jarayondagilar": the staff member's objects accepted with something to fix, with what to fix. */
+    public function process(Request $r): JsonResponse
+    {
+        $streets = $this->staff($r)->streetsQuery()->pluck('id');
+        $objects = DesignObject::query()->active()->whereIn('street_id', $streets)->whereHas('processInspection')
+            ->with(['pendingInspection', 'processInspection', 'street:id,name'])->get()
+            ->sortByDesc(fn ($o) => $o->processInspection?->reviewed_at)->values();
+
+        return response()->json(['objects' => $objects->map(fn ($o) => $this->brief($o) + ['street' => $o->street?->name])]);
+    }
+
     public function nearby(Request $r): JsonResponse
     {
         $data = $r->validate([
@@ -591,7 +602,8 @@ class StaffAppController extends Controller
             'id' => $o->id, 'shop_name' => $o->shop_name, 'owner_name' => $o->owner_name, 'stir' => $o->stir, 'status' => $o->status,
             'address' => $o->address,
             'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->whereIn('review', Inspection::OPEN)->exists(),
-            'in_process' => $o->relationLoaded('processInspection') ? (bool) $o->processInspection : $o->inspections()->where('review', Inspection::CONFIRMING)->exists(),
+            'in_process' => (bool) ($p = $o->relationLoaded('processInspection') ? $o->processInspection : $o->processInspection()->first()),
+            'process_note' => $p?->review_note,  // what the moderator said is still to fix
         ];
     }
 

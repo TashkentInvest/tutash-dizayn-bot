@@ -158,8 +158,12 @@ def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
     # Telegram opens Mini Apps over https only; a plain link keeps a local http setup usable for testing
     open_btn = (InlineKeyboardButton(text=t(L, "btn_objects"), web_app=WebAppInfo(url=f"{WEBAPP_URL}?lang={L}"))
                 if WEBAPP_URL.startswith("https://") else InlineKeyboardButton(text=t(L, "btn_objects"), url=WEBAPP_URL))
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [open_btn],
+    rows = [[open_btn]]
+    if n["process"]:  # accepted with something to fix: straight to that list in the Mini App
+        label = f'{t(L, "btn_process")} ({n["process"]})'
+        rows.append([InlineKeyboardButton(text=label, web_app=WebAppInfo(url=f"{WEBAPP_URL}?lang={L}&screen=process"))
+                     if WEBAPP_URL.startswith("https://") else InlineKeyboardButton(text=label, url=f"{WEBAPP_URL}?screen=process")])
+    kb = InlineKeyboardMarkup(inline_keyboard=rows + [
         [InlineKeyboardButton(text=t(L, "btn_design"), callback_data="pick:design"),
          InlineKeyboardButton(text=t(L, "btn_concept"), callback_data="pick:concept")],
         # no "Murojaat yuborish": requests are for residents; staff talk to their head

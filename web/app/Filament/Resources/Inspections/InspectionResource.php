@@ -11,6 +11,7 @@ use App\Models\Inspection;
 use App\Services\InspectionReview;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Textarea;
 use Filament\Infolists\Components\ViewEntry;
 use Filament\Notifications\Notification;
@@ -86,7 +87,7 @@ class InspectionResource extends Resource
                     ->description(fn (Inspection $i) => $i->review_note),
             ])
             ->filters([
-                // what still needs the moderator: waiting, held ("Moderator jarayonida"), and waiting for the final confirmation
+                // what still needs the moderator: waiting, held ("Moderator jarayonida"), and accepted with something to fix
                 SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple()->default(Inspection::LOCKED),
                 SelectFilter::make('kind')->label('Nima qilindi')->options(Inspection::KINDS),
                 SelectFilter::make('district')->label('Tuman')
@@ -100,30 +101,33 @@ class InspectionResource extends Resource
                     ->modalHeading(fn (Inspection $i) => $i->object?->street?->name.' · '.$i->object?->label())
                     ->modalSubmitAction(false)->modalCancelActionLabel('Yopish')->modalWidth('5xl')
                     ->schema([ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review')]),
+                // 1) full approval by the moderator
                 Action::make('approve')->label('Tasdiqlash')->icon('heroicon-o-check-circle')->color('success')
-                    ->visible(fn (Inspection $i) => in_array($i->review, Inspection::OPEN, true))
-                    ->modalHeading('Dalilni tasdiqlash')->modalWidth('5xl')
+                    ->visible(fn (Inspection $i) => in_array($i->review, Inspection::LOCKED, true))
+                    ->modalHeading('Dalilni to‘liq tasdiqlash')->modalWidth('5xl')
                     ->modalDescription(fn (Inspection $i) => $i->kind === DesignObject::INSTALLED
-                        ? 'Obyekt hali «Qo‘yildi» bo‘lmaydi: «Jarayonda»ga o‘tadi va keyin «Yakuniy tasdiqlash» kutadi. Xodimga bot orqali xabar boradi.'
+                        ? 'To‘liq tasdiqlanadi: obyekt «Dizayn-kodga keltirildi» bo‘ladi. Xodimga bot orqali xabar boradi.'
                         : 'Tasdiqlansa, obyekt «Jarayonda»ga o‘tadi va xodimga bot orqali xabar boradi.')
                     ->schema([
                         ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
                         Textarea::make('note')->label('Izoh (ixtiyoriy)')->rows(2)->maxLength(500),
                     ])
                     ->modalSubmitActionLabel('Tasdiqlash')
-                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email),
-                        $i->kind === DesignObject::INSTALLED ? 'Jarayonga o‘tkazildi (yakuniy tasdiq kutadi)' : 'Tasdiqlandi')),
-                // the second step for "installed": only now is the object done ("Qo'yildi")
-                Action::make('confirm')->label('Yakuniy tasdiqlash')->icon('heroicon-o-check-badge')->color('success')
-                    ->visible(fn (Inspection $i) => $i->review === Inspection::CONFIRMING)
-                    ->modalHeading('Yakuniy tasdiqlash')->modalWidth('5xl')
-                    ->modalDescription('Obyekt «Jarayonda»dan chiqib «Qo‘yildi» bo‘ladi. Xodimga bot orqali xabar boradi.')
+                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email), 'Tasdiqlandi')),
+                // 2) accepted with something to fix: the object is "Jarayonda", the staff member is told what and sends again
+                Action::make('process')->label('Jarayonli tasdiqlash')->icon('heroicon-o-arrow-path')->color('warning')
+                    ->visible(fn (Inspection $i) => in_array($i->review, Inspection::OPEN, true) && $i->kind === DesignObject::INSTALLED)
+                    ->modalHeading('Jarayonli tasdiqlash')->modalWidth('5xl')
+                    ->modalDescription('Obyekt «Jarayonda»ga o‘tadi. Belgilangan kamchiliklar xodimga botda yuboriladi; u obyektni «Jarayondagilar» bo‘limida topib, '
+                        .'tuzatgach yangi rasm, video va joylashuv yuboradi (avvalgilari saqlanadi). Keyin «Tasdiqlash» bilan to‘liq tasdiqlaysiz.')
                     ->schema([
                         ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
-                        Textarea::make('note')->label('Izoh (ixtiyoriy)')->rows(2)->maxLength(500),
+                        CheckboxList::make('reasons')->label('Nimani tuzatish kerak')->required()
+                            ->options(array_map(fn ($r) => $r[0], Inspection::PROCESS_REASONS)),
+                        Textarea::make('note')->label('Qo‘shimcha izoh (ixtiyoriy, xodimga ham boradi)')->rows(2)->maxLength(500),
                     ])
-                    ->modalSubmitActionLabel('Yakuniy tasdiqlash')
-                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::confirm($i, $data['note'] ?? null, auth()->user()?->email), 'Yakuniy tasdiqlandi')),
+                    ->modalSubmitActionLabel('Jarayonli tasdiqlash')
+                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::process($i, $data['reasons'] ?? [], $data['note'] ?? null, auth()->user()?->email), 'Jarayonga o‘tkazildi')),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
                     // a mistaken approval can be taken back too: the object's status then goes back
                     ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::LOCKED, Inspection::APPROVED], true))
