@@ -162,8 +162,8 @@ def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
         [open_btn],
         [InlineKeyboardButton(text=t(L, "btn_design"), callback_data="pick:design"),
          InlineKeyboardButton(text=t(L, "btn_concept"), callback_data="pick:concept")],
-        [InlineKeyboardButton(text=t(L, "btn_feedback"), callback_data="pick:feedback"),
-         InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")],
+        # no "Murojaat yuborish": requests are for residents; staff talk to their head
+        [InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")],
     ])
     return text, kb
 

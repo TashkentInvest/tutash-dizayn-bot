@@ -243,7 +243,8 @@ async def consent_flow():
           and t("uz", "staff_linked") in texts() and staff_msg is not None)
     btn = staff_msg.reply_markup.inline_keyboard[0][0] if staff_msg else None
     datas = [b.callback_data for row in (staff_msg.reply_markup.inline_keyboard if staff_msg else []) for b in row]
-    check("staff menu: design code and request buttons too", "pick:design" in datas and "pick:feedback" in datas)
+    check("staff menu: design code and concepts, no request button (requests are for residents)",
+          "pick:design" in datas and "pick:concept" in datas and "pick:feedback" not in datas)
     check("staff menu: button to the Mini App", btn is not None and (btn.web_app or btn.url) and "/tg/app" in ((btn.web_app.url if btn.web_app else btn.url) or ""))
     # assigned streets: the staff menu counts only those (as the Mini App shows only those)
     dstreets = [r[0] for r in db.fetch_all("SELECT id FROM streets WHERE district_id=(SELECT MIN(id) FROM districts) ORDER BY id")]
@@ -261,8 +262,8 @@ async def consent_flow():
                          "chat": {"id": 515151, "type": "private"}}
     n[0] += 1; await dp.feed_update(bot, Update.model_validate(forged))
     check("someone else's contact links nothing", db.staff_by_user(515151) is None)
-    sent.clear(); await press("pick:feedback", 424242); await press("pick:menu", 424242)
-    check("'back' from a request returns staff to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()))
+    sent.clear(); await press("pick:concept", 424242); await press("pick:menu", 424242)
+    check("'back' from the concepts returns staff to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()))
     # a personal invite link from the dashboard links whoever opens it, whatever number they joined with; it works once
     inv = db.execute("INSERT INTO staff (full_name, phone, district_id, invite_token, invite_expires) VALUES "
                      "('Taklif Xodim', '+998901119911', (SELECT MIN(id) FROM districts), 'TOK123', '2999-01-01 00:00:00')")

@@ -23,8 +23,8 @@ class InspectionReview
         'note' => ["\nAdmin izohi: %s", "\nКомментарий администратора: %s"],
         'held' => ["⏸ «%s» (%s) bo‘yicha dalilingiz moderator jarayonida: %s.\nIzoh: %s\n\nObyekt hali tugallanmagan. Moderator qaror qilguncha bu obyektga yangi dalil yuborilmaydi.",
             "⏸ Ваши доказательства по «%s» (%s) на модерации: %s.\nКомментарий: %s\n\nОбъект ещё не завершён. До решения модератора новые доказательства по нему не принимаются."],
-        'ask' => ["❓ Moderator so‘rayapti: «%s» (%s, %s)\n\n%s\n\nObyekt joyi: %s\nJavobingizni botdagi «Murojaat yuborish» orqali yoki rahbaringizga yuboring.",
-            "❓ Вопрос модератора: «%s» (%s, %s)\n\n%s\n\nМесто объекта: %s\nОтветьте через «Отправить обращение» в боте или руководителю."],
+        'ask' => ["❓ Moderator so‘rayapti: «%s» (%s, %s)\n\n%s\n\nObyekt joyi: %s\nJavobingizni rahbaringizga yuboring.",
+            "❓ Вопрос модератора: «%s» (%s, %s)\n\n%s\n\nМесто объекта: %s\nОтвет передайте своему руководителю."],
         'kind' => ['removed' => ['eski peshtaxta yechildi', 'старая вывеска снята'], 'installed' => ['dizayn-kod bo‘yicha qo‘yildi', 'установлено по дизайн-коду']],
     ];
 
