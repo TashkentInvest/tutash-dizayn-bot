@@ -38,7 +38,8 @@ def districts_kb(lang: str) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def streets_kb(d: catalog.Entry, lang: str) -> InlineKeyboardMarkup:
+def streets_kb(d: catalog.Entry, lang: str, back: str = "back") -> InlineKeyboardMarkup:
+    """back: "back" = to the district list; staff (one district only) go back to their menu ("pick:menu")."""
     b = InlineKeyboardBuilder()
     for s in catalog.streets(d):
         files = catalog.files(s)
@@ -46,5 +47,5 @@ def streets_kb(d: catalog.Entry, lang: str) -> InlineKeyboardMarkup:
             mb = max(1, round(catalog.total_size(s) / 2**20))
             b.button(text=f"{name(lang, s.name)} · {mb} {t(lang, 'mb')}", callback_data=f"s:{d.num}:{s.num}")
     b.adjust(1)
-    b.row(InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="back"))
+    b.row(InlineKeyboardButton(text=t(lang, "btn_back"), callback_data=back))
     return b.as_markup()

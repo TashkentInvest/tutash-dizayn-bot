@@ -233,6 +233,8 @@ async def main_menu(c: CallbackQuery):
         # staff only browse: marking them as concept users would ask them for the residents' location and photos
         if not await adb.staff_by_user(uid) and not (await adb.get_user(uid) or {}).get("concept_at"):
             await adb.update_user(uid, concept_at=registration._now())
+        if staff := await adb.staff_by_user(uid):  # staff see only their own district's concepts
+            return await _show_district(c, staff["district_id"], L, staff=True)
         if await adb.run(registration.may_browse, uid):
             await _edit(c, t(L, "districts"), await adb.run(districts_kb, L))
         elif await adb.is_registered(uid):
@@ -430,6 +432,8 @@ async def _drop_markup(c: CallbackQuery) -> None:
 @router.callback_query(F.data == "back")
 async def back(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
+    if staff := await adb.staff_by_user(c.from_user.id):  # staff have no district list: their own district again
+        return await _show_district(c, staff["district_id"], L, staff=True)
     await c.message.edit_text(t(L, "districts"), reply_markup=await adb.run(districts_kb, L))
     await c.answer()
 
@@ -437,22 +441,36 @@ async def back(c: CallbackQuery):
 @router.callback_query(F.data.startswith("d:"))
 async def pick_district(c: CallbackQuery):
     L = i18n.lang(c.from_user.id)
-    d = await adb.run(catalog.district, int(c.data.split(":")[1]))
+    num = int(c.data.split(":")[1])
+    if staff := await adb.staff_by_user(c.from_user.id):  # an old list button: staff open only their own district
+        return await _show_district(c, staff["district_id"], L, staff=True)
+    await _show_district(c, num, L)
+
+
+async def _show_district(c: CallbackQuery, num: int, L: str, staff: bool = False) -> None:
+    """A district's streets with concepts. Staff: back goes to their menu (they have no district list)."""
+    d = await adb.run(catalog.district, num)
     if not d:
         return await c.answer(t(L, "stale"), show_alert=True)
-    kb = await adb.run(streets_kb, d, L)
+    kb = await adb.run(streets_kb, d, L, "pick:menu" if staff else "back")
     has_streets = len(kb.inline_keyboard) > 1
     dn = html.escape(i18n.name(L, d.name))
     text = t(L, "streets" if has_streets else "empty", dn)
     if phone := catalog.format_phone(d.phone):
         text += t(L, "contact", dn, html.escape(phone))
-    await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    try:
+        await c.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except TelegramBadRequest:  # already showing this district
+        pass
     await c.answer()
 
 
 @router.callback_query(F.data.startswith("s:"))
 async def pick_street(c: CallbackQuery):
     _, dn, sn = c.data.split(":")
+    staff = await adb.staff_by_user(c.from_user.id)
+    if staff and int(dn) != staff["district_id"]:  # staff: their own district only
+        return await c.answer(t(i18n.lang(c.from_user.id), "stale"), show_alert=True)
     d, s, named = await adb.run(_street_files, int(dn), int(sn))
     if not s:
         return await c.answer(t(i18n.lang(c.from_user.id), "stale"), show_alert=True)

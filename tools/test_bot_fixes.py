@@ -312,12 +312,21 @@ async def consent_flow():
     check("staff menu has the concept button", lm is not None and any(b.callback_data == "pick:concept" for r in lm.reply_markup.inline_keyboard for b in r))
     db.update_user(424242, concept_at=None)
     sent.clear(); await press("pick:concept", 424242)
-    check("staff: concept -> the district list, not the residents' location step",
-          t("uz", "districts") in texts() and not (db.get_user(424242) or {}).get("concept_at"))
-    ds = bm.catalog.districts()
-    if ds:
-        sent.clear(); await press(f"d:{ds[0].num}", 424242)
-        check("staff: a district opens (no 'register first')", t("uz", "need_reg") not in alerts() and t("uz", "pending") not in alerts())
+    own = db.staff_by_user(424242)["district_id"]
+    ed = [m for m in sent if isinstance(m, EditMessageText)]
+    kb = ed[-1].reply_markup.inline_keyboard if ed and ed[-1].reply_markup else []
+    check("staff: concept -> only their own district's streets (no district list, no location step), back to their menu",
+          t("uz", "districts") not in texts() and not (db.get_user(424242) or {}).get("concept_at")
+          and kb and kb[-1][0].callback_data == "pick:menu"
+          and all(b.callback_data.startswith(f"s:{own}:") for r in kb[:-1] for b in r))
+    other = next((d.num for d in bm.catalog.districts() if d.num != own), None)
+    if other:
+        sent.clear(); await press(f"d:{other}", 424242)
+        ed = [m for m in sent if isinstance(m, EditMessageText)]
+        check("staff: another district's button opens their own one", t("uz", "need_reg") not in alerts()
+              and all(b.callback_data.startswith(f"s:{own}:") or b.callback_data == "pick:menu" for e in ed for r in e.reply_markup.inline_keyboard for b in r))
+        sent.clear(); await press(f"s:{other}:1", 424242)
+        check("staff: another district's street refused", t("uz", "stale") in alerts())
 
     # Menu -> /joylashuv: staff get the Mini App's location permission screen, others are told it is for staff
     sent.clear(); await say("/joylashuv", 424242)
