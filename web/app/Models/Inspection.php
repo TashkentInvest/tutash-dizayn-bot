@@ -27,11 +27,20 @@ class Inspection extends Model
     /** Held by the moderator with a note: not approved, the object is not done, it may stay so for days; the staff member waits. */
     public const MODERATION = 'moderation';
 
+    /**
+     * "Installed" evidence the moderator approved once: the object goes to "Jarayonda" (not "Qo'yildi" yet) and becomes
+     * done only after the final confirmation ("Yakuniy tasdiqlash"), which may come days later.
+     */
+    public const CONFIRMING = 'confirming';
+
     /** Still open: the object is "in process" and takes no new evidence until the moderator decides. */
     public const OPEN = [self::PENDING, self::MODERATION];
 
+    /** The object takes no new evidence: waiting, held, or approved once and waiting for the final confirmation. */
+    public const LOCKED = [self::PENDING, self::MODERATION, self::CONFIRMING];
 
-    public const REVIEW_COLORS = [self::PENDING => 'warning', self::MODERATION => 'info', self::APPROVED => 'success', self::REJECTED => 'danger'];
+
+    public const REVIEW_COLORS = [self::PENDING => 'warning', self::MODERATION => 'info', self::CONFIRMING => 'primary', self::APPROVED => 'success', self::REJECTED => 'danger'];
 
     protected $connection = 'bot';
 

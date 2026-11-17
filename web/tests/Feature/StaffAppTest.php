@@ -373,6 +373,36 @@ class StaffAppTest extends TestCase
         $this->get(route('bot-inspection-media', [$id, 'video']))->assertOk();
     }
 
+    public function test_installed_evidence_goes_to_in_process_first_and_is_done_only_after_the_final_confirmation(): void
+    {
+        $admin = User::factory()->create();
+        config(['app.admin_emails' => [$admin->email]]);
+        $this->actingAs($admin);
+
+        $id = $this->sendEvidence('installed');
+        Livewire::test(ListInspections::class)
+            ->assertActionHidden(TestAction::make('confirm')->table(Inspection::find($id)))
+            ->callAction(TestAction::make('approve')->table(Inspection::find($id)))->assertHasNoActionErrors();
+        $this->assertSame(Inspection::CONFIRMING, Inspection::find($id)->review);
+        $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'Jarayonda, not Qo‘yildi yet');
+        $this->assertStringContainsString('yakuniy tasdiq kutilmoqda', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
+        $h = $this->headers();
+        $this->postJson("/tg/api/objects/{$this->object->id}/inspections", ['kind' => 'installed'], $h)->assertStatus(409);
+
+        // the final confirmation: done
+        Livewire::test(ListInspections::class)->assertCanSeeTableRecords([Inspection::find($id)])
+            ->callAction(TestAction::make('confirm')->table(Inspection::find($id)))->assertHasNoActionErrors();
+        $this->assertSame(Inspection::APPROVED, Inspection::find($id)->review);
+        $this->assertSame(DesignObject::INSTALLED, $this->object->fresh()->status);
+        $this->assertStringContainsString('tasdiqlandi', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
+
+        // a second one, approved once and then rejected: the object goes back to not started
+        DB::connection('bot')->table('inspections')->where('id', $id)->update(['review' => Inspection::CONFIRMING]);
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Hali to‘liq emas'])->assertHasNoActionErrors();
+        $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
+    }
+
     public function test_mass_message_reaches_the_ones_without_name_or_phone_and_skips_the_blocked(): void
     {
         $admin = User::factory()->create();
@@ -539,6 +569,11 @@ class StaffAppTest extends TestCase
             array_intersect_key($row, array_flip(['total', 'pending', 'installed', 'review', 'day_installed'])));
 
         \App\Services\InspectionReview::approve(Inspection::find($id), null, 'test');
+        // approved once: "Jarayonda", not done yet
+        $row = collect(Svod::byDistrict($day)['rows'])->firstWhere('id', $this->district);
+        $this->assertSame([3, 2, 1, 0, 0, 0], [$row['total'], $row['pending'], $row['removed'], $row['installed'], $row['review'], $row['day_installed']]);
+
+        \App\Services\InspectionReview::confirm(Inspection::find($id), null, 'test');
         $svod = Svod::byDistrict($day);
         $row = collect($svod['rows'])->firstWhere('id', $this->district);
         // total from the official list (3); one approved "installed" -> 2 still waiting, 33.3 %

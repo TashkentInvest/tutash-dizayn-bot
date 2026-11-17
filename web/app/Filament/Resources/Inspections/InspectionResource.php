@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Inspections;
 use App\Filament\NavGroups;
 use App\Filament\Resources\DesignObjects\DesignObjectResource;
 use App\Filament\Resources\Inspections\Pages\ListInspections;
+use App\Models\DesignObject;
 use App\Models\District;
 use App\Models\Inspection;
 use App\Services\InspectionReview;
@@ -85,8 +86,8 @@ class InspectionResource extends Resource
                     ->description(fn (Inspection $i) => $i->review_note),
             ])
             ->filters([
-                // what still needs the moderator: waiting, and held ("Moderator jarayonida")
-                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple()->default(Inspection::OPEN),
+                // what still needs the moderator: waiting, held ("Moderator jarayonida"), and waiting for the final confirmation
+                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple()->default(Inspection::LOCKED),
                 SelectFilter::make('kind')->label('Nima qilindi')->options(Inspection::KINDS),
                 SelectFilter::make('district')->label('Tuman')
                     ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))
@@ -102,16 +103,30 @@ class InspectionResource extends Resource
                 Action::make('approve')->label('Tasdiqlash')->icon('heroicon-o-check-circle')->color('success')
                     ->visible(fn (Inspection $i) => in_array($i->review, Inspection::OPEN, true))
                     ->modalHeading('Dalilni tasdiqlash')->modalWidth('5xl')
-                    ->modalDescription('Tasdiqlansa, obyekt holati o‘zgaradi va xodimga bot orqali xabar boradi.')
+                    ->modalDescription(fn (Inspection $i) => $i->kind === DesignObject::INSTALLED
+                        ? 'Obyekt hali «Qo‘yildi» bo‘lmaydi: «Jarayonda»ga o‘tadi va keyin «Yakuniy tasdiqlash» kutadi. Xodimga bot orqali xabar boradi.'
+                        : 'Tasdiqlansa, obyekt «Jarayonda»ga o‘tadi va xodimga bot orqali xabar boradi.')
                     ->schema([
                         ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
                         Textarea::make('note')->label('Izoh (ixtiyoriy)')->rows(2)->maxLength(500),
                     ])
                     ->modalSubmitActionLabel('Tasdiqlash')
-                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email), 'Tasdiqlandi')),
+                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email),
+                        $i->kind === DesignObject::INSTALLED ? 'Jarayonga o‘tkazildi (yakuniy tasdiq kutadi)' : 'Tasdiqlandi')),
+                // the second step for "installed": only now is the object done ("Qo'yildi")
+                Action::make('confirm')->label('Yakuniy tasdiqlash')->icon('heroicon-o-check-badge')->color('success')
+                    ->visible(fn (Inspection $i) => $i->review === Inspection::CONFIRMING)
+                    ->modalHeading('Yakuniy tasdiqlash')->modalWidth('5xl')
+                    ->modalDescription('Obyekt «Jarayonda»dan chiqib «Qo‘yildi» bo‘ladi. Xodimga bot orqali xabar boradi.')
+                    ->schema([
+                        ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
+                        Textarea::make('note')->label('Izoh (ixtiyoriy)')->rows(2)->maxLength(500),
+                    ])
+                    ->modalSubmitActionLabel('Yakuniy tasdiqlash')
+                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::confirm($i, $data['note'] ?? null, auth()->user()?->email), 'Yakuniy tasdiqlandi')),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
                     // a mistaken approval can be taken back too: the object's status then goes back
-                    ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::OPEN, Inspection::APPROVED], true))
+                    ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::LOCKED, Inspection::APPROVED], true))
                     ->modalHeading(fn (Inspection $i) => $i->review === Inspection::APPROVED ? 'Tasdiqlangan dalilni rad etish' : 'Dalilni rad etish')
                     ->modalDescription(fn (Inspection $i) => $i->review === Inspection::APPROVED
                         ? 'Tasdiq bekor qilinadi: obyekt holati qolgan tasdiqlangan dalillarga qarab qaytariladi (boshqasi bo‘lmasa, “Boshlanmagan”). Xodimga sababi bilan xabar boradi.' : null)

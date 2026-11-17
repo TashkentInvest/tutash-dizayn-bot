@@ -10,7 +10,8 @@
     "pending": {"uz": "Tekshiruvda", "ru": "На проверке"},
     "approved": {"uz": "Tasdiqlandi", "ru": "Одобрено"},
     "rejected": {"uz": "Rad etildi", "ru": "Отклонено"},
-    "moderation": {"uz": "Moderator jarayonida", "ru": "На модерации"}
+    "moderation": {"uz": "Moderator jarayonida", "ru": "На модерации"},
+    "confirming": {"uz": "Jarayonda (yakuniy tasdiq)", "ru": "В процессе (финальное подтверждение)"}
   },
   "svod": {
     "total": {"uz": "Jami obyekt", "ru": "Всего объектов"},

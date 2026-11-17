@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Approving or rejecting a staff member's evidence. Only an approval changes the object:
- * "removed" -> the object is in progress (unless it is already done), "installed" -> done.
+ * "removed" -> the object is in progress (unless it is already done); "installed" -> first in progress too ("Jarayonda",
+ * review "confirming"), done only after the final confirmation (confirm()).
  * The staff member is told the result through the bot (outbox table, sent by the bot).
  */
 class InspectionReview
@@ -17,6 +18,8 @@ class InspectionReview
         'approved' => ["✅ «%s» (%s) bo‘yicha dalilingiz tasdiqlandi: %s.", "✅ Ваши доказательства по «%s» (%s) подтверждены: %s."],
         'rejected' => ["❌ «%s» (%s) bo‘yicha dalilingiz rad etildi: %s.\nSabab: %s\n\nMini App’da obyektni ochib, qayta yuboring.",
             "❌ Ваши доказательства по «%s» (%s) отклонены: %s.\nПричина: %s\n\nОткройте объект в Mini App и отправьте снова."],
+        'accepted' => ["☑️ «%s» (%s) bo‘yicha dalilingiz qabul qilindi: %s.\nObyekt jarayonda, yakuniy tasdiq kutilmoqda.",
+            "☑️ Ваши доказательства по «%s» (%s) приняты: %s.\nОбъект в процессе, ждёт окончательного подтверждения."],
         'note' => ["\nAdmin izohi: %s", "\nКомментарий администратора: %s"],
         'held' => ["⏸ «%s» (%s) bo‘yicha dalilingiz moderator jarayonida: %s.\nIzoh: %s\n\nObyekt hali tugallanmagan. Moderator qaror qilguncha bu obyektga yangi dalil yuborilmaydi.",
             "⏸ Ваши доказательства по «%s» (%s) на модерации: %s.\nКомментарий: %s\n\nОбъект ещё не завершён. До решения модератора новые доказательства по нему не принимаются."],
@@ -30,17 +33,18 @@ class InspectionReview
     {
         return DB::connection('bot')->transaction(function () use ($inspection, $note, $by) {
             // waiting, or held by the moderator for a while
+            // "installed" evidence is not final yet: the object goes to "Jarayonda" and waits for confirm()
+            $installed = Inspection::query()->whereKey($inspection->id)->value('kind') === DesignObject::INSTALLED;
             $done = Inspection::query()->whereKey($inspection->id)->whereIn('review', Inspection::OPEN)->update([
-                'review' => Inspection::APPROVED, 'review_note' => $note ?: null, 'reviewed_by' => $by,
-                'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+                'review' => $installed ? Inspection::CONFIRMING : Inspection::APPROVED, 'review_note' => $note ?: null,
+                'reviewed_by' => $by, 'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
             ]);
             if (! $done) {
                 return false;
             }
             $i = $inspection->fresh(['object.street', 'staff']);
             $o = $i->object;
-            $status = $i->kind === DesignObject::INSTALLED ? DesignObject::INSTALLED
-                : ($o->status === DesignObject::INSTALLED ? DesignObject::INSTALLED : DesignObject::REMOVED);
+            $status = $o->status === DesignObject::INSTALLED ? DesignObject::INSTALLED : DesignObject::REMOVED;
             $o->forceFill([
                 'status' => $status,
                 // the place picked on the map in the approved evidence becomes the object's place: later evidence must be
@@ -49,6 +53,29 @@ class InspectionReview
                 'longitude' => $i->obj_longitude ?? $o->longitude ?? $i->longitude,
                 'updated_at' => now()->utc()->format('Y-m-d H:i:s'),
             ])->save();
+            self::tell($i, $installed ? 'accepted' : 'approved', $note);
+
+            return true;
+        });
+    }
+
+    /**
+     * The final confirmation of approved "installed" evidence: the object leaves "Jarayonda" and is done ("Qo'yildi").
+     *
+     * @return bool false when it is not waiting for the confirmation (any more)
+     */
+    public static function confirm(Inspection $inspection, ?string $note, ?string $by): bool
+    {
+        return DB::connection('bot')->transaction(function () use ($inspection, $note, $by) {
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::CONFIRMING)->update([
+                'review' => Inspection::APPROVED, 'reviewed_by' => $by, 'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+                ...($note ? ['review_note' => $note] : []),
+            ]);
+            if (! $done) {
+                return false;
+            }
+            $i = $inspection->fresh(['object.street', 'staff']);
+            $i->object->forceFill(['status' => DesignObject::INSTALLED, 'updated_at' => now()->utc()->format('Y-m-d H:i:s')])->save();
             self::tell($i, 'approved', $note);
 
             return true;
@@ -65,7 +92,7 @@ class InspectionReview
     {
         return DB::connection('bot')->transaction(function () use ($inspection, $reason, $by) {
             $was = Inspection::query()->whereKey($inspection->id)->lockForUpdate()->value('review');
-            if (! in_array($was, [...Inspection::OPEN, Inspection::APPROVED], true)) {
+            if (! in_array($was, [...Inspection::LOCKED, Inspection::APPROVED], true)) {
                 return false;
             }
             $done = Inspection::query()->whereKey($inspection->id)->where('review', $was)->update([
@@ -76,7 +103,7 @@ class InspectionReview
                 return false;
             }
             $i = $inspection->fresh(['object.street', 'staff']);
-            if ($was === Inspection::APPROVED && $i->object) {
+            if (in_array($was, [Inspection::APPROVED, Inspection::CONFIRMING], true) && $i->object) {
                 self::restatus($i->object);
             }
             self::tell($i, 'rejected', $reason);
@@ -125,13 +152,17 @@ class InspectionReview
         return true;
     }
 
-    /** The object's status from its approved evidence: installed beats removed; the place from the latest approved one. */
+    /**
+     * The object's status from its approved evidence: installed beats removed (an installed one still waiting for the final
+     * confirmation counts as removed: "Jarayonda"); the place from the latest approved one.
+     */
     private static function restatus(DesignObject $o): void
     {
-        $approved = Inspection::query()->where('object_id', $o->id)->where('review', Inspection::APPROVED)
+        $approved = Inspection::query()->where('object_id', $o->id)->whereIn('review', [Inspection::APPROVED, Inspection::CONFIRMING])
             ->orderByDesc('reviewed_at')->orderByDesc('id')->get();
-        $status = $approved->contains('kind', DesignObject::INSTALLED) ? DesignObject::INSTALLED
-            : ($approved->contains('kind', DesignObject::REMOVED) ? DesignObject::REMOVED : DesignObject::PENDING);
+        $final = $approved->where('review', Inspection::APPROVED);
+        $status = $final->contains('kind', DesignObject::INSTALLED) ? DesignObject::INSTALLED
+            : ($approved->isNotEmpty() ? DesignObject::REMOVED : DesignObject::PENDING);
         $last = $approved->first();
         $o->forceFill([
             'status' => $status,
@@ -151,7 +182,7 @@ class InspectionReview
         $kind = self::TEXT['kind'][$i->kind][$ru] ?? $i->kind;
         $street = (string) $i->object?->street?->name;
         $text = match ($result) {
-            'approved' => sprintf(self::TEXT['approved'][$ru], $i->object->shop_name, $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : ''),
+            'approved', 'accepted' => sprintf(self::TEXT[$result][$ru], $i->object->shop_name, $street, $kind).($note ? sprintf(self::TEXT['note'][$ru], $note) : ''),
             'held' => sprintf(self::TEXT['held'][$ru], $i->object->shop_name, $street, $kind, $note),
             default => sprintf(self::TEXT['rejected'][$ru], $i->object->shop_name, $street, $kind, $note),
         };

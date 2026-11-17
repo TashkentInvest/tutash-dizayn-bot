@@ -337,7 +337,7 @@ class StaffAppController extends Controller
         $staff = $this->staff($r);
 
         return $this->locked('staff:'.$staff->id, function () use ($r, $object, $staff, $data) {
-            if ($object->inspections()->whereIn('review', Inspection::OPEN)->exists()) {  // waiting, or held by the moderator
+            if ($object->inspections()->whereIn('review', Inspection::LOCKED)->exists()) {  // waiting, or held by the moderator
                 return $this->fail($r, 'in_review', 409);
             }
             if ($object->status === DesignObject::INSTALLED && $data['kind'] === DesignObject::REMOVED) {
@@ -584,7 +584,7 @@ class StaffAppController extends Controller
         return [
             'id' => $o->id, 'shop_name' => $o->shop_name, 'owner_name' => $o->owner_name, 'stir' => $o->stir, 'status' => $o->status,
             'address' => $o->address,
-            'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->whereIn('review', Inspection::OPEN)->exists(),
+            'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->whereIn('review', Inspection::LOCKED)->exists(),
         ];
     }
 
