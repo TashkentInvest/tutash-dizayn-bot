@@ -28,20 +28,20 @@ class SvodImage
 
         if ($kind === 'progress') {
             $rows = collect($svod['rows'])->sortBy([['pct', 'desc'], ['installed', 'desc'], ['total', 'desc']])->values();
-            $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 84, 'c'], [L::get('status.installed'), 76, 'c'], [L::get('svod.pct'), 250, 'bar']];
+            $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 84, 'c'], [L::get('svod.installed'), 110, 'c'], [L::get('svod.pct'), 250, 'bar']];
             $body = $rows->map(fn ($r, $i) => [$i + 1, $r['name'], $r['total'], $r['installed'], [$r['pct'], $pct($r['pct'])]])->all();
             $total = ['', $svod['total']['name'], $svod['total']['total'], $svod['total']['installed'], [$svod['total']['pct'], $pct($svod['total']['pct'])]];
 
             return self::table('Dizayn-kod: tumanlar kesimida bajarilish — '.$date, $cols, $total, $body);
         }
 
-        [$removed, $installed] = [L::get('status.removed'), L::get('status.installed')];
-        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 76, 'c'], [L::get('svod.left'), 92, 'c'], [L::get('status.review'), 84, 'c'],
-            [$installed, 70, 'c'], ['Bugun '.mb_strtolower($removed), 80, 'c'], ['Bugun '.mb_strtolower($installed), 80, 'c'],
-            ['Bugun yuborilgan dalil', 84, 'c'], ['Bugun qo‘shilgan obyekt', 84, 'c'],
-            [L::get('svod.awaiting'), 90, 'c'], [L::get('svod.pct'), 86, 'c']];
-        $line = fn ($r, $n) => [$n, $r['name'], $r['total'], $r['pending'], $r['removed'], $r['installed'], $r['day_removed'], $r['day_installed'],
-            $r['day_sent'], $r['day_added'], $r['review'], $pct($r['pct'])];
+        // Jami | Qolgan | Dizayn-kodga keltirildi | Jarayonda | Bugun yechildi | Bugun dizayn-kodga keltirildi | Bajarilish
+        [$removed, $installed] = [L::get('status.removed'), L::get('svod.installed')];
+        $cols = [['№', 34, 'c'], ['Tuman nomi', 190, 'l'], [L::get('svod.total'), 80, 'c'], [L::get('svod.left'), 80, 'c'],
+            [$installed, 110, 'c'], [L::get('status.review'), 90, 'c'], ['Bugun '.mb_strtolower($removed), 90, 'c'],
+            ['Bugun '.mb_strtolower($installed), 120, 'c'], [L::get('svod.pct'), 96, 'c']];
+        $line = fn ($r, $n) => [$n, $r['name'], $r['total'], $r['pending'], $r['installed'], $r['removed'], $r['day_removed'], $r['day_installed'],
+            $pct($r['pct'])];
         $body = array_map(fn ($r, $i) => $line($r, $i + 1), $svod['rows'], array_keys($svod['rows']));
 
         return self::table('Dizayn-kod: tumanlar kesimida svod — '.$date, $cols, $line($svod['total'], ''), $body);
@@ -57,8 +57,14 @@ class SvodImage
         $s = self::S;
         $font = resource_path('fonts/DejaVuSans.ttf');
         $bold = resource_path('fonts/DejaVuSans-Bold.ttf');
+        foreach ($cols as $k => [$label, $cw]) {  // a column is at least as wide as its longest word
+            foreach (explode(' ', $label) as $word) {
+                $cols[$k][1] = max($cols[$k][1], (int) ceil(self::width($word, $bold, 10)) + 14);
+            }
+        }
         $tableW = array_sum(array_column($cols, 1));
-        $headH = 44;
+        $lines = max(array_map(fn ($c) => count(self::wrap($c[0], $bold, 10, $c[1] - 10)), $cols));
+        $headH = max(44, $lines * 14 + 16);
         $rowH = 26;
         $titleH = 40;
         $w = ($tableW + 2 * self::PAD) * $s;
@@ -86,7 +92,7 @@ class SvodImage
         imagefilledrectangle($im, $x0 * $s, $y * $s, ($x0 + $tableW) * $s, ($y + $headH) * $s, $headBg);
         $x = $x0;
         foreach ($cols as [$label, $cw]) {
-            $lines = self::wrap($label, $bold, 10, $cw - 8);
+            $lines = self::wrap($label, $bold, 10, $cw - 10);
             foreach ($lines as $i => $ln) {
                 $ly = $y + $headH / 2 + ($i - (count($lines) - 1) / 2) * 14 + 5;
                 self::text($im, $ln, $bold, 10, ($x + $cw / 2) * $s, $ly * $s, $ink, 'c');
@@ -163,16 +169,23 @@ class SvodImage
         return $box[2] - $box[0];
     }
 
-    /** @return list<string> */
+    /** Word by word into lines no wider than $max (a single word longer than that gets its own line). @return list<string> */
     private static function wrap(string $t, string $font, int $size, int $max): array
     {
-        if (self::width($t, $font, $size) <= $max || ! str_contains($t, ' ')) {
-            return [$t];
+        $lines = [];
+        $cur = '';
+        foreach (explode(' ', $t) as $word) {
+            $try = $cur === '' ? $word : $cur.' '.$word;
+            if ($cur !== '' && self::width($try, $font, $size) > $max) {
+                $lines[] = $cur;
+                $cur = $word;
+            } else {
+                $cur = $try;
+            }
         }
-        $words = explode(' ', $t);
-        $half = (int) ceil(count($words) / 2);
+        $lines[] = $cur;
 
-        return [implode(' ', array_slice($words, 0, $half)), implode(' ', array_slice($words, $half))];
+        return $lines;
     }
 
     private static function fit(string $t, string $font, int $size, int $max): string

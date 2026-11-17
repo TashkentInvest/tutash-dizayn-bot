@@ -29,7 +29,7 @@ class DesignCodeProgressChart extends ChartWidget
 
         return [
             'datasets' => [
-                ['label' => Labels::get('status.installed'), 'data' => array_column($rows, 'installed'), 'backgroundColor' => '#22c55e', 'borderRadius' => 3],
+                ['label' => Labels::get('svod.installed'), 'data' => array_column($rows, 'installed'), 'backgroundColor' => '#22c55e', 'borderRadius' => 3],
                 ['label' => Labels::get('status.review'), 'data' => array_column($rows, 'removed'), 'backgroundColor' => '#f59e0b', 'borderRadius' => 3],
                 ['label' => Labels::get('svod.left'), 'data' => array_column($rows, 'pending'), 'backgroundColor' => '#94a3b866', 'borderRadius' => 3],
             ],

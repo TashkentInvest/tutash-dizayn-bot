@@ -53,12 +53,12 @@ class ScheduledReports
         $working = DB::connection('bot')->table('staff_days')->where('day', $at->copy()->setTimezone(config('app.display_timezone'))->toDateString())->count();
 
         return '📊 Dizayn-kod · soat '.$at->copy()->setTimezone(config('app.display_timezone'))->format('H:i')." holati\n"
-            ."Bugun: yechildi {$t['day_removed']}, qo‘yildi {$t['day_installed']}\n"
+            ."Bugun: yechildi {$t['day_removed']}, dizayn-kodga keltirildi {$t['day_installed']}\n"
             ."Bugun yuborildi: dalil {$t['day_sent']}, yangi obyekt {$t['day_added']}\n"
             .Labels::get('status.review')." (yechilgan, dizayn-kod qo‘yilmagan): {$t['removed']}\n"
             .Labels::get('svod.awaiting').": {$t['review']}\n"
             ."Ishlayotgan xodimlar: $working / $staff\n"
-            ."Umumiy: qo‘yildi {$t['installed']} / {$t['total']} (".DesignCodeSvod::pct($t['pct']).')';
+            ."Umumiy: dizayn-kodga keltirildi {$t['installed']} / {$t['total']} (".DesignCodeSvod::pct($t['pct']).')';
     }
 
     /** Every active staff member, by district: worked or not, from when to when, what they entered (the report day). */
