@@ -13,6 +13,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\ViewEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -128,6 +129,27 @@ class InspectionResource extends Resource
                     ])
                     ->modalSubmitActionLabel('Jarayonli tasdiqlash')
                     ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::process($i, $data['reasons'] ?? [], $data['note'] ?? null, auth()->user()?->email), 'Jarayonga o‘tkazildi')),
+                // already "Jarayonli tasdiqlandi": tick or change what is to fix (the older ones have no reasons yet)
+                Action::make('reasons')->label('Sababni tahrirlash')->icon('heroicon-o-pencil-square')->color('warning')
+                    ->visible(fn (Inspection $i) => $i->review === Inspection::CONFIRMING)
+                    ->modalHeading('Nimani tuzatish kerak')->modalWidth('5xl')
+                    ->fillForm(function (Inspection $i) {
+                        [$reasons, $note] = InspectionReview::readReasons($i->review_note);
+
+                        return ['reasons' => $reasons, 'note' => $note, 'notify' => true];
+                    })
+                    ->schema([
+                        ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
+                        CheckboxList::make('reasons')->label('Nimani tuzatish kerak')->required()
+                            ->options(array_map(fn ($r) => $r[0], Inspection::PROCESS_REASONS)),
+                        Textarea::make('note')->label('Qo‘shimcha izoh (ixtiyoriy)')->rows(2)->maxLength(500),
+                        Toggle::make('notify')->label('Xodimga botda qayta yuborish'),
+                    ])
+                    ->modalSubmitActionLabel('Saqlash')
+                    ->action(fn (Inspection $i, array $data) => InspectionReview::editReasons($i, $data['reasons'] ?? [], $data['note'] ?? null,
+                        auth()->user()?->email, (bool) ($data['notify'] ?? false))
+                        ? Notification::make()->success()->title(($data['notify'] ?? false) ? 'Saqlandi, xodimga yuboriladi' : 'Saqlandi')->send()
+                        : Notification::make()->warning()->title('Saqlanmadi: dalil endi jarayonda emas')->send()),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
                     // a mistaken approval can be taken back too: the object's status then goes back
                     ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::LOCKED, Inspection::APPROVED], true))

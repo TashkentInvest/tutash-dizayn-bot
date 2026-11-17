@@ -84,7 +84,7 @@ Ishni tugatgach, Mini App’da «🔄 Jarayondagilar» bo‘limidan obyektni och
         }
 
         return DB::connection('bot')->transaction(function () use ($inspection, $reasons, $note, $by) {
-            $text = implode('; ', array_map(fn ($k) => Inspection::PROCESS_REASONS[$k][0], $reasons)).($note ? '. '.trim($note) : '');
+            $text = self::reasonText($reasons, $note);
             $done = Inspection::query()->whereKey($inspection->id)->whereIn('review', Inspection::OPEN)
                 ->where('kind', DesignObject::INSTALLED)->update([
                     'review' => Inspection::CONFIRMING, 'review_note' => $text, 'reviewed_by' => $by,
@@ -101,16 +101,65 @@ Ishni tugatgach, Mini App’da «🔄 Jarayondagilar» bo‘limidan obyektni och
                 'longitude' => $i->obj_longitude ?? $o->longitude ?? $i->longitude,
                 'updated_at' => now()->utc()->format('Y-m-d H:i:s'),
             ])->save();
-            $uid = $i->staff?->user_id;
-            if ($uid) {
-                $ru = DB::connection('bot')->table('users')->where('user_id', $uid)->value('lang') === 'ru' ? 1 : 0;
-                $what = implode(', ', array_map(fn ($k) => Inspection::PROCESS_REASONS[$k][$ru], $reasons));
-                DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'text' => sprintf(self::TEXT['process'][$ru],
-                    $o->shop_name, (string) $o->street?->name, $what, $note ? sprintf(self::TEXT['note'][$ru], trim($note)) : '')]);
-            }
+            self::tellProcess($i, $reasons, $note);
 
             return true;
         });
+    }
+
+    /**
+     * Evidence already "Jarayonli tasdiqlandi" (also from before the reasons existed): the moderator ticks or changes what
+     * is to fix; the staff member is told again when $notify.
+     *
+     * @param  list<string>  $reasons
+     */
+    public static function editReasons(Inspection $inspection, array $reasons, ?string $note, ?string $by, bool $notify = true): bool
+    {
+        $reasons = array_values(array_intersect(array_keys(Inspection::PROCESS_REASONS), $reasons));
+        if (! $reasons) {
+            return false;
+        }
+        $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::CONFIRMING)->update([
+            'review_note' => self::reasonText($reasons, $note), 'reviewed_by' => $by,
+        ]);
+        if ($done && $notify) {
+            self::tellProcess($inspection->fresh(['object.street', 'staff']), $reasons, $note);
+        }
+
+        return (bool) $done;
+    }
+
+    /** @return array{0: list<string>, 1: string} the ticked reasons and the rest of the note, read back from review_note */
+    public static function readReasons(?string $text): array
+    {
+        $text = (string) $text;
+        $keys = [];
+        foreach (Inspection::PROCESS_REASONS as $k => [$uz]) {
+            if (str_contains($text, $uz)) {
+                $keys[] = $k;
+                $text = str_replace($uz, '', $text);
+            }
+        }
+
+        return [$keys, trim($text, " ;.\n")];
+    }
+
+    private static function reasonText(array $reasons, ?string $note): string
+    {
+        return implode('; ', array_map(fn ($k) => Inspection::PROCESS_REASONS[$k][0], $reasons)).(filled($note) ? '. '.trim($note) : '');
+    }
+
+    private static function tellProcess(Inspection $i, array $reasons, ?string $note): void
+    {
+        $uid = $i->staff?->user_id;
+        if (! $uid) {
+            return;
+        }
+        $o = $i->object;
+        $ru = DB::connection('bot')->table('users')->where('user_id', $uid)->value('lang') === 'ru' ? 1 : 0;
+        $what = implode(', ', array_map(fn ($k) => Inspection::PROCESS_REASONS[$k][$ru], $reasons));
+        DB::connection('bot')->table('outbox')->insert(['user_id' => $uid, 'text' => sprintf(self::TEXT['process'][$ru],
+            $o->shop_name, (string) $o->street?->name, $what, filled($note) ? sprintf(self::TEXT['note'][$ru], trim($note)) : '')]);
     }
 
     /**

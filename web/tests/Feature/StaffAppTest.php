@@ -420,6 +420,17 @@ class StaffAppTest extends TestCase
 
         $this->assertSame([], $this->getJson('/tg/api/process', $h)->json('objects'));
 
+        // an older one with a free note only: the moderator ticks the reasons later, the staff member is told
+        DB::connection('bot')->table('inspections')->where('id', $id2)->update(['review' => Inspection::CONFIRMING, 'review_note' => 'Bukva qo‘yilmagan; eski']);
+        $this->assertSame([['letters'], 'eski'], \App\Services\InspectionReview::readReasons('Bukva qo‘yilmagan; eski'));
+        Livewire::test(ListInspections::class)
+            ->callAction(TestAction::make('reasons')->table(Inspection::find($id2)), ['reasons' => ['letters', 'design'], 'note' => '', 'notify' => true])
+            ->assertHasNoActionErrors();
+        $this->assertSame('Bukva qo‘yilmagan; Dizayn-kodga mos emas', Inspection::find($id2)->review_note);
+        $this->assertSame(Inspection::CONFIRMING, Inspection::find($id2)->review);
+        $this->assertStringContainsString('Dizayn-kodga mos emas', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
+        DB::connection('bot')->table('inspections')->where('id', $id2)->update(['review' => Inspection::APPROVED]);
+
         // accepted with reasons, then rejected: the object goes back to not started
         DB::connection('bot')->table('inspections')->whereIn('id', [$id, $id2])->update(['review' => Inspection::CONFIRMING]);
         Livewire::test(ListInspections::class)
