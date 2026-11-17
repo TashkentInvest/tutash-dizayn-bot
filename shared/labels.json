@@ -18,6 +18,7 @@
     "pct": {"uz": "Bajarilish", "ru": "Выполнение"},
     "review_hint": {"uz": "tasdiq kutmoqda", "ru": "ждёт проверки"},
     "awaiting": {"uz": "Tasdiq kutmoqda", "ru": "Ждёт проверки"},
+    "final_hint": {"uz": "yakuniy tasdiq kutmoqda", "ru": "ждёт окончательного подтверждения"},
     "left": {"uz": "Qolgan", "ru": "Осталось"}
   }
 }

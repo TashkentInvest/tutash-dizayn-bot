@@ -83,6 +83,10 @@ class StaffAppController extends Controller
         $review = DB::connection('bot')->table('inspections')->join('objects', 'objects.id', '=', 'inspections.object_id')
             ->whereIn('inspections.review', Inspection::OPEN)->whereIn('objects.street_id', $streets->pluck('id'))
             ->selectRaw('objects.street_id, COUNT(*) AS n')->groupBy('objects.street_id')->pluck('n', 'street_id');
+        // "Jarayonda": objects with installed evidence approved once, waiting for the final confirmation
+        $process = DB::connection('bot')->table('inspections')->join('objects', 'objects.id', '=', 'inspections.object_id')
+            ->where('inspections.review', Inspection::CONFIRMING)->where('objects.is_active', true)->whereIn('objects.street_id', $streets->pluck('id'))
+            ->selectRaw('objects.street_id, COUNT(DISTINCT objects.id) AS n')->groupBy('objects.street_id')->pluck('n', 'street_id');
         $priority = array_map('intval', $staff->priority_streets ?? []);
 
         $rows = $streets->map(fn ($s) => [
@@ -91,6 +95,7 @@ class StaffAppController extends Controller
             'total' => (int) $s->planned_objects, 'added' => (int) ($counts[$s->id]->added ?? 0),
             'removed' => (int) ($counts[$s->id]->removed ?? 0),
             'installed' => (int) ($counts[$s->id]->installed ?? 0), 'review' => (int) ($review[$s->id] ?? 0),
+            'process' => (int) ($process[$s->id] ?? 0),
         ])->filter(fn ($s) => $s['total'] > 0 || $s['added'] > 0)
             ->sortBy(fn ($s) => [$s['priority'] ? 0 : 1, $s['priority'] ? array_search($s['id'], $priority, true) : 0])->values();
 
@@ -101,7 +106,7 @@ class StaffAppController extends Controller
             'lang' => $r->attributes->get('lang'),
             'totals' => [
                 'total' => $rows->sum('total'), 'removed' => $rows->sum('removed'),
-                'installed' => $rows->sum('installed'), 'review' => $rows->sum('review'),
+                'installed' => $rows->sum('installed'), 'review' => $rows->sum('review'), 'process' => $rows->sum('process'),
             ],
             'streets' => $rows,
             'draft' => $draft ? ['id' => $draft->id, 'object_id' => $draft->object_id, 'step' => $draft->step] : null,
@@ -113,7 +118,7 @@ class StaffAppController extends Controller
         if (! $this->staff($r)->worksOn($street->id)) {
             return $this->fail($r, 'not_yours', 403);
         }
-        $objects = DesignObject::query()->active()->where('street_id', $street->id)->with('pendingInspection')
+        $objects = DesignObject::query()->active()->where('street_id', $street->id)->with(['pendingInspection', 'processInspection'])
             ->orderBy('shop_name')->orderBy('id')->get();
         // the street's concept PDF(s), whole: opened in the phone's browser through a signed link
         $files = StreetFile::query()->where('street_id', $street->id)->orderBy('sort_order')->orderBy('id')->get(['id', 'file_name', 'size']);
@@ -145,7 +150,7 @@ class StaffAppController extends Controller
         $streets = $staff->streetsQuery()->orderBy('sort_order')->orderBy('name')
             ->get(['id', 'name', 'start_lat', 'start_lon', 'end_lat', 'end_lon', 'path']);
 
-        $objects = DesignObject::query()->active()->with(['pendingInspection', 'street:id,name'])
+        $objects = DesignObject::query()->active()->with(['pendingInspection', 'processInspection', 'street:id,name'])
             ->whereIn('street_id', $streets->pluck('id'))
             ->where(fn ($q) => $q->whereNotNull('latitude')->orWhereNotNull('found_lat'))->get()
             ->map(function (DesignObject $o) use ($lat, $lon) {
@@ -337,7 +342,8 @@ class StaffAppController extends Controller
         $staff = $this->staff($r);
 
         return $this->locked('staff:'.$staff->id, function () use ($r, $object, $staff, $data) {
-            if ($object->inspections()->whereIn('review', Inspection::LOCKED)->exists()) {  // waiting, or held by the moderator
+            // waiting, or held by the moderator. "Jarayonda" (approved once) is not locked: new evidence is added to the old
+            if ($object->inspections()->whereIn('review', Inspection::OPEN)->exists()) {
                 return $this->fail($r, 'in_review', 409);
             }
             if ($object->status === DesignObject::INSTALLED && $data['kind'] === DesignObject::REMOVED) {
@@ -584,7 +590,8 @@ class StaffAppController extends Controller
         return [
             'id' => $o->id, 'shop_name' => $o->shop_name, 'owner_name' => $o->owner_name, 'stir' => $o->stir, 'status' => $o->status,
             'address' => $o->address,
-            'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->whereIn('review', Inspection::LOCKED)->exists(),
+            'in_review' => $o->relationLoaded('pendingInspection') ? (bool) $o->pendingInspection : $o->inspections()->whereIn('review', Inspection::OPEN)->exists(),
+            'in_process' => $o->relationLoaded('processInspection') ? (bool) $o->processInspection : $o->inspections()->where('review', Inspection::CONFIRMING)->exists(),
         ];
     }
 

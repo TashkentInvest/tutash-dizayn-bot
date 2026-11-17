@@ -74,6 +74,10 @@ class InspectionReview
             if (! $done) {
                 return false;
             }
+            // the evidence added while it was "Jarayonda" is confirmed with it: all of it stays, as one record of the work
+            Inspection::query()->where('object_id', $inspection->object_id)->where('review', Inspection::CONFIRMING)->update([
+                'review' => Inspection::APPROVED, 'reviewed_by' => $by, 'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
             $i = $inspection->fresh(['object.street', 'staff']);
             $i->object->forceFill(['status' => DesignObject::INSTALLED, 'updated_at' => now()->utc()->format('Y-m-d H:i:s')])->save();
             self::tell($i, 'approved', $note);

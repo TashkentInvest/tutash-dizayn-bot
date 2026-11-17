@@ -10,5 +10,15 @@
             <p style="margin:0 0 4px"><a href="{{ route('bot-file', $f) }}" target="_blank" style="color:#d97706">{{ $f->file_name }}</a></p>
         @endforeach
     </div>
-    <div>@include('filament.objects.inspection-card', ['i' => $i])</div>
+    <div>@include('filament.objects.inspection-card', ['i' => $i])
+        {{-- everything sent for this object before (nothing is deleted: new evidence is added to the old) --}}
+        @php($earlier = \App\Models\Inspection::query()->with('staff')->where('object_id', $i->object_id)->where('id', '!=', $i->id)
+            ->where('step', 'submitted')->orderByDesc('submitted_at')->orderByDesc('id')->get())
+        @if ($earlier->isNotEmpty())
+            <details style="margin-top:6px">
+                <summary style="cursor:pointer;font-weight:600">Shu obyekt bo‘yicha oldingi dalillar ({{ $earlier->count() }})</summary>
+                <div style="margin-top:8px">@foreach ($earlier as $e) @include('filament.objects.inspection-card', ['i' => $e]) @endforeach</div>
+            </details>
+        @endif
+    </div>
 </div>

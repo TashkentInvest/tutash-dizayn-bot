@@ -62,7 +62,13 @@ class DesignObject extends Model
 
     public function pendingInspection(): HasOne
     {
-        return $this->hasOne(Inspection::class, 'object_id')->whereIn('review', Inspection::LOCKED)->latestOfMany();
+        return $this->hasOne(Inspection::class, 'object_id')->whereIn('review', Inspection::OPEN)->latestOfMany();
+    }
+
+    /** "Jarayonda": installed evidence approved once, waiting for the final confirmation (the staff may add more). */
+    public function processInspection(): HasOne
+    {
+        return $this->hasOne(Inspection::class, 'object_id')->where('review', Inspection::CONFIRMING)->latestOfMany();
     }
 
     public function scopeActive(Builder $q): Builder

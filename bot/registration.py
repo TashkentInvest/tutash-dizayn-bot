@@ -154,7 +154,7 @@ async def send_choice(bot: Bot, chat_id: int, lang: str | None = None, user_id: 
 def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
     n = db.staff_counts(staff)  # only the streets assigned to this person (all of the district when none are)
     text = t(L, "staff_menu", html.escape(staff["full_name"]), html.escape(i18n.name(L, staff["district"])),
-             n["total"], n["removed"], n["installed"], n["review"])
+             n["total"], n["removed"], n["installed"], n["review"], n["process"])
     # Telegram opens Mini Apps over https only; a plain link keeps a local http setup usable for testing
     open_btn = (InlineKeyboardButton(text=t(L, "btn_objects"), web_app=WebAppInfo(url=f"{WEBAPP_URL}?lang={L}"))
                 if WEBAPP_URL.startswith("https://") else InlineKeyboardButton(text=t(L, "btn_objects"), url=WEBAPP_URL))

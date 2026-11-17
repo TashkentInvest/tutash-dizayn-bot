@@ -667,7 +667,7 @@ def staff_counts(staff: dict) -> dict:
     """The numbers of the staff menu, for the streets this person works on."""
     ids = staff_street_ids(staff)
     if not ids:
-        return {"total": 0, "removed": 0, "installed": 0, "review": 0}
+        return {"total": 0, "removed": 0, "installed": 0, "review": 0, "process": 0}
     marks = ",".join("?" * len(ids))
     with _db() as c:
         r = c.execute(
@@ -680,7 +680,12 @@ def staff_counts(staff: dict) -> dict:
             "SELECT COUNT(*) FROM inspections i JOIN objects o ON o.id=i.object_id "
             f"WHERE o.street_id IN ({marks}) AND i.review IN ('pending', 'moderation')", tuple(ids)
         ).fetchone()[0]
-    return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending}
+        # "Jarayonda": installed evidence approved once, waiting for the final confirmation (more evidence may be added)
+        process = c.execute(
+            "SELECT COUNT(DISTINCT o.id) FROM inspections i JOIN objects o ON o.id=i.object_id "
+            f"WHERE o.street_id IN ({marks}) AND o.is_active = TRUE AND i.review = 'confirming'", tuple(ids)
+        ).fetchone()[0]
+    return {"total": planned, "removed": r["removed"] or 0, "installed": r["installed"] or 0, "review": pending, "process": process}
 
 
 def unsent_outbox(limit: int = 20) -> list:

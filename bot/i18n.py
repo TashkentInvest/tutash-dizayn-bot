@@ -156,7 +156,8 @@ TEXTS: dict[str, tuple[str, str]] = {
     # district staff
     "staff_menu": tuple(
         f"{head}: <b>{{}}</b>\n{{}}\n\n{_w('svod.total', lg)}: <b>{{}}</b>\n🔧 {_w('status.removed', lg)}: <b>{{}}</b>\n"
-        f"✅ {_w('status.installed', lg)}: <b>{{}}</b>\n⏳ {_w('status.review', lg)} ({_w('svod.review_hint', lg)}): <b>{{}}</b>\n\n{tail}"
+        f"✅ {_w('status.installed', lg)}: <b>{{}}</b>\n⏳ {_w('review.pending', lg)}: <b>{{}}</b>\n"
+        f"🔄 {_w('status.review', lg)} ({_w('svod.final_hint', lg)}): <b>{{}}</b>\n\n{tail}"
         for lg, head, tail in (("uz", "👷 Tuman xodimi", "Obyektlar bilan ishlash uchun pastdagi tugmani bosing."),
                                ("ru", "👷 Сотрудник района", "Для работы с объектами нажмите кнопку ниже."))
     ),

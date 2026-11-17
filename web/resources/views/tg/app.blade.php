@@ -29,7 +29,7 @@
   .street { cursor: pointer; }
   .street .name { font-weight: 600; }
   .pill { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--bg); margin: 2px 2px 0 0; }
-  .s-pending { color: var(--hint); } .s-removed { color: var(--amber); } .s-installed { color: var(--green); } .s-review { color: var(--link); }
+  .s-pending { color: var(--hint); } .s-removed { color: var(--amber); } .s-installed { color: var(--green); } .s-review { color: var(--link); } .s-process { color: #8b5cf6; }
   .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .obj { background: var(--card); border-radius: 10px; overflow: hidden; cursor: pointer; }
   .obj img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: #ddd; }
@@ -79,7 +79,7 @@
       added: 'Kiritilgan', pdf: '📄 Konsepsiya (PDF)', addTitle: 'Tadbirkor qo‘shish', addBtn: '➕ Tadbirkor qo‘shish', addHint: 'Ko‘chadagi do‘kon yoki firmani kiriting. Kerakli ko‘rinish — konsepsiya PDF’ida.', create: 'Qo‘shish',
       obj: 'Obyekt', shop: 'Do‘kon / firma nomi', owner: 'Tadbirkor F.I.Sh.', phone: 'Tadbirkor telefoni', stir: 'STIR (9 raqam)',
       save: 'Saqlash', saved: 'Saqlandi', status: 'Holat', startRemoved: '🔧 Eski peshtaxta yechildi', startInstalled: '✅ Dizayn-kod bo‘yicha qo‘yildi',
-      inReview: 'Bu obyekt bo‘yicha dalil tekshiruvda. Admin natijasini kuting.', continueDraft: 'Tugallanmagan tekshiruvni davom ettirish',
+      inReview: 'Bu obyekt bo‘yicha dalil tekshiruvda. Admin natijasini kuting.', inProcess: 'Obyekt jarayonda: yakuniy tasdiq kutilmoqda. Yangi rasm, video va joylashuv yuborishingiz mumkin — avvalgilari saqlanib qoladi.', continueDraft: 'Tugallanmagan tekshiruvni davom ettirish',
       history: 'Tarix', approved: 'Tasdiqlandi', rejected: 'Rad etildi', st1: '1/5 · Jonli rasm', st2: '2/5 · Sizning joylashuvingiz', st3: '3/5 · Obyekt joylashuvi', st4: '4/5 · Jonli video', st5: '5/5 · Izoh',
       pointHint: 'Xaritada obyektni belgilang: belgini suring yoki xaritaga bosing. Ko‘k doira — siz turgan joydan {x} m.',
       pointBtn: '📍 Obyekt shu yerda — tasdiqlash', pointKnown: 'Obyektning tasdiqlangan joyi ko‘rsatilgan. To‘g‘ri bo‘lsa, tasdiqlang.', mapErr: 'Xarita yuklanmadi. Internetni tekshirib, qayta oching.',
@@ -98,7 +98,7 @@
       added: 'Внесено', pdf: '📄 Концепция (PDF)', addTitle: 'Добавить предпринимателя', addBtn: '➕ Добавить предпринимателя', addHint: 'Внесите магазин или фирму на улице. Нужный вид — в PDF концепции.', create: 'Добавить',
       obj: 'Объект', shop: 'Название магазина / фирмы', owner: 'Ф.И.О. предпринимателя', phone: 'Телефон предпринимателя', stir: 'ИНН (9 цифр)',
       save: 'Сохранить', saved: 'Сохранено', status: 'Статус', startRemoved: '🔧 Старая вывеска снята', startInstalled: '✅ Установлено по дизайн-коду',
-      inReview: 'Доказательства по этому объекту на проверке. Дождитесь решения администратора.', continueDraft: 'Продолжить незавершённую проверку',
+      inReview: 'Доказательства по этому объекту на проверке. Дождитесь решения администратора.', inProcess: 'Объект в процессе: ждёт окончательного подтверждения. Можно отправить новые фото, видео и местоположение — прежние сохраняются.', continueDraft: 'Продолжить незавершённую проверку',
       history: 'История', approved: 'Подтверждено', rejected: 'Отклонено', st1: '1/5 · Фото', st2: '2/5 · Ваше местоположение', st3: '3/5 · Место объекта', st4: '4/5 · Видео', st5: '5/5 · Комментарий',
       pointHint: 'Отметьте объект на карте: передвиньте метку или нажмите на карту. Синий круг — {x} м от вас.',
       pointBtn: '📍 Объект здесь — подтвердить', pointKnown: 'Показано подтверждённое место объекта. Если верно — подтвердите.', mapErr: 'Карта не загрузилась. Проверьте интернет и откройте снова.',
@@ -118,7 +118,8 @@
     ['uz', 'ru'].forEach(function (lg) {
       var w = T[lg];
       w.pending = L.status.pending[lg]; w.removed = w.kindRemoved = L.status.removed[lg];
-      w.installed = w.kindInstalled = L.status.installed[lg]; w.review = L.status.review[lg];
+      w.installed = w.kindInstalled = L.status.installed[lg];
+      w.review = L.review.pending[lg]; w.process = L.status.review[lg]; w.confirming = L.review.confirming[lg];
       w.approved = L.review.approved[lg]; w.rejected = L.review.rejected[lg];
     });
   })(@json(\App\Support\Labels::all()));
@@ -207,6 +208,7 @@
   }
   function statusPill(o) {
     if (o.in_review) return '<span class="pill s-review">⏳ ' + t('review') + '</span>';
+    if (o.in_process) return '<span class="pill s-process">🔄 ' + t('process') + '</span>';
     return '<span class="pill s-' + o.status + '">' + t(o.status) + '</span>';
   }
 
@@ -221,7 +223,8 @@
       var tot = d.totals;
       var html = '<div class="card"><div class="muted">' + esc(d.staff.name) + '</div><div class="stats" style="margin-top:8px">' +
         '<div><b>' + tot.total + '</b><span>' + t('total') + '</span></div><div><b class="s-removed">' + tot.removed + '</b><span>' + t('removed') + '</span></div>' +
-        '<div><b class="s-installed">' + tot.installed + '</b><span>' + t('installed') + '</span></div><div><b class="s-review">' + tot.review + '</b><span>' + t('review') + '</span></div></div></div>';
+        '<div><b class="s-installed">' + tot.installed + '</b><span>' + t('installed') + '</span></div><div><b class="s-review">' + tot.review + '</b><span>' + t('review') + '</span></div>' +
+        '<div><b class="s-process">' + (tot.process || 0) + '</b><span>' + t('process') + '</span></div></div></div>';
       if (d.draft) html += '<button class="btn alt" id="draft">↩︎ ' + t('continueDraft') + '</button>';
       html += '<button class="btn" id="find">' + t('findBtn') + '</button><p class="muted">' + t('findHint') + '</p>';
       if (locator.canOpenSettings()) html += '<button class="btn alt" id="locset">' + t('locSettings') + '</button>';
@@ -231,6 +234,7 @@
           (s.priority ? '<span class="pill">⭐ ' + t('priority') + '</span>' : '') + '</div><div>' +
           '<span class="pill">' + t('total') + ': ' + s.total + '</span><span class="pill">' + t('added') + ': ' + s.added + '</span><span class="pill s-removed">' + t('removed') + ': ' + s.removed + '</span>' +
           '<span class="pill s-installed">' + t('installed') + ': ' + s.installed + '</span>' + (s.review ? '<span class="pill s-review">' + t('review') + ': ' + s.review + '</span>' : '') +
+          (s.process ? '<span class="pill s-process">' + t('process') + ': ' + s.process + '</span>' : '') +
           '</div></div>';
       });
       if (!d.streets.length) html += '<p class="muted">' + t('none') + '</p>';
@@ -297,8 +301,13 @@
     filter = filter || 'all';
     h('<p class="muted center">' + t('loading') + '</p>');
     api('/streets/' + s.id + '/objects').then(function (d) {
-      var keep = function (o) { return filter === 'all' || (filter === 'review' ? o.in_review : (!o.in_review && o.status === filter)); };
-      var chips = ['all', 'pending', 'removed', 'installed', 'review'].map(function (f) {
+      var keep = function (o) {
+        if (filter === 'all') return true;
+        if (filter === 'review') return o.in_review;
+        if (filter === 'process') return o.in_process && !o.in_review;
+        return !o.in_review && !o.in_process && o.status === filter;
+      };
+      var chips = ['all', 'pending', 'removed', 'process', 'installed', 'review'].map(function (f) {
         return '<button class="chip' + (f === filter ? ' on' : '') + '" data-f="' + f + '">' + t(f) + '</button>';
       }).join('');
       var list = d.objects.filter(keep).map(function (o) {
@@ -370,6 +379,7 @@
       } else if (o.in_review) {
         html += '<div class="card">⏳ ' + t('inReview') + '</div>';
       } else {
+        if (o.in_process) html += '<div class="card">🔄 ' + t('inProcess') + '</div>';
         if (o.status === 'pending') html += '<button class="btn" data-kind="removed">' + t('startRemoved') + '</button>';
         if (o.status !== 'installed') html += '<button class="btn" data-kind="installed">' + t('startInstalled') + '</button>';
       }
@@ -382,7 +392,8 @@
         '<button class="btn alt" id="save">' + t('save') + '</button></details>';
       if (o.history && o.history.length) {
         html += '<p class="muted">' + t('history') + '</p>' + o.history.map(function (x) {
-          var r = x.review === 'approved' ? '<span class="s-installed">' + t('approved') + '</span>' : x.review === 'rejected' ? '<span style="color:var(--red)">' + t('rejected') + '</span>' : '<span class="s-review">' + t('review') + '</span>';
+          var r = x.review === 'approved' ? '<span class="s-installed">' + t('approved') + '</span>' : x.review === 'rejected' ? '<span style="color:var(--red)">' + t('rejected') + '</span>'
+            : x.review === 'confirming' ? '<span class="s-process">' + t('confirming') + '</span>' : '<span class="s-review">' + t('review') + '</span>';
           return '<div class="card"><div class="row"><span>' + t(x.kind === 'removed' ? 'kindRemoved' : 'kindInstalled') + '</span>' + r + '</div><div class="muted">' + esc(x.at) + (x.note ? ' · ' + esc(x.note) : '') + '</div></div>';
         }).join('');
       }

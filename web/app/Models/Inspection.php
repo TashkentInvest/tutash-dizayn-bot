@@ -36,7 +36,10 @@ class Inspection extends Model
     /** Still open: the object is "in process" and takes no new evidence until the moderator decides. */
     public const OPEN = [self::PENDING, self::MODERATION];
 
-    /** The object takes no new evidence: waiting, held, or approved once and waiting for the final confirmation. */
+    /**
+     * What the review list shows by default: waiting, held, and approved once (waiting for the final confirmation). Only OPEN
+     * locks the object: a "confirming" one (Jarayonda) takes more evidence, added to what was sent before.
+     */
     public const LOCKED = [self::PENDING, self::MODERATION, self::CONFIRMING];
 
 
