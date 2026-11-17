@@ -307,6 +307,18 @@ async def consent_flow():
     sent.clear(); await say("/start", 424242); await press("lang:uz", 424242)
     check("next /start: straight to the staff menu", any("Tuman xodimi" in (x or "") for x in texts()) and t("uz", "choice") not in texts())
 
+    # staff see the residents' concepts by district from their own menu, with no location/photo step
+    lm = next((m for m in sent if isinstance(m, SendMessage) and m.reply_markup and "Tuman xodimi" in (m.text or "")), None)
+    check("staff menu has the concept button", lm is not None and any(b.callback_data == "pick:concept" for r in lm.reply_markup.inline_keyboard for b in r))
+    db.update_user(424242, concept_at=None)
+    sent.clear(); await press("pick:concept", 424242)
+    check("staff: concept -> the district list, not the residents' location step",
+          t("uz", "districts") in texts() and not (db.get_user(424242) or {}).get("concept_at"))
+    ds = bm.catalog.districts()
+    if ds:
+        sent.clear(); await press(f"d:{ds[0].num}", 424242)
+        check("staff: a district opens (no 'register first')", t("uz", "need_reg") not in alerts() and t("uz", "pending") not in alerts())
+
     # Menu -> /joylashuv: staff get the Mini App's location permission screen, others are told it is for staff
     sent.clear(); await say("/joylashuv", 424242)
     lm = next((m for m in sent if isinstance(m, SendMessage) and m.reply_markup), None)

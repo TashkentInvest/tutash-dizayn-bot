@@ -53,6 +53,12 @@ def has_access(user_id: int) -> bool:
     return db.is_registered(user_id) and (not REQUIRE_APPROVAL or db.is_approved(user_id))
 
 
+def may_browse(user_id: int) -> bool:
+    """The concepts by district (what residents see): residents with access, and district staff (they never give the
+    object location and photos residents do; their name and phone are checked by has_contact first)."""
+    return bool(db.staff_by_user(user_id)) or has_access(user_id)
+
+
 def step(user_id: int) -> str:
     u = db.get_user(user_id) or {}
     # language, consent, name and phone come first for everyone: also for those who registered before a step existed
@@ -155,8 +161,9 @@ def staff_menu(staff: dict, L: str) -> tuple[str, InlineKeyboardMarkup]:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [open_btn],
         [InlineKeyboardButton(text=t(L, "btn_design"), callback_data="pick:design"),
-         InlineKeyboardButton(text=t(L, "btn_feedback"), callback_data="pick:feedback")],
-        [InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")],
+         InlineKeyboardButton(text=t(L, "btn_concept"), callback_data="pick:concept")],
+        [InlineKeyboardButton(text=t(L, "btn_feedback"), callback_data="pick:feedback"),
+         InlineKeyboardButton(text=t(L, "btn_refresh"), callback_data="staff:refresh")],
     ])
     return text, kb
 

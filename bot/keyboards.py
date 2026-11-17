@@ -34,6 +34,7 @@ def districts_kb(lang: str) -> InlineKeyboardMarkup:
     for d in catalog.districts():
         b.button(text=name(lang, d.name), callback_data=f"d:{d.num}")
     b.adjust(2)
+    b.row(InlineKeyboardButton(text=t(lang, "btn_back"), callback_data="pick:menu"))  # to the main (or staff) menu
     return b.as_markup()
 
 

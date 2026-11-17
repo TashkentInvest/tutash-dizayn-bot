@@ -67,6 +67,8 @@ class RequireRegistration(BaseMiddleware):
 
     async def __call__(self, handler, event: CallbackQuery, data):
         uid = event.from_user.id
+        if await adb.staff_by_user(uid):  # district staff browse the concepts without the residents' registration
+            return await handler(event, data)
         if not await adb.is_registered(uid):
             return await event.answer(t(i18n.lang(uid), "need_reg"), show_alert=True)
         if not await adb.run(registration.has_access, uid):
@@ -228,9 +230,10 @@ async def main_menu(c: CallbackQuery):
         await adb.set_fb_wait(uid, what, FB_WAIT_SECONDS)
         await _edit(c, t(L, "fb_write", t(L, f"lvl_{what}")), None)
     elif what == "concept":
-        if not (await adb.get_user(uid) or {}).get("concept_at"):
+        # staff only browse: marking them as concept users would ask them for the residents' location and photos
+        if not await adb.staff_by_user(uid) and not (await adb.get_user(uid) or {}).get("concept_at"):
             await adb.update_user(uid, concept_at=registration._now())
-        if await adb.run(registration.has_access, uid):
+        if await adb.run(registration.may_browse, uid):
             await _edit(c, t(L, "districts"), await adb.run(districts_kb, L))
         elif await adb.is_registered(uid):
             await c.answer(t(L, "pending"), show_alert=True)
