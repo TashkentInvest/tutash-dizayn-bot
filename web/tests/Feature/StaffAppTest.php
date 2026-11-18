@@ -440,6 +440,25 @@ class StaffAppTest extends TestCase
         Livewire::test(ListInspections::class)->set('activeTab', 'process')
             ->callAction(TestAction::make('reject')->table(Inspection::find($id2)), ['reason' => 'Hali to‘liq emas'])->assertHasNoActionErrors();
         $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
+
+        // a rejected one put into "Jarayonda" after all (only the latest of the object)
+        $this->assertFalse(\App\Services\InspectionReview::canGoToProcess(Inspection::find($id)), 'a newer rejected one exists');
+        $this->assertSame(['letters', 'design'], \App\Services\InspectionReview::guessReasons('Bukvasini qo‘ydirish va dizayn kodga keltirish kerak'));
+        $this->assertSame(['design'], \App\Services\InspectionReview::guessReasons('marinovka zontik oldirish kerak'));
+        Livewire::test(ListInspections::class)->set('activeTab', 'rejected')
+            ->callTableBulkAction('toProcess', [Inspection::find($id), Inspection::find($id2)])->assertHasNoTableBulkActionErrors();
+        $this->assertSame(Inspection::REJECTED, Inspection::find($id)->review);
+        $this->assertSame(Inspection::CONFIRMING, Inspection::find($id2)->review);
+        $this->assertSame('Dizayn-kodga mos emas. Hali to‘liq emas', Inspection::find($id2)->review_note);
+        $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status);
+
+        // the 09:00 reminder: the staff member's objects in process, with what to fix
+        DB::connection('bot')->table('outbox')->delete();
+        $this->assertSame(1, \App\Services\ProcessReminder::send());
+        $text = DB::connection('bot')->table('outbox')->where('user_id', 555001)->value('text');
+        $this->assertStringContainsString('jarayonda: 1 ta', $text);
+        $this->assertStringContainsString('Dizayn-kodga mos emas', $text);
+        $this->artisan('staff:process-reminder')->assertSuccessful();
     }
 
     public function test_mass_message_reaches_the_ones_without_name_or_phone_and_skips_the_blocked(): void

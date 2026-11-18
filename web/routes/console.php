@@ -14,3 +14,5 @@ $tz = config('app.display_timezone', 'Asia/Tashkent');
 Schedule::command('reports:send hourly')->timezone($tz)->hourlyAt(0)->between('9:00', '17:59')->withoutOverlapping();
 Schedule::command('reports:send daily')->timezone($tz)->dailyAt('18:00')->withoutOverlapping();
 Schedule::command('reports:send attendance')->timezone($tz)->dailyAt('18:01')->withoutOverlapping();
+// each staff member: the objects "Jarayonda" and what to fix
+Schedule::command('staff:process-reminder')->timezone($tz)->dailyAt('09:00')->withoutOverlapping();

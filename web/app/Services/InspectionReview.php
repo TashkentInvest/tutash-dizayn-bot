@@ -129,6 +129,66 @@ Ishni tugatgach, Mini App’da «🔄 Jarayondagilar» bo‘limidan obyektni och
         return (bool) $done;
     }
 
+    /**
+     * Rejected "installed" evidence put into "Jarayonda" after all: the staff member sees it under "Jarayondagilar" with
+     * what to fix and sends new evidence. Only the object's latest one, and only while nothing newer waits or is approved.
+     *
+     * @param  list<string>  $reasons
+     */
+    public static function rejectedToProcess(Inspection $inspection, array $reasons, ?string $note, ?string $by, bool $notify = false): bool
+    {
+        $reasons = array_values(array_intersect(array_keys(Inspection::PROCESS_REASONS), $reasons));
+        if (! $reasons || ! self::canGoToProcess($inspection)) {
+            return false;
+        }
+
+        return DB::connection('bot')->transaction(function () use ($inspection, $reasons, $note, $by, $notify) {
+            $done = Inspection::query()->whereKey($inspection->id)->where('review', Inspection::REJECTED)->update([
+                'review' => Inspection::CONFIRMING, 'review_note' => self::reasonText($reasons, $note), 'reviewed_by' => $by,
+                'reviewed_at' => now()->utc()->format('Y-m-d H:i:s'),
+            ]);
+            if (! $done) {
+                return false;
+            }
+            $i = $inspection->fresh(['object.street', 'staff']);
+            if ($i->object && $i->object->status !== DesignObject::INSTALLED) {
+                $i->object->forceFill(['status' => DesignObject::REMOVED, 'updated_at' => now()->utc()->format('Y-m-d H:i:s')])->save();
+            }
+            if ($notify) {
+                self::tellProcess($i, $reasons, $note);
+            }
+
+            return true;
+        });
+    }
+
+    /** Rejected installed evidence that may still go to "Jarayonda": the object's latest, nothing newer open or approved. */
+    public static function canGoToProcess(Inspection $i): bool
+    {
+        if ($i->review !== Inspection::REJECTED || $i->kind !== DesignObject::INSTALLED) {
+            return false;
+        }
+
+        return ! Inspection::query()->where('object_id', $i->object_id)->whereKeyNot($i->id)->where(fn ($q) => $q
+            ->whereIn('review', [...Inspection::LOCKED, Inspection::APPROVED])
+            ->orWhere(fn ($q) => $q->where('review', Inspection::REJECTED)->where('id', '>', $i->id)))->exists();
+    }
+
+    /** The reasons a free rejection note speaks about (to move old rejections in bulk): letters, else the design. */
+    public static function guessReasons(?string $note): array
+    {
+        $n = mb_strtolower((string) $note);
+        $keys = [];
+        if (preg_match('/bukv|букв/u', $n)) {
+            $keys[] = 'letters';
+        }
+        if (preg_match('/dizay|дизайн|mos|мос|олдир|oldir|polig|полиг/u', $n) || ! $keys) {
+            $keys[] = 'design';
+        }
+
+        return $keys;
+    }
+
     /** @return array{0: list<string>, 1: string} the ticked reasons and the rest of the note, read back from review_note */
     public static function readReasons(?string $text): array
     {

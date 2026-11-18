@@ -11,6 +11,7 @@ use App\Models\Inspection;
 use App\Services\InspectionReview;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
@@ -22,6 +23,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Evidence from district staff waiting for a decision. Approving changes the object's status (and sets its place on the
@@ -149,6 +151,24 @@ class InspectionResource extends Resource
                         auth()->user()?->email, (bool) ($data['notify'] ?? false))
                         ? Notification::make()->success()->title(($data['notify'] ?? false) ? 'Saqlandi, xodimga yuboriladi' : 'Saqlandi')->send()
                         : Notification::make()->warning()->title('Saqlanmadi: dalil endi jarayonda emas')->send()),
+                // a rejection turned into "Jarayonda": the staff member sees what to fix and sends again
+                Action::make('toProcess')->label('Jarayonga o‘tkazish')->icon('heroicon-o-arrow-path')->color('warning')
+                    ->visible(fn (Inspection $i) => InspectionReview::canGoToProcess($i))
+                    ->modalHeading('Jarayonga o‘tkazish')->modalWidth('5xl')
+                    ->modalDescription('Obyekt «Jarayonda»ga o‘tadi: xodim uni «Jarayondagilar»da nimani tuzatish kerakligi bilan ko‘radi va qayta yuboradi.')
+                    ->fillForm(fn (Inspection $i) => ['reasons' => InspectionReview::guessReasons($i->review_note), 'note' => $i->review_note, 'notify' => true])
+                    ->schema([
+                        ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
+                        CheckboxList::make('reasons')->label('Nimani tuzatish kerak')->required()
+                            ->options(array_map(fn ($r) => $r[0], Inspection::PROCESS_REASONS)),
+                        Textarea::make('note')->label('Izoh (xodimga ham boradi)')->rows(2)->maxLength(500),
+                        Toggle::make('notify')->label('Xodimga botda hozir yuborish'),
+                    ])
+                    ->modalSubmitActionLabel('Jarayonga o‘tkazish')
+                    ->action(fn (Inspection $i, array $data) => InspectionReview::rejectedToProcess($i, $data['reasons'] ?? [], $data['note'] ?? null,
+                        auth()->user()?->email, (bool) ($data['notify'] ?? false))
+                        ? Notification::make()->success()->title('Jarayonga o‘tkazildi')->send()
+                        : Notification::make()->warning()->title('O‘tkazilmadi: bu obyekt bo‘yicha yangiroq dalil bor')->send()),
                 Action::make('reject')->label('Rad etish')->icon('heroicon-o-x-circle')->color('danger')
                     // a mistaken approval can be taken back too: the object's status then goes back
                     ->visible(fn (Inspection $i) => in_array($i->review, [...Inspection::LOCKED, Inspection::APPROVED], true))
@@ -184,6 +204,19 @@ class InspectionResource extends Resource
                     ->action(fn (Inspection $i, array $data) => InspectionReview::ask($i, $data['question'])
                         ? Notification::make()->success()->title('Xodimga yuborildi')->send()
                         : Notification::make()->warning()->title('Yuborilmadi: xodim botga bog‘lanmagan yoki dalil endi moderator jarayonida emas')->send()),
+            ])
+            ->toolbarActions([
+                // the rejected ones in one go (the reasons are read from each rejection note; the morning reminder tells the staff)
+                BulkAction::make('toProcess')->label('Jarayonga o‘tkazish')->icon('heroicon-o-arrow-path')->color('warning')
+                    ->requiresConfirmation()
+                    ->modalDescription('Belgilangan rad etilgan «qo‘yildi» dalillari «Jarayonda»ga o‘tadi (har bir obyektning eng oxirgisi, yangiroq dalili '
+                        .'bo‘lmasa). Nimani tuzatish kerakligi rad etish izohidan olinadi; xodimlar ertalabki eslatmada ko‘radi.')
+                    ->action(function (Collection $records) {
+                        $n = $records->filter(fn (Inspection $i) => InspectionReview::rejectedToProcess($i,
+                            InspectionReview::guessReasons($i->review_note), $i->review_note, auth()->user()?->email))->count();
+                        Notification::make()->success()->title("Jarayonga o‘tkazildi: $n ta")->send();
+                    })
+                    ->deselectRecordsAfterCompletion(),
             ]);
     }
 
