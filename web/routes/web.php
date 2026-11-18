@@ -62,6 +62,22 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-inspection/{inspectio
     return response()->file($file, ['Content-Type' => $type, 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => 'sandbox']);
 })->name('bot-inspection-media');
 
+// Some phones save the evidence photo sideways: the moderator turns it upright in the review window (the file itself is turned)
+Route::middleware(['auth', 'can:access-admin'])->post('/bot-inspection/{inspection}/photo/rotate/{dir}', function (\App\Models\Inspection $inspection, string $dir) {
+    abort_unless(in_array($dir, ['left', 'right'], true) && $inspection->photo && function_exists('imagerotate'), 404);
+    $root = realpath((string) config('bot.uploads_path'));
+    $file = $root ? realpath($root.DIRECTORY_SEPARATOR.$inspection->photo) : false;
+    abort_unless($file && str_starts_with($file, $root.DIRECTORY_SEPARATOR) && is_file($file), 404);
+    $img = @imagecreatefromstring((string) file_get_contents($file));
+    abort_unless($img, 422);
+    $turned = imagerotate($img, $dir === 'right' ? -90 : 90, 0);  // GD turns counter-clockwise for a positive angle
+    $tmp = $file.'.tmp';
+    imagejpeg($turned, $tmp, 90);
+    rename($tmp, $file);
+
+    return response()->json(['ok' => true]);
+})->name('bot-inspection-photo-rotate');
+
 // A refused staff location ("Xatolikka uchraganlar") on a map: the dashboard's modal shows it in an iframe
 Route::middleware(['auth', 'can:access-admin'])->get('/failure-map/{failure}', function (\App\Models\LocationFailure $failure) {
     $f = $failure->load(['street', 'object']);

@@ -409,6 +409,13 @@ class StaffAppTest extends TestCase
         $this->assertTrue($this->getJson("/tg/api/objects/{$this->object->id}", $h)->json('in_review'), 'the new one waits for review');
         // the review window shows the earlier evidence too
         $card = view('filament.objects.inspection-review', ['getRecord' => fn () => Inspection::find($id2)])->render();
+        $this->assertStringContainsString('O‘ngga', $card);
+        // a sideways photo turned upright by the moderator: the file itself turns (width and height swap)
+        $path = rtrim((string) config('bot.uploads_path'), '/\\').'/'.Inspection::find($id)->photo;
+        [$w, $hgt] = getimagesize($path);
+        $this->post(route('bot-inspection-photo-rotate', [$id, 'right']))->assertOk();
+        $this->assertSame([$hgt, $w], array_slice(getimagesize($path), 0, 2));
+        $this->post(route('bot-inspection-photo-rotate', [$id, 'up']))->assertNotFound();
         $this->assertStringContainsString('Shu obyekt bo‘yicha oldingi dalillar (1)', $card);
         $this->assertStringContainsString(route('bot-inspection-media', [$id, 'photo']), $card);
 

@@ -27,5 +27,5 @@ return [
     'comment_min' => 5,
 
     // bump on every change of the Mini App page (?v=N), so phones do not keep an old copy
-    'asset_version' => 8,
+    'asset_version' => 9,
 ];

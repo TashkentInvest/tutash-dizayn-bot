@@ -86,7 +86,7 @@
       locHint: 'Obyekt yonida turib, o‘z joylashuvingizni yuboring.', locBtn: '📍 Joylashuvni aniqlash', locWait: 'Joylashuv aniqlanmoqda…',
       locDenied: 'Joylashuvga ruxsat berilmagan.', openSettings: 'Ruxsatni yoqish', retry: 'Qayta urinish', locNone: 'Joylashuv aniqlanmadi. GPS yoqilganini tekshirib, qayta urinib ko‘ring.',
       camStart: '📷 Kamerani yoqish', shot: '📸 Rasmga olish', retake: 'Qayta olish', send: 'Yuborish', camErr: 'Kamera ochilmadi. Telegram’ga kameraga ruxsat bering.',
-      photoHint: 'Obyektni (peshtaxta va fasad) to‘liq ko‘rinadigan qilib rasmga oling.',
+      photoHint: 'Obyektni (peshtaxta va fasad) to‘liq ko‘rinadigan qilib rasmga oling.', rotate: '↻ Aylantirish (rasm yonboshlab chiqsa)',
       videoHint: '3–15 soniyalik video: obyekt va atrofi. Yozish 15 soniyada o‘zi to‘xtaydi.', recStart: '⏺ Yozishni boshlash', recStop: '⏹ To‘xtatish',
       recShort: 'Video kamida 3 soniya bo‘lsin.', recNo: 'Bu qurilmada video yozib bo‘lmaydi. Telegram va telefon tizimini yangilang.', cancel: 'Bekor qilish', slow: 'Yuborish juda uzoq davom etdi. Internetni tekshirib, qayta yuboring.', uploading: 'Yuborilmoqda…', commentHint: 'Nima qilindi? Masalan: “Eski peshtaxta olib tashlandi, yangisi buyurtma qilingan”.',
       comment: 'Izoh', submit: 'Tekshiruvga yuborish', done: 'Yuborildi! Admin tasdiqlagach, holat o‘zgaradi.', toObject: 'Obyektga qaytish',
@@ -105,7 +105,7 @@
       locHint: 'Встаньте у объекта и отправьте своё местоположение.', locBtn: '📍 Определить местоположение', locWait: 'Определяем местоположение…',
       locDenied: 'Нет доступа к местоположению.', openSettings: 'Разрешить доступ', retry: 'Повторить', locNone: 'Не удалось определить местоположение. Проверьте GPS и попробуйте снова.',
       camStart: '📷 Включить камеру', shot: '📸 Сфотографировать', retake: 'Переснять', send: 'Отправить', camErr: 'Камера не открылась. Разрешите Telegram доступ к камере.',
-      photoHint: 'Сфотографируйте объект так, чтобы вывеска и фасад были видны полностью.',
+      photoHint: 'Сфотографируйте объект так, чтобы вывеска и фасад были видны полностью.', rotate: '↻ Повернуть (если фото боком)',
       videoHint: 'Видео 3–15 секунд: объект и окрестности. Запись остановится сама через 15 секунд.', recStart: '⏺ Начать запись', recStop: '⏹ Остановить',
       recShort: 'Видео должно быть не короче 3 секунд.', recNo: 'На этом устройстве нельзя записать видео. Обновите Telegram и систему телефона.', cancel: 'Отменить', slow: 'Отправка заняла слишком долго. Проверьте интернет и отправьте снова.', uploading: 'Отправка…', commentHint: 'Что сделано? Например: «Старая вывеска снята, новая заказана».',
       comment: 'Комментарий', submit: 'Отправить на проверку', done: 'Отправлено! Статус изменится после подтверждения администратором.', toObject: 'Вернуться к объекту',
@@ -580,15 +580,23 @@
     h(bar + '<h3>' + t('st1') + '</h3><p class="muted">' + t('photoHint') + '</p><video id="v" autoplay playsinline muted></video>' +
       '<canvas class="preview" id="c" hidden></canvas><div id="err" class="err"></div>' +
       '<button class="btn" id="cam">' + t('camStart') + '</button><button class="btn" id="shot" hidden>' + t('shot') + '</button>' +
+      '<button class="btn alt" id="rot" hidden>' + t('rotate') + '</button>' +
       '<button class="btn" id="send" hidden>' + t('send') + '</button><button class="btn alt" id="again" hidden>' + t('retake') + '</button>');
     var v = document.getElementById('v'), c = document.getElementById('c'), cam = document.getElementById('cam'), shot = document.getElementById('shot'),
-      send = document.getElementById('send'), again = document.getElementById('again'), blob = null;
-    function live() { c.hidden = true; v.hidden = false; send.hidden = again.hidden = true; shot.hidden = false; cam.hidden = true; }
+      send = document.getElementById('send'), again = document.getElementById('again'), rot = document.getElementById('rot'), blob = null;
+    function live() { c.hidden = true; v.hidden = false; send.hidden = again.hidden = rot.hidden = true; shot.hidden = false; cam.hidden = true; }
+    // some phones hand over the camera frame sideways: the staff member turns the shot upright before sending
+    rot.onclick = function () {
+      var r = document.createElement('canvas'); r.width = c.height; r.height = c.width;
+      var x = r.getContext('2d'); x.translate(r.width, 0); x.rotate(Math.PI / 2); x.drawImage(c, 0, 0);
+      c.width = r.width; c.height = r.height; c.getContext('2d').drawImage(r, 0, 0);
+      c.toBlob(function (b) { blob = b; }, 'image/jpeg', 0.88);
+    };
     cam.onclick = function () { busy(cam, function () { return openCamera(v).then(live); }); };
     shot.onclick = function () {
       if (!v.videoWidth) return;
       c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
-      c.toBlob(function (b) { blob = b; c.hidden = false; v.hidden = true; shot.hidden = true; send.hidden = again.hidden = false; }, 'image/jpeg', 0.88);
+      c.toBlob(function (b) { blob = b; c.hidden = false; v.hidden = true; shot.hidden = true; send.hidden = again.hidden = rot.hidden = false; }, 'image/jpeg', 0.88);
     };
     again.onclick = live;
     send.onclick = function () {

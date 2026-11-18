@@ -14,7 +14,17 @@
     </div>
     <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
         @if ($i->photo)
-            <a href="{{ route('bot-inspection-media', [$i, 'photo']) }}" target="_blank"><img src="{{ route('bot-inspection-media', [$i, 'photo']) }}" alt="" style="width:100%;border-radius:8px"></a>
+            {{-- a sideways photo is turned upright here: the file itself is turned, so it stays right everywhere --}}
+            <div x-data="{ v: 0, busy: false, turn(dir) { if (this.busy) return; this.busy = true;
+                    fetch('{{ route('bot-inspection-photo-rotate', [$i, '__D__']) }}'.replace('__D__', dir), { method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' } })
+                    .then(r => { if (r.ok) this.v++; }).finally(() => this.busy = false); } }">
+                <a :href="'{{ route('bot-inspection-media', [$i, 'photo']) }}?v=' + v" target="_blank"><img :src="'{{ route('bot-inspection-media', [$i, 'photo']) }}?v=' + v" src="{{ route('bot-inspection-media', [$i, 'photo']) }}" alt="" style="width:100%;border-radius:8px"></a>
+                <div style="display:flex;gap:6px;margin-top:4px;font-size:13px">
+                    <button type="button" @click="turn('left')" :disabled="busy" style="padding:2px 10px;border:1px solid rgba(127,127,127,.4);border-radius:6px">↺ Chapga</button>
+                    <button type="button" @click="turn('right')" :disabled="busy" style="padding:2px 10px;border:1px solid rgba(127,127,127,.4);border-radius:6px">↻ O‘ngga</button>
+                </div>
+            </div>
         @endif
         @if ($i->video)
             <video src="{{ route('bot-inspection-media', [$i, 'video']) }}" controls preload="metadata" style="width:100%;border-radius:8px;background:#000"></video>
