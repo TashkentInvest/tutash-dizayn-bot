@@ -380,11 +380,9 @@ class StaffAppTest extends TestCase
         $this->actingAs($admin);
 
         $id = $this->sendEvidence('installed');
-        // 2) "Jarayonli tasdiqlash": a reason must be ticked
+        // 2) "Jarayonli tasdiqlash": in the same "Tasdiqlash" window, something to fix ticked
         Livewire::test(ListInspections::class)
-            ->callAction(TestAction::make('process')->table(Inspection::find($id)), ['reasons' => []])->assertHasActionErrors(['reasons' => 'required']);
-        Livewire::test(ListInspections::class)
-            ->callAction(TestAction::make('process')->table(Inspection::find($id)), ['reasons' => ['letters'], 'note' => 'Kirish tomonda'])->assertHasNoActionErrors();
+            ->callAction(TestAction::make('approve')->table(Inspection::find($id)), ['reasons' => ['letters'], 'note' => 'Kirish tomonda'])->assertHasNoActionErrors();
         $this->assertSame(Inspection::CONFIRMING, Inspection::find($id)->review);
         $this->assertSame('Bukva qo‘yilmagan. Kirish tomonda', Inspection::find($id)->review_note);
         $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'Jarayonda');

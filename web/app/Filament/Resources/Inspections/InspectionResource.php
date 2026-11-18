@@ -102,33 +102,32 @@ class InspectionResource extends Resource
                     ->modalHeading(fn (Inspection $i) => $i->object?->street?->name.' · '.$i->object?->label())
                     ->modalSubmitAction(false)->modalCancelActionLabel('Yopish')->modalWidth('5xl')
                     ->schema([ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review')]),
-                // 1) full approval by the moderator
+                // one window: nothing ticked = full approval; something to fix ticked = "Jarayonli tasdiqlash" (installed only)
                 Action::make('approve')->label('Tasdiqlash')->icon('heroicon-o-check-circle')->color('success')
                     ->visible(fn (Inspection $i) => in_array($i->review, Inspection::LOCKED, true))
-                    ->modalHeading('Dalilni to‘liq tasdiqlash')->modalWidth('5xl')
-                    ->modalDescription(fn (Inspection $i) => $i->kind === DesignObject::INSTALLED
-                        ? 'To‘liq tasdiqlanadi: obyekt «Dizayn-kodga keltirildi» bo‘ladi. Xodimga bot orqali xabar boradi.'
-                        : 'Tasdiqlansa, obyekt «Jarayonda»ga o‘tadi va xodimga bot orqali xabar boradi.')
+                    ->modalHeading('Dalilni tasdiqlash')->modalWidth('5xl')
+                    ->modalDescription(fn (Inspection $i) => match (true) {
+                        $i->kind !== DesignObject::INSTALLED => 'Tasdiqlansa, obyekt «Jarayonda»ga o‘tadi va xodimga bot orqali xabar boradi.',
+                        $i->review === Inspection::CONFIRMING => 'To‘liq tasdiqlanadi: obyekt «Dizayn-kodga keltirildi» bo‘ladi. Xodimga bot orqali xabar boradi.',
+                        default => 'Hech narsa belgilanmasa — to‘liq tasdiqlanadi: obyekt «Dizayn-kodga keltirildi» bo‘ladi. '
+                            .'Kamchilik belgilansa — jarayonli tasdiqlanadi: obyekt «Jarayonda»ga o‘tadi, xodimga nimani tuzatish kerakligi yuboriladi, '
+                            .'u tuzatib yangi dalil yuboradi (avvalgilari saqlanadi).',
+                    })
                     ->schema([
                         ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
-                        Textarea::make('note')->label('Izoh (ixtiyoriy)')->rows(2)->maxLength(500),
+                        CheckboxList::make('reasons')->label('Kamchilik bo‘lsa belgilang (jarayonli tasdiqlash)')
+                            ->options(array_map(fn ($r) => $r[0], Inspection::PROCESS_REASONS))
+                            ->visible(fn (Inspection $record) => $record->kind === DesignObject::INSTALLED && in_array($record->review, Inspection::OPEN, true)),
+                        Textarea::make('note')->label('Izoh (ixtiyoriy, xodimga ham boradi)')->rows(2)->maxLength(500),
                     ])
                     ->modalSubmitActionLabel('Tasdiqlash')
-                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::approve($i, $data['note'] ?? null, auth()->user()?->email), 'Tasdiqlandi')),
-                // 2) accepted with something to fix: the object is "Jarayonda", the staff member is told what and sends again
-                Action::make('process')->label('Jarayonli tasdiqlash')->icon('heroicon-o-arrow-path')->color('warning')
-                    ->visible(fn (Inspection $i) => in_array($i->review, Inspection::OPEN, true) && $i->kind === DesignObject::INSTALLED)
-                    ->modalHeading('Jarayonli tasdiqlash')->modalWidth('5xl')
-                    ->modalDescription('Obyekt «Jarayonda»ga o‘tadi. Belgilangan kamchiliklar xodimga botda yuboriladi; u obyektni «Jarayondagilar» bo‘limida topib, '
-                        .'tuzatgach yangi rasm, video va joylashuv yuboradi (avvalgilari saqlanadi). Keyin «Tasdiqlash» bilan to‘liq tasdiqlaysiz.')
-                    ->schema([
-                        ViewEntry::make('card')->hiddenLabel()->view('filament.objects.inspection-review'),
-                        CheckboxList::make('reasons')->label('Nimani tuzatish kerak')->required()
-                            ->options(array_map(fn ($r) => $r[0], Inspection::PROCESS_REASONS)),
-                        Textarea::make('note')->label('Qo‘shimcha izoh (ixtiyoriy, xodimga ham boradi)')->rows(2)->maxLength(500),
-                    ])
-                    ->modalSubmitActionLabel('Jarayonli tasdiqlash')
-                    ->action(fn (Inspection $i, array $data) => self::done(InspectionReview::process($i, $data['reasons'] ?? [], $data['note'] ?? null, auth()->user()?->email), 'Jarayonga o‘tkazildi')),
+                    ->action(function (Inspection $i, array $data) {
+                        $by = auth()->user()?->email;
+                        if (! empty($data['reasons'])) {
+                            return self::done(InspectionReview::process($i, $data['reasons'], $data['note'] ?? null, $by), 'Jarayonli tasdiqlandi');
+                        }
+                        self::done(InspectionReview::approve($i, $data['note'] ?? null, $by), 'Tasdiqlandi');
+                    }),
                 // already "Jarayonli tasdiqlandi": tick or change what is to fix (the older ones have no reasons yet)
                 Action::make('reasons')->label('Sababni tahrirlash')->icon('heroicon-o-pencil-square')->color('warning')
                     ->visible(fn (Inspection $i) => $i->review === Inspection::CONFIRMING)
