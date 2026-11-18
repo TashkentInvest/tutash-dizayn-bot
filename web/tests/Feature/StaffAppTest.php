@@ -355,7 +355,7 @@ class StaffAppTest extends TestCase
         $this->assertStringContainsString('Rasmda peshtaxta ko‘rinmayapti', DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text'));
 
         // an approval taken back: rejected, the object goes back to not started, the staff member is told
-        Livewire::test(ListInspections::class)->filterTable('review', [Inspection::APPROVED])
+        Livewire::test(ListInspections::class)->set('activeTab', 'approved')
             ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Xato tasdiqlangan ekan'])->assertHasNoActionErrors();
         $this->assertSame(Inspection::REJECTED, Inspection::find($id)->review);
         $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
@@ -389,7 +389,8 @@ class StaffAppTest extends TestCase
         $this->assertSame('Bukva qo‘yilmagan. Kirish tomonda', Inspection::find($id)->review_note);
         $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'Jarayonda');
         // it leaves the review list until the staff member sends the fix
-        Livewire::test(ListInspections::class)->assertCanNotSeeTableRecords([Inspection::find($id)]);
+        Livewire::test(ListInspections::class)->assertCanNotSeeTableRecords([Inspection::find($id)])
+            ->set('activeTab', 'process')->assertCanSeeTableRecords([Inspection::find($id)])->assertSee('Sababni tahrirlash');
         $msg = DB::connection('bot')->table('outbox')->orderByDesc('id')->value('text');
         $this->assertStringContainsString('Bukva qo‘yilmagan', $msg);
         $this->assertStringContainsString('Jarayondagilar', $msg);
@@ -425,7 +426,7 @@ class StaffAppTest extends TestCase
         // an older one with a free note only: the moderator ticks the reasons later, the staff member is told
         DB::connection('bot')->table('inspections')->where('id', $id2)->update(['review' => Inspection::CONFIRMING, 'review_note' => 'Bukva qo‘yilmagan; eski']);
         $this->assertSame([['letters'], 'eski'], \App\Services\InspectionReview::readReasons('Bukva qo‘yilmagan; eski'));
-        Livewire::test(ListInspections::class)->filterTable('review', [Inspection::CONFIRMING])
+        Livewire::test(ListInspections::class)->set('activeTab', 'process')
             ->callAction(TestAction::make('reasons')->table(Inspection::find($id2)), ['reasons' => ['letters', 'design'], 'note' => '', 'notify' => true])
             ->assertHasNoActionErrors();
         $this->assertSame('Bukva qo‘yilmagan; Dizayn-kodga mos emas', Inspection::find($id2)->review_note);
@@ -435,10 +436,10 @@ class StaffAppTest extends TestCase
 
         // accepted with reasons, then rejected: the object goes back to not started
         DB::connection('bot')->table('inspections')->whereIn('id', [$id, $id2])->update(['review' => Inspection::CONFIRMING]);
-        Livewire::test(ListInspections::class)->filterTable('review', [Inspection::CONFIRMING])
+        Livewire::test(ListInspections::class)->set('activeTab', 'process')
             ->callAction(TestAction::make('reject')->table(Inspection::find($id)), ['reason' => 'Hali to‘liq emas'])->assertHasNoActionErrors();
         $this->assertSame(DesignObject::REMOVED, $this->object->fresh()->status, 'the other one is still Jarayonda');
-        Livewire::test(ListInspections::class)->filterTable('review', [Inspection::CONFIRMING])
+        Livewire::test(ListInspections::class)->set('activeTab', 'process')
             ->callAction(TestAction::make('reject')->table(Inspection::find($id2)), ['reason' => 'Hali to‘liq emas'])->assertHasNoActionErrors();
         $this->assertSame(DesignObject::PENDING, $this->object->fresh()->status);
     }

@@ -88,9 +88,8 @@ class InspectionResource extends Resource
                     ->description(fn (Inspection $i) => $i->review_note),
             ])
             ->filters([
-                // what still needs the moderator: waiting and held ("Moderator jarayonida"). "Jarayonli tasdiqlandi" leaves the list:
-                // it comes back as new evidence once the staff member fixes it (pick it in this filter to change its reasons)
-                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple()->default(Inspection::OPEN),
+                // the stages are the tabs above (ListInspections); this narrows inside one
+                SelectFilter::make('review')->label('Holat')->options(Inspection::reviews())->multiple(),
                 SelectFilter::make('kind')->label('Nima qilindi')->options(Inspection::KINDS),
                 SelectFilter::make('district')->label('Tuman')
                     ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id'))
