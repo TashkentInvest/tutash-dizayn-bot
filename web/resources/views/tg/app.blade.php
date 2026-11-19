@@ -85,7 +85,7 @@
       pointBtn: '📍 Obyekt shu yerda — tasdiqlash', pointKnown: 'Obyektning tasdiqlangan joyi ko‘rsatilgan. To‘g‘ri bo‘lsa, tasdiqlang.', mapErr: 'Xarita yuklanmadi. Internetni tekshirib, qayta oching.',
       locHint: 'Obyekt yonida turib, o‘z joylashuvingizni yuboring.', locBtn: '📍 Joylashuvni aniqlash', locWait: 'Joylashuv aniqlanmoqda…',
       locDenied: 'Joylashuvga ruxsat berilmagan.', openSettings: 'Ruxsatni yoqish', retry: 'Qayta urinish', locNone: 'Joylashuv aniqlanmadi. GPS yoqilganini tekshirib, qayta urinib ko‘ring.',
-      camStart: '📷 Kamerani yoqish', shot: '📸 Rasmga olish', retake: 'Qayta olish', send: 'Yuborish', camErr: 'Kamera ochilmadi. Telegram’ga kameraga ruxsat bering.',
+      camStart: '📷 Kamerani yoqish', shot: '📸 Rasmga olish', retake: 'Qayta olish', send: 'Yuborish', camErr: 'Kamera ochilmadi. Telegram’ga kameraga ruxsat bering: iPhone — Sozlamalar → Telegram → Kamera; Android — Sozlamalar → Ilovalar → Telegram → Ruxsatlar → Kamera → Ruxsat berish. Keyin «📷 Kamerani yoqish»ni qayta bosing.', micOff: '🎤 Mikrofon yoqilmagan — video ovozsiz yoziladi.', micHelp: 'Ruxsat oynasi chiqmasa: iPhone — Sozlamalar → Telegram → Mikrofon; Android — Sozlamalar → Ilovalar → Telegram → Ruxsatlar → Mikrofon → Ruxsat berish. Keyin pastdagi tugmani bosing.', micOn: '🎤 Mikrofonni yoqish', micOk: '🎤 Mikrofon yoqildi — video ovoz bilan yoziladi.',
       photoHint: 'Obyektni (peshtaxta va fasad) to‘liq ko‘rinadigan qilib rasmga oling.', rotate: '↻ Aylantirish (rasm yonboshlab chiqsa)',
       videoHint: '3–15 soniyalik video: obyekt va atrofi. Yozish 15 soniyada o‘zi to‘xtaydi.', recStart: '⏺ Yozishni boshlash', recStop: '⏹ To‘xtatish',
       recShort: 'Video kamida 3 soniya bo‘lsin.', recNo: 'Bu qurilmada video yozib bo‘lmaydi. Telegram va telefon tizimini yangilang.', cancel: 'Bekor qilish', slow: 'Yuborish juda uzoq davom etdi. Internetni tekshirib, qayta yuboring.', uploading: 'Yuborilmoqda…', commentHint: 'Nima qilindi? Masalan: “Eski peshtaxta olib tashlandi, yangisi buyurtma qilingan”.',
@@ -104,7 +104,7 @@
       pointBtn: '📍 Объект здесь — подтвердить', pointKnown: 'Показано подтверждённое место объекта. Если верно — подтвердите.', mapErr: 'Карта не загрузилась. Проверьте интернет и откройте снова.',
       locHint: 'Встаньте у объекта и отправьте своё местоположение.', locBtn: '📍 Определить местоположение', locWait: 'Определяем местоположение…',
       locDenied: 'Нет доступа к местоположению.', openSettings: 'Разрешить доступ', retry: 'Повторить', locNone: 'Не удалось определить местоположение. Проверьте GPS и попробуйте снова.',
-      camStart: '📷 Включить камеру', shot: '📸 Сфотографировать', retake: 'Переснять', send: 'Отправить', camErr: 'Камера не открылась. Разрешите Telegram доступ к камере.',
+      camStart: '📷 Включить камеру', shot: '📸 Сфотографировать', retake: 'Переснять', send: 'Отправить', micOff: '🎤 Микрофон не включён — видео запишется без звука.', micHelp: 'Если окно разрешения не появилось: iPhone — Настройки → Telegram → Микрофон; Android — Настройки → Приложения → Telegram → Разрешения → Микрофон → Разрешить. Затем нажмите кнопку ниже.', micOn: '🎤 Включить микрофон', micOk: '🎤 Микрофон включён — видео запишется со звуком.', camErr: 'Камера не открылась. Разрешите Telegram доступ к камере.',
       photoHint: 'Сфотографируйте объект так, чтобы вывеска и фасад были видны полностью.', rotate: '↻ Повернуть (если фото боком)',
       videoHint: 'Видео 3–15 секунд: объект и окрестности. Запись остановится сама через 15 секунд.', recStart: '⏺ Начать запись', recStop: '⏹ Остановить',
       recShort: 'Видео должно быть не короче 3 секунд.', recNo: 'На этом устройстве нельзя записать видео. Обновите Telegram и систему телефона.', cancel: 'Отменить', slow: 'Отправка заняла слишком долго. Проверьте интернет и отправьте снова.', uploading: 'Отправка…', commentHint: 'Что сделано? Например: «Старая вывеска снята, новая заказана».',
@@ -611,12 +611,23 @@
 
   function stepVideo(bar, draft, next) {
     h(bar + '<h3>' + t('st4') + '</h3><p class="muted">' + t('videoHint') + '</p><video id="v" autoplay playsinline muted></video>' +
-      '<p class="center"><span id="timer"></span></p><div id="err" class="err"></div>' +
+      '<p class="center"><span id="timer"></span></p><div id="err" class="err"></div><div id="mic"></div>' +
       '<button class="btn" id="cam">' + t('camStart') + '</button><button class="btn danger" id="rec" hidden>' + t('recStart') + '</button>' +
       '<button class="btn" id="send" hidden>' + t('send') + '</button><button class="btn alt" id="again" hidden>' + t('retake') + '</button>');
     var v = document.getElementById('v'), cam = document.getElementById('cam'), rec = document.getElementById('rec'), send = document.getElementById('send'),
       again = document.getElementById('again'), timer = document.getElementById('timer'), recorder = null, chunks = [], started = 0, tick = null, blob = null, type = '';
-    function live() { send.hidden = again.hidden = true; rec.hidden = false; rec.textContent = t('recStart'); cam.hidden = true; timer.textContent = ''; v.srcObject = stream; v.controls = false; }
+    function live() { send.hidden = again.hidden = true; rec.hidden = false; rec.textContent = t('recStart'); cam.hidden = true; timer.textContent = ''; v.srcObject = stream; v.controls = false; micState(); }
+    // no sound track (the microphone was refused): say so, how to allow it, and a button that asks again
+    var micBox = document.getElementById('mic'), hadNoMic = false;
+    function micState() {
+      var on = stream && stream.getAudioTracks && stream.getAudioTracks().length > 0;
+      if (on) { micBox.innerHTML = hadNoMic ? '<p class="ok">' + t('micOk') + '</p>' : ''; return; }
+      hadNoMic = true;
+      micBox.innerHTML = '<div class="card"><b>' + t('micOff') + '</b><p class="muted">' + t('micHelp') + '</p>' +
+        '<button class="btn alt" id="micon">' + t('micOn') + '</button></div>';
+      var b = document.getElementById('micon');
+      b.onclick = function () { if (recorder && recorder.state === 'recording') return; busy(b, function () { return openCamera(v, true).then(live); }); };
+    }
     cam.onclick = function () { busy(cam, function () { return openCamera(v, true).then(live); }); };
     function pickType() {
       // with the sound track: the codec lists name the audio too (a video-only "codecs=avc1" would drop it)
