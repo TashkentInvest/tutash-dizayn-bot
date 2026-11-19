@@ -90,7 +90,7 @@ class DistrictStaff extends Page implements HasTable
                             ->helperText('Boshqa tumandagi xodimni tanlasangiz, u shu tumanga o‘tadi. Ro‘yxatdan olib tashlangan xodim '
                                 .'hech qaysi tumanga biriktirilmagan bo‘lib qoladi (bot bilan bog‘lanishi va dalillari saqlanadi). '
                                 .'Yangi xodim: ro‘yxat oxiridagi “+” tugmasi.')
-                            ->createOptionForm([StaffResource::nameField(), StaffResource::phoneField()])
+                            ->createOptionForm([StaffResource::nameField(), StaffResource::phoneField(), StaffResource::phoneField('phone2', false)])
                             ->createOptionModalHeading('Yangi xodim')
                             ->createOptionUsing(fn (array $data) => Staff::create($data + ['is_active' => true])->getKey()),
                     ])

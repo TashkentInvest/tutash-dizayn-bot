@@ -788,6 +788,15 @@ class StaffAppTest extends TestCase
         Livewire::test(ManageStaff::class)->callTableAction('link', $other, ['user_id' => 888001]);
         $this->assertNull($s->fresh()->user_id);
         $this->assertSame(888001, $other->fresh()->user_id);
+
+        // a second number: optional, normalised, not taken twice; the staff list finds it
+        Livewire::test(ManageStaff::class)->callAction('create', ['full_name' => 'Ikki Raqamli', 'phone' => '+998901110044',
+            'phone2' => '91 003 04 90', 'district_id' => $this->district, 'is_active' => true])->assertHasNoActionErrors();
+        $two = Staff::query()->where('full_name', 'Ikki Raqamli')->firstOrFail();
+        $this->assertSame('+998910030490', $two->phone2);
+        Livewire::test(ManageStaff::class)->callAction('create', ['full_name' => 'Takror', 'phone' => '+998910030490',
+            'district_id' => $this->district, 'is_active' => true])->assertHasActionErrors(['phone']);
+        Livewire::test(ManageStaff::class)->searchTable('910030490')->assertCanSeeTableRecords([$two])->assertCanNotSeeTableRecords([$s]);
     }
 
     public function test_staff_bot_state_and_a_notice_when_added_while_already_in_the_bot(): void

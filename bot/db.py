@@ -376,7 +376,7 @@ def _added_columns():
                          "path": "TEXT"}),  # the real shape, [[lat, lon], ...] (tools/import_street_lines.py); else start -> end
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
             # a personal invite link from the dashboard (t.me/<bot>?start=s_<token>): links a staff member whatever number they joined with
-            ("staff", {"invite_token": "TEXT", "invite_expires": "TEXT"}),
+            ("staff", {"invite_token": "TEXT", "invite_expires": "TEXT", "phone2": "TEXT"}),
             ("outbox", {"photo": "TEXT"}),  # a picture (path under UPLOADS_DIR) sent with the text as its caption
             # which scheduled reports a recipient gets (Sozlamalar): the svod pictures and the attendance at 18:00, hourly status
             ("report_recipients", {"daily_report": "BOOLEAN NOT NULL DEFAULT TRUE", "attendance_report": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -622,7 +622,8 @@ def staff_by_user(user_id: int) -> dict | None:
 
 def staff_by_phone(phone: str) -> dict | None:
     with _db() as c:
-        row = c.execute("SELECT * FROM staff WHERE phone=? AND is_active = TRUE", (phone,)).fetchone()
+        # either of the staff member's numbers (phone2: a second one, set in the dashboard)
+        row = c.execute("SELECT * FROM staff WHERE (phone=? OR phone2=?) AND is_active = TRUE", (phone, phone)).fetchone()
     return dict(row) if row else None
 
 

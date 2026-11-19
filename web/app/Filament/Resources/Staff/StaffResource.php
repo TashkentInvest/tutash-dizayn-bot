@@ -56,6 +56,7 @@ class StaffResource extends Resource
         return $schema->columns(2)->components([
             self::nameField(),
             self::phoneField(),
+            self::phoneField('phone2', false),
             Select::make('district_id')->label('Tuman')->live()->placeholder('Biriktirilmagan')
                 ->options(fn () => District::query()->orderBy('sort_order')->pluck('name', 'id')),
             Select::make('priority_streets')->label('Biriktirilgan ko‘chalar')->multiple()->searchable()
@@ -74,20 +75,30 @@ class StaffResource extends Resource
         return TextInput::make('full_name')->label('F.I.Sh.')->required()->maxLength(150);
     }
 
-    /** The phone, checked as it is stored: "90 123 45 67" and "+998901234567" are the same number. */
-    public static function phoneField(): TextInput
+    /**
+     * The phone, checked as it is stored: "90 123 45 67" and "+998901234567" are the same number. Used on the district
+     * page too ("Yangi xodim"), where the page's record is a District: only a Staff record is the one being edited.
+     */
+    public static function phoneField(string $name = 'phone', bool $required = true): TextInput
     {
-        return TextInput::make('phone')->label('Telefon')->tel()->required()->placeholder('+998 90 123 45 67')
-            ->helperText('Xodim botda shu raqamni “Raqamni yuborish” tugmasi bilan tasdiqlaydi.')
-            ->rules([fn (?Staff $record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+        return TextInput::make($name)->label($name === 'phone' ? 'Telefon' : 'Qo‘shimcha raqam (2-raqam)')->tel()->required($required)
+            ->placeholder('+998 90 123 45 67')
+            ->helperText($name === 'phone' ? 'Xodim botda shu raqamni “Raqamni yuborish” tugmasi bilan tasdiqlaydi.'
+                : 'Ixtiyoriy. Xodim botda shu raqam bilan ham tasdiqlay oladi.')
+            ->rules([fn ($record) => function (string $attribute, $value, \Closure $fail) use ($record) {
+                if (blank($value)) {
+                    return;
+                }
                 $phone = Phone::normalize($value);
+                $self = $record instanceof Staff ? $record->getKey() : null;
                 if ($phone === null) {
                     $fail('Raqam noto‘g‘ri. Namuna: +998 90 123 45 67');
-                } elseif (Staff::query()->where('phone', $phone)->when($record instanceof Staff, fn ($q) => $q->whereKeyNot($record->getKey()))->exists()) {
+                } elseif (Staff::query()->where(fn ($q) => $q->where('phone', $phone)->orWhere('phone2', $phone))
+                    ->when($self, fn ($q) => $q->whereKeyNot($self))->exists()) {
                     $fail('Bu raqam boshqa xodimga biriktirilgan.');
                 }
             }])
-            ->dehydrateStateUsing(fn ($state) => Phone::normalize($state));
+            ->dehydrateStateUsing(fn ($state) => blank($state) ? null : Phone::normalize($state));
     }
 
     public static function table(Table $table): Table
@@ -108,7 +119,8 @@ class StaffResource extends Resource
             ->columns([
                 TextColumn::make('full_name')->label('F.I.Sh.')->searchable()->weight('medium')
                     ->description(fn (Staff $s) => self::streetNames($s) ?: $s->streets_note),
-                TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable()->copyable(),
+                TextColumn::make('phone')->label('Telefon')->formatStateUsing(fn ($state) => Phone::pretty($state))->searchable(['phone', 'phone2'])->copyable()
+                    ->description(fn (Staff $s) => $s->phone2 ? '2-raqam: '.Phone::pretty($s->phone2) : null),
                 TextColumn::make('bot_state')->label('Botda')->badge()
                     ->state(fn (Staff $s) => $s->botState())
                     ->formatStateUsing(fn (string $state) => ['linked' => 'Tasdiqlangan', 'waiting' => 'Raqami botda bor, tasdiqlamagan', 'absent' => 'Bu raqam botda yo‘q'][$state])

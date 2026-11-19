@@ -524,11 +524,14 @@
     };
   }
 
-  function openCamera(videoEl) {
+  // withSound: the evidence video records the microphone too; refused or missing, it still records without it
+  function openCamera(videoEl, withSound) {
     stopCamera();
     var my = camReq;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject({ error: t('camErr') });
-    return navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+    var video = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } };
+    var ask = function (audio) { return navigator.mediaDevices.getUserMedia({ video: video, audio: audio }); };
+    return (withSound ? ask(true).catch(function () { return ask(false); }) : ask(false))
       .then(function (s) {
         if (my !== camReq) { s.getTracks().forEach(function (tr) { tr.stop(); }); return; }  // superseded: never leave a camera on
         stream = s; videoEl.srcObject = s; videoEl.muted = true; videoEl.setAttribute('playsinline', ''); return videoEl.play(); })
@@ -614,9 +617,10 @@
     var v = document.getElementById('v'), cam = document.getElementById('cam'), rec = document.getElementById('rec'), send = document.getElementById('send'),
       again = document.getElementById('again'), timer = document.getElementById('timer'), recorder = null, chunks = [], started = 0, tick = null, blob = null, type = '';
     function live() { send.hidden = again.hidden = true; rec.hidden = false; rec.textContent = t('recStart'); cam.hidden = true; timer.textContent = ''; v.srcObject = stream; v.controls = false; }
-    cam.onclick = function () { busy(cam, function () { return openCamera(v).then(live); }); };
+    cam.onclick = function () { busy(cam, function () { return openCamera(v, true).then(live); }); };
     function pickType() {
-      var c = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+      // with the sound track: the codec lists name the audio too (a video-only "codecs=avc1" would drop it)
+      var c = ['video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'];
       for (var i = 0; i < c.length; i++) { if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c[i])) return c[i]; }
       return '';
     }
@@ -636,7 +640,7 @@
       recorder.onstop = function () {
         clearInterval(tick); guardClose(false);
         blob = new Blob(chunks, { type: (type || 'video/webm').split(';')[0] });
-        v.srcObject = null; v.src = URL.createObjectURL(blob); v.controls = true; v.muted = true;
+        v.srcObject = null; v.src = URL.createObjectURL(blob); v.controls = true; v.muted = false;  // the recording is played back with its sound
         rec.hidden = true; send.hidden = again.hidden = false;
       };
       recorder.start(500); started = Date.now(); guardClose(true); rec.textContent = t('recStop');
@@ -646,7 +650,7 @@
         if (s >= 15) stop();
       }, 250);
     };
-    again.onclick = function () { busy(again, function () { return openCamera(v).then(live); }); };
+    again.onclick = function () { busy(again, function () { return openCamera(v, true).then(live); }); };
     send.onclick = function () {
       busy(send, function () {
         send.textContent = t('uploading');
