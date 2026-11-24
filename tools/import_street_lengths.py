@@ -25,7 +25,8 @@ def read_list(xlsx: str) -> list[tuple[str, str, float | None]]:
         for r in ws.iter_rows(values_only=True):
             r = list(r) + [None] * 3
             if isinstance(r[0], str) and r[0].strip().lower().endswith("тумани"):
-                district = r[0].strip()
+                # match() compares the district's last word: "Бектемир тумани" -> "Бектемир"
+                district = r[0].strip()[: -len("тумани")].strip()
             elif district and isinstance(r[0], (int, float)) and r[1]:
                 km = r[2] if isinstance(r[2], (int, float)) else None
                 rows.append((district, str(r[1]).strip(), float(km) if km is not None else None))
