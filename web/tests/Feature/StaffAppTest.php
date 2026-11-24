@@ -1032,6 +1032,9 @@ class StaffAppTest extends TestCase
         $this->assertSame([[69.27, 41.31], [69.27, 41.32], [69.285, 41.32]], $f['geometry']['coordinates']);
         $this->assertSame(3.5, $f['properties']['length_km']);
         $this->assertTrue($f['properties']['has_shape']);
+        $this->assertArrayHasKey('district_latin', $f['properties']);
+        $this->assertSame('Mirzo Ulug‘bek tumani', \App\Support\Latin::of('Мирзо Улуғбек тумани'));
+        $this->assertSame('Shayxontohur tumani', \App\Support\Latin::of('Шайхонтоҳур тумани'));
         $this->assertCount(0, $this->getJson('/api/v1/streets?district_id=999999', ['Authorization' => 'Bearer secret-test'])->json('features'));
     }
 }

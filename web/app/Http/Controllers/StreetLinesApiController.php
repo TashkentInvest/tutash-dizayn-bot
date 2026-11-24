@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Filament\Pages\ObjectsMap;
+use App\Support\Latin;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -35,8 +36,10 @@ class StreetLinesApiController extends Controller
                 'properties' => [
                     'id' => $s['id'],
                     'name' => $s['name'],
-                    'district_id' => $s['district_id'],
+                    'name_latin' => Latin::of($s['name']),
+                    'district_id' => $s['district_id'],          // this system's id (not SNOS's): match by name
                     'district' => $s['district'],
+                    'district_latin' => Latin::of($s['district']),  // "Mirzo Ulug‘bek tumani" (‘ U+2018)
                     'length_km' => $s['km'],           // the official list
                     'drawn_km' => $s['drawn_km'],      // the line as drawn
                     'has_shape' => $s['path'] !== null, // false: only start -> end is known
