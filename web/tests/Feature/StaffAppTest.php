@@ -1017,5 +1017,21 @@ class StaffAppTest extends TestCase
         $html = $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->assertSee('Uzunligi')->getContent();
         $this->assertStringContainsString('"km":3.5', $html);
         $this->assertMatchesRegularExpression('/"drawn_km":2\.3\d/', $html);  // 1.11 km north + 1.25 km east
+
+        // the same lines for SNOS: GeoJSON behind a bearer token, [lon, lat]
+        auth()->logout();
+        config(['bot.integration_token' => '']);
+        $this->getJson('/api/v1/streets', ['Authorization' => 'Bearer x'])->assertUnauthorized();  // no token set: closed
+        config(['bot.integration_token' => 'secret-test']);
+        $this->getJson('/api/v1/streets')->assertUnauthorized();
+        $this->getJson('/api/v1/streets', ['Authorization' => 'Bearer wrong'])->assertUnauthorized();
+        $geo = $this->getJson('/api/v1/streets', ['Authorization' => 'Bearer secret-test'])->assertOk()
+            ->assertJsonPath('type', 'FeatureCollection')->json('features');
+        $f = collect($geo)->firstWhere('id', $this->street);
+        $this->assertSame('LineString', $f['geometry']['type']);
+        $this->assertSame([[69.27, 41.31], [69.27, 41.32], [69.285, 41.32]], $f['geometry']['coordinates']);
+        $this->assertSame(3.5, $f['properties']['length_km']);
+        $this->assertTrue($f['properties']['has_shape']);
+        $this->assertCount(0, $this->getJson('/api/v1/streets?district_id=999999', ['Authorization' => 'Bearer secret-test'])->json('features'));
     }
 }

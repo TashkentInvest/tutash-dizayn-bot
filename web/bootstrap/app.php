@@ -12,7 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         // the staff Mini App: stateless (no session/cookie), authenticated by Telegram's initData signature
-        then: fn () => Route::prefix('tg')->group(base_path('routes/tg.php')),
+        // and the API other systems read (SNOS map): stateless too, a bearer token
+        then: function () {
+            Route::prefix('tg')->group(base_path('routes/tg.php'));
+            Route::prefix('api')->group(base_path('routes/api.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Behind nginx/Caddy: trust the proxy so client IPs (the login rate limit!) and https are seen correctly.

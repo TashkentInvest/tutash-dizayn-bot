@@ -38,11 +38,22 @@ class ObjectsMap extends Page
 
     protected function getViewData(): array
     {
+        $streets = self::streetLines();
+        $review = Inspection::query()->whereIn('review', Inspection::OPEN)->pluck('object_id')->flip();
+        return $this->viewData($streets, $review);
+    }
+
+    /**
+     * Every street that has a place, with its line and progress. Shared with the API other systems read
+     * (GET /api/v1/streets, SNOS map): one source for the map here and there.
+     */
+    public static function streetLines(): \Illuminate\Support\Collection
+    {
         $db = DB::connection('bot');
         $counts = $db->table('objects')->where('is_active', true)
             ->selectRaw("street_id, SUM(CASE WHEN status='removed' THEN 1 ELSE 0 END) AS removed, SUM(CASE WHEN status='installed' THEN 1 ELSE 0 END) AS installed")
             ->groupBy('street_id')->get()->keyBy('street_id');
-        $streets = $db->table('streets as s')->join('districts as d', 'd.id', '=', 's.district_id')
+        return $db->table('streets as s')->join('districts as d', 'd.id', '=', 's.district_id')
             ->whereNotNull('s.start_lat')->whereNotNull('s.end_lat')
             ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path', 's.length_km'])
             ->map(function ($s) use ($counts) {
@@ -64,8 +75,10 @@ class ObjectsMap extends Page
                     'pct' => $total ? round($installed / $total * 100, 1) : 0,
                 ];
             })->values();
+    }
 
-        $review = Inspection::query()->whereIn('review', Inspection::OPEN)->pluck('object_id')->flip();
+    private function viewData(\Illuminate\Support\Collection $streets, \Illuminate\Support\Collection $review): array
+    {
         $objects = DesignObject::query()->active()->with('street:id,name,district_id')
             ->where(fn ($q) => $q->whereNotNull('latitude')->orWhereNotNull('found_lat'))->get()
             ->map(fn (DesignObject $o) => [
