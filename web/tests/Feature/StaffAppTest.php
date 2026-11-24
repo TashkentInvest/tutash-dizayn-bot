@@ -1011,5 +1011,11 @@ class StaffAppTest extends TestCase
         config(['app.admin_emails' => [$admin->email]]);
         $this->actingAs($admin);
         $this->assertStringContainsString('"path":[[41.31,69.27],[41.32,69.27],[41.32,69.285]]', $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->getContent());
+
+        // the street's length from the official list is on the map (with the length of the line as drawn)
+        $db->table('streets')->where('id', $this->street)->update(['length_km' => 3.5]);
+        $html = $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->assertSee('Uzunligi')->getContent();
+        $this->assertStringContainsString('"km":3.5', $html);
+        $this->assertMatchesRegularExpression('/"drawn_km":2\.3\d/', $html);  // 1.11 km north + 1.25 km east
     }
 }

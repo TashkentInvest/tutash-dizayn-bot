@@ -46,6 +46,8 @@ class StreetResource extends Resource
                 ->helperText('Tuman ichida shu raqam bo‘yicha tartiblanadi'),
             TextInput::make('planned_objects')->label('Obyektlar soni (rasmiy ro‘yxat)')->integer()->minValue(0)->default(0)->required()
                 ->helperText('Dizayn-kod svodidagi “Jami obyekt”. Odatda Excel ro‘yxatidan import qilinadi (tools/import_object_plan.py).'),
+            TextInput::make('length_km')->label('Uzunligi (km)')->numeric()->minValue(0)->step(0.01)->suffix('km')
+                ->helperText('Rasmiy ro‘yxatdagi uzunlik. Xaritada chiziq bosilganda ko‘rinadi (tools/import_street_lengths.py).'),
             Toggle::make('is_active')->label('Botda ko‘rinsin')->default(true),
         ]);
     }
@@ -60,6 +62,8 @@ class StreetResource extends Resource
                 TextColumn::make('name')->label('Ko‘cha')->searchable(),
                 TextColumn::make('files_count')->label('Fayllar')->sortable(),
                 TextColumn::make('planned_objects')->label('Obyektlar (ro‘yxat)')->sortable(),
+                TextColumn::make('length_km')->label('Uzunligi')->sortable()
+                    ->formatStateUsing(fn ($state) => $state === null ? null : str_replace('.', ',', (string) round((float) $state, 2)).' km'),
                 ToggleColumn::make('is_active')->label('Botda ko‘rinadi'),
             ])
             ->filters([

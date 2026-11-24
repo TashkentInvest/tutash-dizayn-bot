@@ -44,17 +44,22 @@ class ObjectsMap extends Page
             ->groupBy('street_id')->get()->keyBy('street_id');
         $streets = $db->table('streets as s')->join('districts as d', 'd.id', '=', 's.district_id')
             ->whereNotNull('s.start_lat')->whereNotNull('s.end_lat')
-            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path'])
+            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path', 's.length_km'])
             ->map(function ($s) use ($counts) {
                 $total = (int) $s->planned_objects;
                 $installed = (int) ($counts[$s->id]->installed ?? 0);
                 $removed = (int) ($counts[$s->id]->removed ?? 0);
+                $path = ($p = json_decode((string) $s->path, true)) && count($p) >= 2 ? $p : null;
+                $line = [[(float) $s->start_lat, (float) $s->start_lon], [(float) $s->end_lat, (float) $s->end_lon]];
 
                 return [
                     'id' => $s->id, 'name' => $s->name, 'district' => $s->district, 'district_id' => (int) $s->district_id,
-                    'line' => [[(float) $s->start_lat, (float) $s->start_lon], [(float) $s->end_lat, (float) $s->end_lon]],
+                    'line' => $line,
                     // the real shape where a KMZ was imported (it follows the road), else null: the map draws start -> end
-                    'path' => ($p = json_decode((string) $s->path, true)) && count($p) >= 2 ? $p : null,
+                    'path' => $path,
+                    // the length of the official list, and the length of the line as drawn (to compare)
+                    'km' => $s->length_km !== null ? round((float) $s->length_km, 2) : null,
+                    'drawn_km' => round(self::lengthKm($path ?? $line), 2),
                     'total' => $total, 'installed' => $installed, 'removed' => $removed,
                     'pct' => $total ? round($installed / $total * 100, 1) : 0,
                 ];
@@ -77,8 +82,24 @@ class ObjectsMap extends Page
             'districts' => District::query()->orderBy('sort_order')->pluck('name', 'id'),
             'totals' => [
                 'streets' => $streets->count(), 'planned' => $streets->sum('total'), 'objects' => $objects->count(),
+                'km' => str_replace('.', ',', (string) round((float) $streets->sum('km'), 1)),
                 'pct' => DesignCodeSvod::pct(($p = $streets->sum('total')) ? round($streets->sum('installed') / $p * 100, 1) : 0),
             ],
         ];
+    }
+
+    /** @param  list<array{0: float, 1: float}>  $pts  kilometres along the points (great-circle) */
+    public static function lengthKm(array $pts): float
+    {
+        $km = 0.0;
+        for ($i = 0; $i + 1 < count($pts); $i++) {
+            [$a, $b] = [$pts[$i], $pts[$i + 1]];
+            $dLat = deg2rad((float) $b[0] - (float) $a[0]);
+            $dLon = deg2rad((float) $b[1] - (float) $a[1]);
+            $h = sin($dLat / 2) ** 2 + cos(deg2rad((float) $a[0])) * cos(deg2rad((float) $b[0])) * sin($dLon / 2) ** 2;
+            $km += 2 * 6371.0088 * asin(min(1.0, sqrt($h)));
+        }
+
+        return $km;
     }
 }

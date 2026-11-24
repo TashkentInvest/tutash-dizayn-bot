@@ -35,6 +35,7 @@
             </select>
         </label>
         <span class="omap-stat">Ko‘chalar: <b>{{ $totals['streets'] }}</b></span>
+        <span class="omap-stat">Uzunligi: <b>{{ $totals['km'] }} km</b></span>
         <span class="omap-stat">Ro‘yxatdagi obyektlar: <b>{{ $totals['planned'] }}</b></span>
         <span class="omap-stat">Xaritadagi obyektlar: <b>{{ $totals['objects'] }}</b></span>
         <span class="omap-stat">Bajarilish: <b>{{ $totals['pct'] }}</b></span>
@@ -83,7 +84,10 @@
                 var at = function (p, label) {
                     return '<br>' + label + ': <a href="#" data-fly="' + p[0] + ',' + p[1] + '"><code>' + p[0].toFixed(6) + ', ' + p[1].toFixed(6) + '</code></a>';
                 };
+                var km = function (v) { return String(v).replace('.', ',') + ' km'; };
                 return '<b>' + esc(s.name) + '</b><br>' + esc(s.district) + (s.path ? ' · <span style="color:' + RED + '">KMZ chizig‘i</span>' : '') +
+                    '<br>Uzunligi: <b>' + (s.km !== null ? km(s.km) : '—') + '</b>' +
+                    ' <span style="opacity:.7">(xaritada chizilgani: ' + km(s.drawn_km) + (s.path ? '' : ', to‘g‘ri chiziq') + ')</span>' +
                     '<br>Jami obyekt: <b>' + s.total + '</b> · ' + statusName.removed + ': ' + s.removed + ' · ' + statusName.installed + ': ' + s.installed +
                     '<br>Bajarilish: <b>' + String(s.pct).replace('.', ',') + '%</b>' +
                     at(s.line[0], 'Дан (boshlanishi)') + at(s.line[1], 'Гача (tugashi)');
@@ -108,9 +112,9 @@
                     });
                     line.bindPopup(popup(s));
                     if (s.path) {
-                        line.bindTooltip(esc(s.name), { permanent: true, direction: 'center', className: 'omap-label' });
+                        line.bindTooltip(esc(s.name) + (s.km !== null ? ' · ' + String(s.km).replace('.', ',') + ' km' : ''), { permanent: true, direction: 'center', className: 'omap-label' });
                     } else {
-                        line.bindTooltip(esc(s.name) + ' · ' + String(s.pct).replace('.', ',') + '%', { sticky: true });
+                        line.bindTooltip(esc(s.name) + (s.km !== null ? ' · ' + String(s.km).replace('.', ',') + ' km' : '') + ' · ' + String(s.pct).replace('.', ',') + '%', { sticky: true });
                     }
                 });
                 data.objects.filter(function (o) { return !district || o.district_id === district; }).forEach(function (o) {
