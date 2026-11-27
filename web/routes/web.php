@@ -62,6 +62,19 @@ Route::middleware(['auth', 'can:access-admin'])->get('/bot-inspection/{inspectio
     return response()->file($file, ['Content-Type' => $type, 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => 'sandbox']);
 })->name('bot-inspection-media');
 
+// a post's picture or video ("Postlar"), from the bot's uploads folder: admins only
+Route::middleware(['auth', 'can:access-admin'])->get('/bot-post/{post}/media', function (\App\Models\Post $post) {
+    abort_unless($post->media_path, 404);
+    $root = realpath((string) config('filesystems.disks.bot_uploads.root'));
+    $file = $root ? realpath($root.DIRECTORY_SEPARATOR.$post->media_path) : false;
+    abort_unless($file && str_starts_with($file, $root.DIRECTORY_SEPARATOR) && is_file($file), 404);
+    $type = $post->media_type === 'video'
+        ? (strtolower(pathinfo($file, PATHINFO_EXTENSION)) === 'mov' ? 'video/quicktime' : 'video/mp4')
+        : (mime_content_type($file) ?: 'image/jpeg');
+
+    return response()->file($file, ['Content-Type' => $type, 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => 'sandbox']);
+})->name('bot-post-media');
+
 // Some phones save the evidence photo sideways: the moderator turns it upright in the review window (the file itself is turned)
 Route::middleware(['auth', 'can:access-admin'])->post('/bot-inspection/{inspection}/photo/rotate/{dir}', function (\App\Models\Inspection $inspection, string $dir) {
     abort_unless(in_array($dir, ['left', 'right'], true) && $inspection->photo && function_exists('imagerotate'), 404);

@@ -178,6 +178,44 @@ CREATE TABLE IF NOT EXISTS outbox (
     sent_at    TEXT,
     error      TEXT
 );
+-- A post from the dashboard ("Post yuborish"): a picture or video and a text, to the people the admin ticked. The bot
+-- sends it (post_worker) and keeps every message id, so the post can be taken back from the chats within 48 hours.
+CREATE TABLE IF NOT EXISTS posts (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    caption            TEXT,
+    media_type         TEXT,                      -- photo | video | NULL (text only)
+    media_path         TEXT,                      -- under UPLOADS_DIR
+    media_width        INTEGER,                   -- the video's frame (turned upright), so Telegram does not stretch it
+    media_height       INTEGER,
+    media_duration     INTEGER,
+    file_id            TEXT,                      -- Telegram's id of the uploaded file: uploaded once, then reused
+    audience           TEXT,                      -- JSON: the groups and districts the admin chose
+    ack_button         BOOLEAN NOT NULL DEFAULT TRUE,
+    status             TEXT NOT NULL DEFAULT 'sending',  -- sending | sent
+    total              INTEGER NOT NULL DEFAULT 0,
+    delivered          INTEGER NOT NULL DEFAULT 0,
+    failed             INTEGER NOT NULL DEFAULT 0,
+    created_by         INTEGER,                   -- the dashboard user
+    created_at         TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at        TEXT,
+    recalled_at        TEXT,                      -- "Botdan o'chirish" asked
+    recalled           INTEGER NOT NULL DEFAULT 0,
+    recall_failed      INTEGER NOT NULL DEFAULT 0,
+    recall_finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS post_deliveries (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id      INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    user_id      INTEGER NOT NULL,                -- Telegram id (users.user_id)
+    status       TEXT NOT NULL DEFAULT 'pending', -- pending | sent | failed
+    message_id   INTEGER,
+    sent_at      TEXT,
+    ack_at       TEXT,                            -- pressed "Tanishdim"
+    recalled_at  TEXT,
+    error        TEXT,
+    recall_error TEXT,
+    UNIQUE (post_id, user_id)
+);
 """
 
 
@@ -204,7 +242,7 @@ class Row:
 
 # tables whose rows have an "id": an INSERT into them returns it (lastrowid) on PostgreSQL too
 _ID_TABLES = {"downloads", "user_photos", "districts", "streets", "street_files", "feedback", "staff", "objects",
-              "inspections", "outbox"}
+              "inspections", "outbox", "posts", "post_deliveries"}
 
 
 def _pg_sql(sql: str, has_params: bool = True) -> tuple[str, bool]:
@@ -223,6 +261,7 @@ class _PgCursor:
     def __init__(self, cur, want_id: bool):
         self._cur = cur
         self.lastrowid = cur.fetchone()[0] if want_id else None
+        self.rowcount = cur.rowcount  # rows an UPDATE / DELETE changed, as sqlite3 gives it
 
     def fetchone(self):
         return self._cur.fetchone() if self._cur.description else None
@@ -341,6 +380,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_files_path ON street_files(path);
 CREATE INDEX IF NOT EXISTS idx_inspections_photo_hash ON inspections(photo_hash);
 CREATE INDEX IF NOT EXISTS idx_inspections_video_hash ON inspections(video_hash);
 CREATE INDEX IF NOT EXISTS idx_outbox_unsent ON outbox(id) WHERE sent_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_post_deliveries_pending ON post_deliveries(post_id, id) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_post_deliveries_user ON post_deliveries(user_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_unanswered ON feedback(id) WHERE answer IS NULL;
 CREATE INDEX IF NOT EXISTS idx_feedback_undelivered ON feedback(answered_at) WHERE answer IS NOT NULL AND answer_sent_at IS NULL;
 """
@@ -699,6 +740,89 @@ def mark_outbox_sent(msg_id: int, error: str | None = None) -> None:
     with _db() as c:
         c.execute("UPDATE outbox SET sent_at=datetime('now'), error=? WHERE id=?", (error, msg_id))
         c.commit()
+
+
+# --- posts ("Post yuborish" in the dashboard): the bot sends them and takes them back ---
+
+def posts_to_send() -> list:
+    with _db() as c:
+        return c.execute("SELECT * FROM posts WHERE status='sending' ORDER BY id").fetchall()
+
+
+def pending_deliveries(post_id: int, limit: int = 50) -> list:
+    with _db() as c:
+        return c.execute("SELECT id, user_id FROM post_deliveries WHERE post_id=? AND status='pending' ORDER BY id LIMIT ?",
+                         (post_id, limit)).fetchall()
+
+
+def mark_delivery(delivery_id: int, message_id: int | None, error: str | None = None) -> None:
+    with _db() as c:
+        c.execute("UPDATE post_deliveries SET status=?, message_id=?, error=?, sent_at=datetime('now') WHERE id=?",
+                  ("failed" if error else "sent", message_id, error, delivery_id))
+        c.commit()
+
+
+def set_post_file_id(post_id: int, file_id: str) -> None:
+    with _db() as c:
+        c.execute("UPDATE posts SET file_id=? WHERE id=?", (file_id, post_id))
+        c.commit()
+
+
+def count_post(post_id: int) -> bool:
+    """Writes the post's delivered / failed counts; once nobody is left waiting, the post is sent. True: finished."""
+    with _db() as c:
+        r = c.execute("SELECT SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END), SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END), "
+                      "SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) FROM post_deliveries WHERE post_id=?", (post_id,)).fetchone()
+        done = not (r[2] or 0)
+        c.execute("UPDATE posts SET delivered=?, failed=?" + (", status='sent', finished_at=datetime('now')" if done else "")
+                  + " WHERE id=?", (r[0] or 0, r[1] or 0, post_id))
+        c.commit()
+    return done
+
+
+def posts_to_recall() -> list:
+    with _db() as c:
+        return c.execute("SELECT id FROM posts WHERE recalled_at IS NOT NULL AND recall_finished_at IS NULL "
+                         "AND status='sent' ORDER BY id").fetchall()
+
+
+def recall_queue(post_id: int, limit: int = 50) -> list:
+    with _db() as c:
+        return c.execute("SELECT id, user_id, message_id FROM post_deliveries WHERE post_id=? AND status='sent' "
+                         "AND message_id IS NOT NULL AND recalled_at IS NULL AND recall_error IS NULL ORDER BY id LIMIT ?",
+                         (post_id, limit)).fetchall()
+
+
+def mark_recalled(delivery_id: int, error: str | None = None) -> None:
+    with _db() as c:
+        if error:
+            c.execute("UPDATE post_deliveries SET recall_error=? WHERE id=?", (error, delivery_id))
+        else:
+            c.execute("UPDATE post_deliveries SET recalled_at=datetime('now') WHERE id=?", (delivery_id,))
+        c.commit()
+
+
+def count_recall(post_id: int) -> bool:
+    """Writes how many were taken back and how many could not be; True once nothing is left to take back."""
+    with _db() as c:
+        r = c.execute("SELECT SUM(CASE WHEN recalled_at IS NOT NULL THEN 1 ELSE 0 END), "
+                      "SUM(CASE WHEN recall_error IS NOT NULL THEN 1 ELSE 0 END), "
+                      "SUM(CASE WHEN recalled_at IS NULL AND recall_error IS NULL THEN 1 ELSE 0 END) "
+                      "FROM post_deliveries WHERE post_id=? AND status='sent' AND message_id IS NOT NULL", (post_id,)).fetchone()
+        done = not (r[2] or 0)
+        c.execute("UPDATE posts SET recalled=?, recall_failed=?" + (", recall_finished_at=datetime('now')" if done else "")
+                  + " WHERE id=?", (r[0] or 0, r[1] or 0, post_id))
+        c.commit()
+    return done
+
+
+def ack_post(post_id: int, user_id: int) -> bool:
+    """ "Tanishdim" pressed: the first press is kept (True when this press was the first)."""
+    with _db() as c:
+        cur = c.execute("UPDATE post_deliveries SET ack_at=datetime('now') WHERE post_id=? AND user_id=? AND ack_at IS NULL",
+                        (post_id, user_id))
+        c.commit()
+        return cur.rowcount > 0
 
 
 def get_cached(path: str, size: int, mtime: int) -> str | None:

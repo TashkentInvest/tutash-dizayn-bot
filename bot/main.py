@@ -25,7 +25,7 @@ from aiogram.types import (
     WebAppInfo,
 )
 
-from . import adb, catalog, config, db, registration, web
+from . import adb, catalog, config, db, posts, registration, web
 from .config import (
     BOT_TOKEN,
     DATA_DIR,
@@ -673,16 +673,20 @@ async def main():
     private_only(router)
     private_only(menu)
     private_only(registration.router)
+    private_only(posts.router)
+    dp.include_router(posts.router)  # "Tanishdim" under a post: for anyone, registered or not
     dp.include_router(router)
     dp.include_router(menu)
     dp.include_router(registration.router)
     runner = await web.start_web()
     answers = asyncio.create_task(deliver_answers(bot))
+    post_jobs = asyncio.create_task(posts.post_worker(bot))  # "Post yuborish" from the dashboard
     await set_commands(bot)
     try:
         await dp.start_polling(bot)
     finally:
         answers.cancel()
+        post_jobs.cancel()
         await runner.cleanup()
 
 

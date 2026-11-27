@@ -18,4 +18,9 @@ class Dashboard extends BaseDashboard
     {
         return ['md' => 1, 'lg' => 2, '2xl' => 3];
     }
+
+    protected function getHeaderActions(): array
+    {
+        return [\App\Filament\Actions\PostAction::make()];
+    }
 }

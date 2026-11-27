@@ -46,6 +46,20 @@ return [
             'report' => false,
         ],
 
+        // The bot's uploads/ folder (evidence, post pictures and videos): not served by the web server, only through
+        // the admin routes; the bot reads the post files from here, hence the same group permissions as bot_data.
+        'bot_uploads' => [
+            'driver' => 'local',
+            'root' => env('BOT_UPLOADS_PATH', base_path('../uploads')),
+            'visibility' => 'private',
+            'permissions' => [
+                'file' => ['public' => 0660, 'private' => 0660],
+                'dir' => ['public' => 02770, 'private' => 02770],
+            ],
+            'throw' => false,
+            'report' => false,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
