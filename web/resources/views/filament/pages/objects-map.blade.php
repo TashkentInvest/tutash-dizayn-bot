@@ -36,6 +36,7 @@
         </label>
         <span class="omap-stat">Ko‘chalar: <b>{{ $totals['streets'] }}</b></span>
         <span class="omap-stat">Uzunligi: <b>{{ $totals['km'] }} km</b></span>
+        <span class="omap-stat">Noturar obyektlar: <b>{{ $totals['nonres'] }}</b></span>
         <span class="omap-stat">Ro‘yxatdagi obyektlar: <b>{{ $totals['planned'] }}</b></span>
         <span class="omap-stat">Xaritadagi obyektlar: <b>{{ $totals['objects'] }}</b></span>
         <span class="omap-stat">Bajarilish: <b>{{ $totals['pct'] }}</b></span>
@@ -87,6 +88,7 @@
                 var km = function (v) { return String(v).replace('.', ',') + ' km'; };
                 return '<b>' + esc(s.name) + '</b><br>' + esc(s.district) + (s.path ? ' · <span style="color:' + RED + '">KMZ chizig‘i</span>' : '') +
                     '<br>Uzunligi: <b>' + (s.km !== null ? km(s.km) : '—') + '</b>' +
+                    ' · Noturar obyektlar: <b>' + (s.nonres !== null ? s.nonres : '—') + '</b>' +
                     ' <span style="opacity:.7">(xaritada chizilgani: ' + km(s.drawn_km) + (s.path ? '' : ', to‘g‘ri chiziq') + ')</span>' +
                     '<br>Jami obyekt: <b>' + s.total + '</b> · ' + statusName.removed + ': ' + s.removed + ' · ' + statusName.installed + ': ' + s.installed +
                     '<br>Bajarilish: <b>' + String(s.pct).replace('.', ',') + '%</b>' +

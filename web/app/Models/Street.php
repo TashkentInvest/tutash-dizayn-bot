@@ -19,11 +19,17 @@ class Street extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'sort_order' => 'integer', 'planned_objects' => 'integer', 'path' => 'array', 'length_km' => 'float'];
+        return ['is_active' => 'boolean', 'sort_order' => 'integer', 'planned_objects' => 'integer', 'path' => 'array', 'length_km' => 'float', 'nonres_objects' => 'integer'];
     }
 
     protected static function booted(): void
     {
+        // the official count of non-residential objects is fixed once set (the database refuses it too: a trigger)
+        static::updating(function (Street $s) {
+            if ($s->isDirty('nonres_objects') && $s->getOriginal('nonres_objects') !== null) {
+                throw new \RuntimeException('Noturar obyektlar soni rasmiy ro‘yxatdan kiritilgan va o‘zgartirilmaydi.');
+            }
+        });
         static::deleting(fn (Street $s) => $s->files()->get()->each->delete());
     }
 

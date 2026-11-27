@@ -41,6 +41,7 @@ class StreetLinesApiController extends Controller
                     'district' => $s['district'],
                     'district_latin' => Latin::of($s['district']),  // "Mirzo Ulug‘bek tumani" (‘ U+2018)
                     'length_km' => $s['km'],           // the official list
+                    'nonres_objects' => $s['nonres'],  // non-residential objects, official 1st-stage list (fixed)
                     'drawn_km' => $s['drawn_km'],      // the line as drawn
                     'has_shape' => $s['path'] !== null, // false: only start -> end is known
                     'objects_total' => $s['total'],

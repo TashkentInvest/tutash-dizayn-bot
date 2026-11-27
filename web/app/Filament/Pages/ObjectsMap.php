@@ -55,7 +55,7 @@ class ObjectsMap extends Page
             ->groupBy('street_id')->get()->keyBy('street_id');
         return $db->table('streets as s')->join('districts as d', 'd.id', '=', 's.district_id')
             ->whereNotNull('s.start_lat')->whereNotNull('s.end_lat')
-            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path', 's.length_km'])
+            ->get(['s.id', 's.name', 's.district_id', 'd.name as district', 's.planned_objects', 's.start_lat', 's.start_lon', 's.end_lat', 's.end_lon', 's.path', 's.length_km', 's.nonres_objects'])
             ->map(function ($s) use ($counts) {
                 $total = (int) $s->planned_objects;
                 $installed = (int) ($counts[$s->id]->installed ?? 0);
@@ -70,6 +70,7 @@ class ObjectsMap extends Page
                     'path' => $path,
                     // the length of the official list, and the length of the line as drawn (to compare)
                     'km' => $s->length_km !== null ? round((float) $s->length_km, 2) : null,
+                    'nonres' => $s->nonres_objects !== null ? (int) $s->nonres_objects : null,  // official, fixed
                     'drawn_km' => round(self::lengthKm($path ?? $line), 2),
                     'total' => $total, 'installed' => $installed, 'removed' => $removed,
                     'pct' => $total ? round($installed / $total * 100, 1) : 0,
@@ -96,6 +97,7 @@ class ObjectsMap extends Page
             'totals' => [
                 'streets' => $streets->count(), 'planned' => $streets->sum('total'), 'objects' => $objects->count(),
                 'km' => str_replace('.', ',', (string) round((float) $streets->sum('km'), 1)),
+                'nonres' => number_format((int) $streets->sum('nonres'), 0, ',', ' '),
                 'pct' => DesignCodeSvod::pct(($p = $streets->sum('total')) ? round($streets->sum('installed') / $p * 100, 1) : 0),
             ],
         ];

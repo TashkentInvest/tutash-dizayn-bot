@@ -48,6 +48,9 @@ class StreetResource extends Resource
                 ->helperText('Dizayn-kod svodidagi “Jami obyekt”. Odatda Excel ro‘yxatidan import qilinadi (tools/import_object_plan.py).'),
             TextInput::make('length_km')->label('Uzunligi (km)')->numeric()->minValue(0)->step(0.01)->suffix('km')
                 ->helperText('Rasmiy ro‘yxatdagi uzunlik. Xaritada chiziq bosilganda ko‘rinadi (tools/import_street_lengths.py).'),
+            // fixed: shown, never edited (tools/import_nonres_objects.py writes it once; the database refuses changes)
+            TextInput::make('nonres_objects')->label('Noturar obyektlar soni (rasmiy ro‘yxat)')->disabled()->dehydrated(false)
+                ->placeholder('kiritilmagan')->helperText('1-bosqich ro‘yxatidan bir marta kiritiladi va o‘zgarmaydi.'),
             Toggle::make('is_active')->label('Botda ko‘rinsin')->default(true),
         ]);
     }
@@ -64,6 +67,8 @@ class StreetResource extends Resource
                 TextColumn::make('planned_objects')->label('Obyektlar (ro‘yxat)')->sortable(),
                 TextColumn::make('length_km')->label('Uzunligi')->sortable()
                     ->formatStateUsing(fn ($state) => $state === null ? null : str_replace('.', ',', (string) round((float) $state, 2)).' km'),
+                TextColumn::make('nonres_objects')->label('Noturar obyektlar')->sortable()->placeholder('—')
+                    ->tooltip('Rasmiy ro‘yxat (1-bosqich): o‘zgarmaydi'),
                 ToggleColumn::make('is_active')->label('Botda ko‘rinadi'),
             ])
             ->filters([

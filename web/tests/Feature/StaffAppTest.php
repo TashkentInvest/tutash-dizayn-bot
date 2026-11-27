@@ -1037,4 +1037,39 @@ class StaffAppTest extends TestCase
         $this->assertSame('Shayxontohur tumani', \App\Support\Latin::of('Шайхонтоҳур тумани'));
         $this->assertCount(0, $this->getJson('/api/v1/streets?district_id=999999', ['Authorization' => 'Bearer secret-test'])->json('features'));
     }
+
+    public function test_the_official_nonresidential_count_is_written_once_and_never_changes(): void
+    {
+        $db = DB::connection('bot');
+        $db->table('streets')->where('id', $this->street)->update(['path' => json_encode([[41.31, 69.27], [41.32, 69.27]]),
+            'start_lat' => 41.31, 'start_lon' => 69.27, 'end_lat' => 41.32, 'end_lon' => 69.27]);
+        // the first write (the import) is allowed
+        $db->table('streets')->where('id', $this->street)->update(['nonres_objects' => 225]);
+
+        // then the database itself refuses any change, whatever writes it
+        foreach ([226, null] as $other) {
+            try {
+                $db->table('streets')->where('id', $this->street)->update(['nonres_objects' => $other]);
+                $this->fail('the fixed count was changed');
+            } catch (\Illuminate\Database\QueryException $e) {
+                $this->assertStringContainsString('fixed', $e->getMessage());
+            }
+        }
+        // the model says it in words, and other fields still save
+        $street = \App\Models\Street::find($this->street);
+        $this->expectExceptionMessageMatches('/o‘zgartirilmaydi/');
+        try {
+            $street->update(['name' => 'Yangi nom']);
+            $this->assertSame('Yangi nom', $street->fresh()->name);
+            $this->assertSame(225, $street->fresh()->nonres_objects);
+
+            $admin = User::factory()->create();
+            config(['app.admin_emails' => [$admin->email]]);
+            $this->actingAs($admin);
+            $this->assertStringContainsString('"nonres":225', $this->get(\App\Filament\Pages\ObjectsMap::getUrl())->assertSee('Noturar obyektlar')->getContent());
+            $this->get(\App\Filament\Resources\Streets\StreetResource::getUrl('edit', ['record' => $this->street]))->assertOk()->assertSee('o‘zgarmaydi');
+        } finally {
+            $street->fresh()->update(['nonres_objects' => 1]);
+        }
+    }
 }

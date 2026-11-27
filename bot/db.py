@@ -382,6 +382,9 @@ CREATE INDEX IF NOT EXISTS idx_inspections_video_hash ON inspections(video_hash)
 CREATE INDEX IF NOT EXISTS idx_outbox_unsent ON outbox(id) WHERE sent_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_post_deliveries_pending ON post_deliveries(post_id, id) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_post_deliveries_user ON post_deliveries(user_id);
+CREATE TRIGGER IF NOT EXISTS trg_streets_nonres_objects_fixed BEFORE UPDATE OF nonres_objects ON streets
+WHEN OLD.nonres_objects IS NOT NULL AND NEW.nonres_objects IS NOT OLD.nonres_objects
+BEGIN SELECT RAISE(ABORT, 'streets.nonres_objects is fixed once set'); END;
 CREATE INDEX IF NOT EXISTS idx_feedback_unanswered ON feedback(id) WHERE answer IS NULL;
 CREATE INDEX IF NOT EXISTS idx_feedback_undelivered ON feedback(answered_at) WHERE answer IS NOT NULL AND answer_sent_at IS NULL;
 """
@@ -415,7 +418,9 @@ def _added_columns():
             ("streets", {"planned_objects": "INTEGER NOT NULL DEFAULT 0", "start_lat": "REAL", "start_lon": "REAL",
                          "end_lat": "REAL", "end_lon": "REAL",
                          "path": "TEXT",  # the real shape, see below
-                         "length_km": "REAL"}),  # the length from the official list (tools/import_street_lengths.py)  # the real shape, [[lat, lon], ...] (tools/import_street_lines.py); else start -> end
+                         "length_km": "REAL",
+                         # non-residential objects on the street, official 1st-stage list: fixed once set (trigger below)
+                         "nonres_objects": "INTEGER"}),  # the length from the official list (tools/import_street_lengths.py)  # the real shape, [[lat, lon], ...] (tools/import_street_lines.py); else start -> end
             ("inspections", {"obj_latitude": "REAL", "obj_longitude": "REAL"}),
             # a personal invite link from the dashboard (t.me/<bot>?start=s_<token>): links a staff member whatever number they joined with
             ("staff", {"invite_token": "TEXT", "invite_expires": "TEXT", "phone2": "TEXT"}),
